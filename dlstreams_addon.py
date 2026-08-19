@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""dlstreams -> Stremio : mini-addon + proxy autonome (stdlib pure, ZERO dependance).
-Dashboard redesigne avec couleurs violet/rose et sidebar moderne.
+"""dlstreams -> Stremio : mini-addon + proxy autonome avec dashboard sécurisé.
+Dashboard avec mot de passe, animations, notifications, et fonctionnalités avancées.
 """
 from __future__ import annotations
 import base64
@@ -17,10 +17,13 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "admin123")
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 SITE = "https://dlstreams.st"
 _CH_TTL = 1800
 _START_TIME = time.time()
+_request_count = 0
+_error_count = 0
 
 _POPULAR_CHANNELS = [
     {"id": "121", "name": "Canal+ France", "lang": "fr"},
@@ -170,7 +173,7 @@ def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
         
         return added, message
     except Exception as e:
-        return [], f"❌ Erreur: {type(e).__name__}: {e}"
+        return [], f" Erreur: {type(e).__name__}: {e}"
 
 _PLAYER_PATHS = ("stream", "watch", "player", "plus", "hub", "cast", "casting")
 
@@ -366,8 +369,10 @@ def _stats() -> dict:
     return {
         "status": "ok",
         "uptime": int(time.time() - _START_TIME),
-        "version": "1.3.0",
+        "version": "1.4.0",
         "port": PORT,
+        "requests": _request_count,
+        "errors": _error_count,
         "dlstreams": {
             "count": len(_ch_cache.get("list") or []),
             "age_seconds": int(time.time() - _ch_cache.get("at", 0)) if _ch_cache.get("at") else None,
@@ -385,6 +390,10 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def _send(self, code: int, body: bytes, ctype: str, cache: bool = False):
+        global _request_count, _error_count
+        _request_count += 1
+        if code >= 400:
+            _error_count += 1
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -451,6 +460,13 @@ class Handler(BaseHTTPRequestHandler):
                     "added": len(added_channels),
                     "channels": added_channels
                 }).encode(), "application/json")
+
+            if path == "/api/auth":
+                password = qs.get("password", [None])[0]
+                if password == DASHBOARD_PASSWORD:
+                    return self._send(200, json.dumps({"success": True}).encode(), "application/json")
+                else:
+                    return self._send(401, json.dumps({"success": False, "message": "Mot de passe incorrect"}).encode(), "application/json")
 
             if path in ("/", "/manifest.json"):
                 lang = qs.get("lang", [None])[0]
@@ -561,7 +577,7 @@ class Handler(BaseHTTPRequestHandler):
         
         return {
             "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
-            "version": "1.3.0",
+            "version": "1.4.0",
             "name": name,
             "description": desc,
             "resources": ["catalog", "meta", "stream"],
@@ -585,6 +601,7 @@ def main():
     print(f"  Configure: http://127.0.0.1:{PORT}/configure")
     print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json?lang=fr")
     print(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
+    print(f"  Mot de passe dashboard: {DASHBOARD_PASSWORD}")
     try:
         n = len(channels())
         print(f"  annuaire : {n} chaines chargees (dont {len(_POPULAR_CHANNELS)} populaires)")
@@ -592,7 +609,6 @@ def main():
         print(f"  annuaire : erreur de chargement ({e})")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
-# ---------------------------------------------------------------- DASHBOARD HTML (COULEURS VIOLET/ROSE)
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="fr">
 <head>
@@ -626,10 +642,95 @@ DASHBOARD_HTML = r"""<!doctype html>
         line-height: 1.6;
         min-height: 100vh;
     }
-    .dashboard-container {
-        display: flex;
+    .login-screen {
         min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: 
+            radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+            radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%);
     }
+    .login-container {
+        background: rgba(30, 41, 59, 0.8);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 48px;
+        width: 90%;
+        max-width: 420px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        animation: slideUp 0.5s ease-out;
+    }
+    .login-logo {
+        text-align: center;
+        margin-bottom: 32px;
+    }
+    .login-logo .logo-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 16px;
+        background: var(--gradient);
+        border-radius: 20px;
+        display: grid;
+        place-items: center;
+        font-size: 40px;
+        font-weight: 800;
+        color: #0b0f1a;
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+    }
+    .login-logo h1 {
+        font-size: 28px;
+        font-weight: 700;
+        background: var(--gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .login-form input {
+        width: 100%;
+        padding: 14px 18px;
+        background: var(--bg-dark);
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        color: var(--text-primary);
+        font-size: 15px;
+        transition: all 0.3s;
+        margin-bottom: 16px;
+    }
+    .login-form input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+    .login-form button {
+        width: 100%;
+        padding: 14px;
+        background: var(--gradient);
+        border: none;
+        border-radius: 12px;
+        color: white;
+        font-weight: 600;
+        font-size: 15px;
+        cursor: pointer;
+        transition: all 0.3s;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    .login-form button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    }
+    .error-message {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid var(--error);
+        color: var(--error);
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        text-align: center;
+        animation: shake 0.5s;
+    }
+    .dashboard-container { display: none; }
+    .dashboard-container.active { display: flex; }
     .sidebar {
         position: fixed;
         left: 0;
@@ -702,16 +803,11 @@ DASHBOARD_HTML = r"""<!doctype html>
         color: var(--primary);
         font-weight: 500;
     }
-    .nav-item .icon {
-        font-size: 18px;
-    }
+    .nav-item .icon { font-size: 18px; }
     .add-source-section {
         margin-top: auto;
         padding-top: 24px;
         border-top: 1px solid var(--border);
-    }
-    .add-source-section .nav-section-title {
-        margin-bottom: 12px;
     }
     .add-source-input {
         width: 100%;
@@ -751,10 +847,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         cursor: not-allowed;
         transform: none;
     }
-    .add-source-result {
-        margin-top: 10px;
-        font-size: 12px;
-    }
+    .add-source-result { margin-top: 10px; font-size: 12px; }
     .main-content {
         margin-left: 280px;
         padding: 32px;
@@ -791,6 +884,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         transition: all 0.3s;
         position: relative;
         overflow: hidden;
+        animation: slideUp 0.5s ease-out;
     }
     .stat-card::before {
         content: '';
@@ -809,11 +903,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
     }
     .stat-card:hover::before { opacity: 1; }
-    .stat-label {
-        font-size: 13px;
-        color: var(--text-secondary);
-        margin-bottom: 8px;
-    }
+    .stat-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
     .stat-value {
         font-size: 32px;
         font-weight: 700;
@@ -822,16 +912,14 @@ DASHBOARD_HTML = r"""<!doctype html>
         -webkit-text-fill-color: transparent;
         margin-bottom: 8px;
     }
-    .stat-hint {
-        font-size: 12px;
-        color: var(--text-secondary);
-    }
+    .stat-hint { font-size: 12px; color: var(--text-secondary); }
     .card {
         background: var(--bg-card);
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 24px;
         margin-bottom: 24px;
+        animation: slideUp 0.5s ease-out;
     }
     .card h2 {
         font-size: 18px;
@@ -1038,21 +1126,60 @@ DASHBOARD_HTML = r"""<!doctype html>
         border: 1px solid var(--error);
         color: var(--error);
     }
+    .toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        z-index: 2000;
+        animation: slideInRight 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: var(--error); }
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideInRight {
+        from { opacity: 0; transform: translateX(100px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-10px); }
+        75% { transform: translateX(10px); }
+    }
     @media (max-width: 768px) {
         .sidebar { transform: translateX(-100%); }
         .sidebar.open { transform: translateX(0); }
         .main-content { margin-left: 0; padding: 20px; }
         .stats-grid { grid-template-columns: 1fr; }
     }
-    @keyframes slideUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .stat-card, .card { animation: slideUp 0.5s ease-out; }
 </style>
 </head>
 <body>
-<div class="dashboard-container">
+<div class="login-screen" id="loginScreen">
+    <div class="login-container">
+        <div class="login-logo">
+            <div class="logo-icon">▶</div>
+            <h1>dlstreams</h1>
+        </div>
+        <div id="loginError"></div>
+        <form class="login-form" onsubmit="handleLogin(event)">
+            <input type="password" id="passwordInput" placeholder="Mot de passe" required>
+            <button type="submit">Se connecter</button>
+        </form>
+    </div>
+</div>
+
+<div class="dashboard-container" id="dashboard">
     <aside class="sidebar">
         <div class="sidebar-header">
             <div class="logo">▶</div>
@@ -1102,20 +1229,20 @@ DASHBOARD_HTML = r"""<!doctype html>
                 <div class="stat-hint">depuis démarrage</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Version</div>
-                <div class="stat-value" id="c-v">—</div>
-                <div class="stat-hint">addon Stremio</div>
+                <div class="stat-label">Requêtes</div>
+                <div class="stat-value" id="c-req">—</div>
+                <div class="stat-hint">total</div>
             </div>
         </section>
 
         <section class="card">
-            <h2> Accès rapide</h2>
+            <h2>📱 Accès rapide</h2>
             <div class="access-grid">
                 <div class="access-card">
                     <div class="label">Stremio — installer l'addon</div>
                     <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Addons → « Install via URL »</div>
                     <a id="manifest" href="#">—</a>
-                    <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
+                    <button class="copy-btn" data-copy="manifest"> copier l'URL</button>
                 </div>
                 <div class="access-card">
                     <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
@@ -1136,17 +1263,17 @@ DASHBOARD_HTML = r"""<!doctype html>
         </section>
 
         <section class="card">
-            <h2> Catalogue</h2>
+            <h2>📺 Catalogue</h2>
             <div class="search-bar">
                 <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
                 <select id="lang-filter">
                     <option value="all">🌍 Toutes langues</option>
                     <option value="fr" selected>🇫🇷 Français</option>
-                    <option value="en">🇬🇧 English</option>
+                    <option value="en">🇬 English</option>
                     <option value="es">🇪🇸 Español</option>
-                    <option value="de">🇩🇪 Deutsch</option>
+                    <option value="de">🇩 Deutsch</option>
                     <option value="it">🇮🇹 Italiano</option>
-                    <option value="ar">🇸🇦 Arabe</option>
+                    <option value="ar">🇸 Arabe</option>
                     <option value="pt">🇵🇹 Português</option>
                     <option value="other">📺 Autres</option>
                 </select>
@@ -1186,6 +1313,31 @@ const fmtDur = s => {
 };
 const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
 
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+function handleLogin(e) {
+    e.preventDefault();
+    const password = $('#passwordInput').value;
+    fetch(`/api/auth?password=${encodeURIComponent(password)}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                $('#loginScreen').style.display = 'none';
+                $('#dashboard').classList.add('active');
+                showToast('✅ Connecté avec succès');
+                boot();
+            } else {
+                $('#loginError').innerHTML = '<div class="error-message">Mot de passe incorrect</div>';
+            }
+        });
+}
+
 async function refreshStats(){
     try{
         const r = await fetch("/api/stats");
@@ -1195,7 +1347,7 @@ async function refreshStats(){
         $("#c-vv").textContent = d.vavoo.count;
         $("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);
         $("#c-up").textContent = fmtDur(d.uptime);
-        $("#c-v").textContent = "v" + d.version;
+        $("#c-req").textContent = d.requests || 0;
     }catch(e){
         console.error("Stats error:", e);
     }
@@ -1282,17 +1434,20 @@ $("#add-source-btn").addEventListener("click", async ()=>{
         if(d.success){
             $("#add-source-result").innerHTML = `<div class="alert alert-success">${d.message}</div>`;
             $("#source-url").value = "";
+            showToast(d.message);
             await loadCatalog(CURRENT);
             render();
             await refreshStats();
         }else{
             $("#add-source-result").innerHTML = `<div class="alert alert-error">${d.message}</div>`;
+            showToast(d.message, 'error');
         }
     }catch(e){
         $("#add-source-result").innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
+        showToast('Erreur: ' + e.message, 'error');
     }finally{
         $("#add-source-btn").disabled = false;
-        $("#add-source-btn").textContent = " Scraper & Ajouter";
+        $("#add-source-btn").textContent = "🔍 Scraper & Ajouter";
     }
 });
 
@@ -1313,25 +1468,27 @@ document.querySelectorAll(".copy-btn").forEach(b=>b.addEventListener("click",()=
     const el = $("#"+b.dataset.copy);
     const txt = el.href || el.textContent;
     navigator.clipboard.writeText(txt).then(()=>{
+        showToast('✅ URL copiée');
         const old = b.textContent;
         b.textContent = "✓ copié";
         setTimeout(()=>b.textContent=old,1200);
     });
 }));
 
-(function initLinks(){
+function initLinks(){
     const m = `${BASE}/manifest.json`;
     $("#manifest").href = m;
     $("#manifest").textContent = m;
     $("#vlc").textContent = `${BASE}/hls/121/index.m3u8`;
     $("#host").textContent = BASE;
-})();
+}
 
-(async function boot(){
+async function boot(){
     await Promise.all([refreshStats(), loadCatalog("dlstreams")]);
     render();
+    initLinks();
     setInterval(refreshStats, 30000);
-})();
+}
 </script>
 </body>
 </html>
@@ -1371,18 +1528,18 @@ CONFIGURE_HTML = r"""<!doctype html>
   <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
     <div class="lang-grid" id="lang-grid">
       <button class="lang-btn" data-lang="all"><span class="lang-flag">🌍</span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
-      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
-      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
-      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
-      <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
-      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
-      <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
+      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
+      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
+      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇪🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
+      <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
+      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
+      <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
       <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
     </div>
   </div>
   <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
     <div class="manifest-box" id="manifest-url">—</div>
-    <button class="copy" id="copy-btn">📋 Copier l'URL</button>
+    <button class="copy" id="copy-btn"> Copier l'URL</button>
     <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
   </div>
   <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
