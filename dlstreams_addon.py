@@ -1,23 +1,6 @@
 #!/usr/bin/env python3
 """dlstreams -> Stremio : mini-addon + proxy autonome (stdlib pure, ZERO dependance).
-dlstreams.st enveloppe le reseau DaddyLive. Chaque chaine = un id (watch.php?id=N).
-Le flux reel est un m3u8 tokenise, MAIS deux pieges :
-- la PLAYLIST exige les headers Referer/Origin de l'embed (sinon 403) ;
-- les SEGMENTS sont du MPEG-TS servi avec un Content-Type mensonger `application/zstd`
-(ffmpeg/hls.js s'y cassent les dents si on ne le corrige pas ; les octets, eux, sont du TS).
-Ce script :
-1. resout la chaine (dlstreams -> iframe DaddyLive -> m3u8 en base64) ;
-2. sert un PROXY local qui injecte les headers sur les playlists et rebalise les
-segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue, SANS MediaFlow ;
-3. expose un ADDON STREMIO minimal (manifest + catalog + stream) par-dessus ;
-4. permet de filtrer par langue via /configure pour Stremio ;
-5. dashboard avec mini-player integre et ajout de sources par URL.
-Lancer :    python3 dlstreams_addon.py            (port 8781 par defaut, override: PORT=... )
-VLC/ffmpeg: http://127.0.0.1:8781/hls/121/index.m3u8
-Stremio :   installer via  http://<ton-ip-LAN>:8781/manifest.json?lang=fr
-Dashboard:  http://127.0.0.1:8781/dashboard
-Configure:  http://127.0.0.1:8781/configure
-Rien d'autre a installer : Python 3.8+ suffit. Aucune cle, aucun compte.
+Dashboard redesigne avec style moderne (glassmorphism, gradients, sidebar).
 """
 from __future__ import annotations
 import base64
@@ -39,7 +22,7 @@ SITE = "https://dlstreams.st"
 _CH_TTL = 1800
 _START_TIME = time.time()
 
-# ---------------------------------------------------------------- CHAÎNES POPULAIRES (manuelles)
+# ---------------------------------------------------------------- CHAÎNES POPULAIRES
 _POPULAR_CHANNELS = [
     {"id": "121", "name": "Canal+ France", "lang": "fr"},
     {"id": "122", "name": "Canal+ Sport", "lang": "fr"},
@@ -83,19 +66,19 @@ _POPULAR_CHANNELS = [
 
 def _detect_lang(name: str) -> str:
     n = name.lower()
-    if any(x in n for x in ["france", "français", "french", " fr ", " fr.", "-fr", "_fr", "tf1", "france 2", "france 3", "france 4", "france 5", "m6", "canal+", "rmc", "l'équipe", "arte", "bein sports 1", "bein sports 2", "bein sports 3"]):
+    if any(x in n for x in ["france", "français", "french", " fr ", "tf1", "france 2", "france 3", "m6", "canal+", "rmc", "l'équipe", "arte", "bein sports"]):
         return "fr"
-    if any(x in n for x in ["uk", "english", "usa", " us ", "espn", "fox", "cnn", "nbc", "abc ", "sky sports"]):
+    if any(x in n for x in ["uk", "english", "usa", "espn", "fox", "cnn", "nbc", "sky sports"]):
         return "en"
-    if any(x in n for x in ["españa", "spanish", "spain", " es ", "movistar", "la liga"]):
+    if any(x in n for x in ["españa", "spanish", "spain", " es ", "movistar"]):
         return "es"
-    if any(x in n for x in ["deutsch", "german", "germany", " de ", "sky de", "ard", "zdf"]):
+    if any(x in n for x in ["deutsch", "german", "germany", " de ", "ard", "zdf"]):
         return "de"
-    if any(x in n for x in ["italia", "italian", "italy", " it ", "rai ", "mediaset"]):
+    if any(x in n for x in ["italia", "italian", "italy", " it ", "rai"]):
         return "it"
-    if any(x in n for x in ["arabic", "arabe", "mbc", "al jazeera", "bein arabic"]):
+    if any(x in n for x in ["arabic", "arabe", "mbc", "al jazeera"]):
         return "ar"
-    if any(x in n for x in ["portugal", "portuguese", " pt ", "sport tv", "rtp"]):
+    if any(x in n for x in ["portugal", "portuguese", " pt ", "sport tv"]):
         return "pt"
     return "other"
 
@@ -107,7 +90,6 @@ def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
-# ---------------------------------------------------------------- annuaire (id -> nom)
 class _LinkParser(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -163,15 +145,7 @@ def channels(lang_filter: str | None = None) -> list[dict]:
         _ch_cache.update(at=now, list=out)
     return out
 
-def search(query: str, limit: int = 40, lang_filter: str | None = None) -> list[dict]:
-    q = query.lower().strip()
-    hits = [c for c in channels(lang_filter=lang_filter) if q in c["name"].lower()]
-    return hits[:limit]
-
-# ---------------------------------------------------------------- Ajout de sources par URL
 def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
-    """Scrape une URL dlstreams pour extraire les chaînes.
-    Retourne (liste_chaines, message_statut)."""
     try:
         html = _get(url).decode("utf-8", "replace")
         p = _LinkParser()
@@ -182,7 +156,6 @@ def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
         
         added = []
         existing_count = 0
-        
         current_channels = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
         
         for idv, name in p.items:
@@ -197,11 +170,9 @@ def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
             message += f" ({existing_count} déjà existantes)"
         
         return added, message
-        
     except Exception as e:
         return [], f"❌ Erreur: {type(e).__name__}: {e}"
 
-# ---------------------------------------------------------------- resolution du flux
 _PLAYER_PATHS = ("stream", "watch", "player", "plus", "hub", "cast", "casting")
 
 def _txt(url: str, referer: str = SITE + "/") -> str:
@@ -271,7 +242,6 @@ def working_players(cid: str) -> list[tuple[int, str]]:
     with ThreadPoolExecutor(max_workers=8) as ex:
         return [x for x in ex.map(_chk, enumerate(pls)) if x]
 
-# ---------------------------------------------------------------- Vavoo
 _VAVOO_MIRRORS = (("https://oha.cx", "mediaurl", False),
                   ("http://178.239.115.119", "mediaurl", False),
                   ("https://vavoo.net", "mediahubmx", True),
@@ -367,7 +337,6 @@ def vavoo_resolve(vurl: str) -> str:
         return d[0].get("url") or d[0].get("streamUrl") or ""
     return ""
 
-# ---------------------------------------------------------------- proxy HLS
 def _b64u(s: str) -> str:
     return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
 
@@ -394,7 +363,6 @@ def _rewrite_playlist(text: str, playlist_url: str, hdr_enc: str, self_base: str
         out.append(f"{self_base}/{route}?u={_b64u(absu)}&h={hdr_enc}")
     return "\n".join(out)
 
-# ---------------------------------------------------------------- helpers
 def _stats() -> dict:
     return {
         "status": "ok",
@@ -465,7 +433,6 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vavoo-channels":
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
 
-            # ---- API: Ajouter une source par URL ----
             if path == "/api/add-source":
                 url = qs.get("url", [None])[0]
                 if not url:
@@ -473,7 +440,6 @@ class Handler(BaseHTTPRequestHandler):
                 
                 added_channels, message = scrape_channels_from_url(url)
                 
-                # Ajoute les nouvelles chaînes au cache
                 if added_channels:
                     current = {ch["id"]: ch for ch in _ch_cache.get("list", [])}
                     for ch in added_channels:
@@ -627,176 +593,728 @@ def main():
         print(f"  annuaire : erreur de chargement ({e})")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
-# ---------------------------------------------------------------- DASHBOARD HTML
+# ---------------------------------------------------------------- DASHBOARD HTML (NOUVEAU DESIGN)
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>dlstreams — dashboard</title>
+<title>dlstreams — Dashboard</title>
 <style>
-  :root{--bg:#0b0f1a;--bg2:#111827;--card:#151b2b;--border:#1f2937;--text:#e5e7eb;--muted:#94a3b8;--accent:#60a5fa;--accent2:#a78bfa;--ok:#34d399;--warn:#fbbf24;--err:#f87171}
-  *{box-sizing:border-box}html,body{margin:0;padding:0;background:radial-gradient(1200px 600px at 10% -10%,#1e293b 0%,transparent 60%),radial-gradient(900px 500px at 110% 10%,#312e81 0%,transparent 60%),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
-  header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  header .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
-  header h1{margin:0;font-size:20px;letter-spacing:.3px}header .sub{color:var(--muted);font-size:12px}
-  .status{margin-left:auto;display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02)}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 0 rgba(52,211,153,.6)}.dot.ok{background:var(--ok);animation:pulse 2s infinite}.dot.err{background:var(--err)}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 10px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
-  main{padding:16px 24px 60px;max-width:1200px;margin:0 auto}.grid{display:grid;gap:14px}.cards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-  .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;padding:16px 18px;backdrop-filter:blur(8px)}
-  .card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.card .val{font-size:26px;font-weight:700;margin-top:6px;letter-spacing:.3px}.card .hint{color:var(--muted);font-size:12px;margin-top:4px}
-  section{margin-top:22px}section h2{font-size:15px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
-  .access{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.access .card a{color:var(--accent);text-decoration:none;word-break:break-all}.access .card a:hover{color:var(--accent2)}
-  .copy{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:12px;cursor:pointer;transition:.15s}.copy:hover{color:var(--text);border-color:var(--accent)}
-  .search{position:sticky;top:0;z-index:5;background:rgba(11,15,26,.85);backdrop-filter:blur(10px);padding:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .search input{flex:1;min-width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:10px;font-size:14px;outline:none;transition:.15s}.search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
-  .search select{background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:10px;font-size:14px;outline:none;cursor:pointer;transition:.15s}.search select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
-  .tabs{display:flex;gap:6px}.tab{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;transition:.15s}.tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0f1a;border-color:transparent;font-weight:600}
-  .list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:10px}
-  .item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;transition:.15s;text-decoration:none;color:var(--text)}.item:hover{border-color:var(--accent);transform:translateY(-1px)}
-  .item .name{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.item .id{color:var(--muted);font-size:11px;font-family:ui-monospace,monospace}
-  .empty{color:var(--muted);text-align:center;padding:30px}footer{margin-top:40px;color:var(--muted);font-size:12px;text-align:center}
-  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
-  .player-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.95);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
-  .player-modal.active{display:flex}.player-container{width:100%;max-width:1200px;background:var(--bg2);border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-  .player-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
-  .player-header h3{margin:0;font-size:16px}.player-close{background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;padding:0;width:32px;height:32px;display:grid;place-items:center;border-radius:6px;transition:.15s}
-  .player-close:hover{background:rgba(255,255,255,.1);color:var(--text)}
-  .player-body{padding:20px}.player-frame{width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;border:none}
-  .add-source{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .add-source input{flex:1;min-width:200px;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:14px;outline:none;transition:.15s}
-  .add-source input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
-  .btn{padding:10px 16px;border:none;border-radius:8px;font-size:14px;cursor:pointer;transition:.15s;font-weight:500}
-  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0f1a}
-  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(96,165,250,.4)}
-  .btn-secondary{background:var(--bg2);color:var(--text);border:1px solid var(--border)}
-  .btn-secondary:hover{border-color:var(--accent)}
-  .alert{padding:12px 16px;border-radius:8px;margin-top:10px;font-size:13px}
-  .alert-success{background:rgba(52,211,153,.15);border:1px solid var(--ok);color:var(--ok)}
-  .alert-error{background:rgba(248,113,113,.15);border:1px solid var(--err);color:var(--err)}
-  @media (max-width:600px){header{padding:18px 14px}main{padding:10px 14px 40px}.card .val{font-size:22px}}
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --secondary: #ec4899;
+        --bg-dark: #0f172a;
+        --bg-card: #1e293b;
+        --bg-hover: #334155;
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --border: #334155;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --error: #ef4444;
+        --gradient: linear-gradient(135deg, #6366f1 0%, #ec4899 100%);
+    }
+    body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: var(--bg-dark);
+        background-image: 
+            radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+            radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%);
+        color: var(--text-primary);
+        line-height: 1.6;
+        min-height: 100vh;
+    }
+    .dashboard-container {
+        display: flex;
+        min-height: 100vh;
+    }
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 280px;
+        background: var(--bg-card);
+        border-right: 1px solid var(--border);
+        padding: 24px;
+        overflow-y: auto;
+        z-index: 100;
+    }
+    .sidebar-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 24px;
+    }
+    .sidebar-header .logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: var(--gradient);
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        color: #0b0f1a;
+    }
+    .sidebar-header h2 {
+        font-size: 18px;
+        font-weight: 700;
+        background: var(--gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .nav-section { margin-bottom: 24px; }
+    .nav-section-title {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-secondary);
+        margin-bottom: 12px;
+        padding-left: 12px;
+    }
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 4px;
+        color: var(--text-secondary);
+        text-decoration: none;
+    }
+    .nav-item:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+    .nav-item.active {
+        background: rgba(99, 102, 241, 0.15);
+        color: var(--primary);
+    }
+    .main-content {
+        margin-left: 280px;
+        padding: 32px;
+        flex: 1;
+    }
+    .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 32px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--border);
+    }
+    .page-title h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 4px;
+        background: var(--gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .page-title p { color: var(--text-secondary); }
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+        margin-bottom: 32px;
+    }
+    .stat-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        transition: all 0.3s;
+        position: relative;
+        overflow: hidden;
+    }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--gradient);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+    .stat-card:hover {
+        transform: translateY(-4px);
+        border-color: var(--primary);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+    }
+    .stat-card:hover::before { opacity: 1; }
+    .stat-label {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+    }
+    .stat-value {
+        font-size: 32px;
+        font-weight: 700;
+        background: var(--gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 8px;
+    }
+    .stat-hint {
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .card h2 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 20px;
+    }
+    .add-source {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+    }
+    .add-source input {
+        flex: 1;
+        min-width: 200px;
+        background: var(--bg-dark);
+        border: 2px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 16px;
+        color: var(--text-primary);
+        font-size: 14px;
+        transition: all 0.3s;
+    }
+    .add-source input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+    .btn {
+        padding: 12px 20px;
+        border-radius: 10px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+    }
+    .btn-primary {
+        background: var(--gradient);
+        color: white;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    }
+    .btn-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+    .search-bar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+    .search-bar input {
+        flex: 1;
+        min-width: 200px;
+        background: var(--bg-dark);
+        border: 2px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 16px;
+        color: var(--text-primary);
+        font-size: 14px;
+    }
+    .search-bar select {
+        background: var(--bg-dark);
+        border: 2px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 16px;
+        color: var(--text-primary);
+        cursor: pointer;
+    }
+    .tabs { display: flex; gap: 6px; }
+    .tab {
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .tab.active {
+        background: var(--gradient);
+        color: #0b0f1a;
+        border-color: transparent;
+        font-weight: 600;
+    }
+    .channel-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 10px;
+    }
+    .channel-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg-dark);
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        color: var(--text-primary);
+    }
+    .channel-item:hover {
+        border-color: var(--primary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    }
+    .channel-item .name {
+        flex: 1;
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .channel-item .id {
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-family: ui-monospace, monospace;
+    }
+    .alert {
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin-top: 12px;
+        font-size: 13px;
+    }
+    .alert-success {
+        background: rgba(16, 185, 129, 0.15);
+        border: 1px solid var(--success);
+        color: var(--success);
+    }
+    .alert-error {
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid var(--error);
+        color: var(--error);
+    }
+    .player-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.95);
+        z-index: 1000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+    .player-modal.active { display: flex; }
+    .player-container {
+        width: 100%;
+        max-width: 1200px;
+        background: var(--bg-card);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .player-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+    }
+    .player-header h3 { margin: 0; font-size: 16px; }
+    .player-close {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 24px;
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 6px;
+        transition: all 0.2s;
+    }
+    .player-close:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+    .player-body { padding: 20px; }
+    .player-frame {
+        width: 100%;
+        aspect-ratio: 16/9;
+        background: #000;
+        border-radius: 8px;
+        border: none;
+    }
+    .access-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 14px;
+    }
+    .access-card {
+        background: var(--bg-dark);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+    }
+    .access-card .label {
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+    }
+    .access-card a {
+        color: var(--primary);
+        text-decoration: none;
+        word-break: break-all;
+    }
+    .access-card a:hover { color: var(--secondary); }
+    .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 6px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .copy-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--primary);
+    }
+    @media (max-width: 768px) {
+        .sidebar { transform: translateX(-100%); }
+        .sidebar.open { transform: translateX(0); }
+        .main-content { margin-left: 0; padding: 20px; }
+        .stats-grid { grid-template-columns: 1fr; }
+    }
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
 </style>
 </head>
 <body>
-<header><div class="logo">▶</div><div><h1>dlstreams <span class="badge">addon + proxy</span></h1><div class="sub">Chaînes live DaddyLive + Vavoo — servi sur le port 8781</div></div><div class="status"><span id="dot" class="dot"></span><span id="stxt">vérification…</span></div></header>
-<main>
-  <section><div class="grid cards" id="cards">
-    <div class="card"><div class="label">Chaînes dlstreams</div><div class="val" id="c-dl">—</div><div class="hint" id="c-dl-h">cache</div></div>
-    <div class="card"><div class="label">Chaînes Vavoo</div><div class="val" id="c-vv">—</div><div class="hint" id="c-vv-h">catalogue FR</div></div>
-    <div class="card"><div class="label">Uptime</div><div class="val" id="c-up">—</div><div class="hint">depuis démarrage</div></div>
-    <div class="card"><div class="label">Version</div><div class="val" id="c-v">—</div><div class="hint">addon Stremio</div></div>
-  </div></section>
-  
-  <section><h2>Ajouter une source</h2>
-    <div class="add-source">
-      <input id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121 ou https://dlstreams.st/)">
-      <button class="btn btn-primary" id="add-source-btn"> Scraper & Ajouter</button>
-    </div>
-    <div id="add-source-result"></div>
-  </section>
-  
-  <section><h2>Accès rapide</h2><div class="grid access">
-    <div class="card"><div class="label">Stremio — installer l'addon</div><div style="margin-top:6px">Addons → « Install via URL »</div><a id="manifest" href="#">—</a><div><button class="copy" data-copy="manifest">📋 copier l'URL</button></div></div>
-    <div class="card"><div class="label">VLC / mpv / ffmpeg — lecture directe</div><div style="margin-top:6px">Ouvre un flux par son id :</div><code id="vlc" style="color:var(--accent);word-break:break-all;font-size:12px">—</code><div><button class="copy" data-copy="vlc">📋 copier</button></div></div>
-    <div class="card"><div class="label">API</div><div style="margin-top:6px;font-size:12px;color:var(--muted)">
-      <div><a href="/manifest.json" style="color:var(--accent)">/manifest.json</a> — Stremio</div>
-      <div><a href="/api/stats" style="color:var(--accent)">/api/stats</a> — statut serveur</div>
-      <div><a href="/api/channels" style="color:var(--accent)">/api/channels</a> — annuaire dlstreams</div>
-      <div><a href="/api/vavoo-channels" style="color:var(--accent)">/api/vavoo-channels</a> — catalogue Vavoo FR</div>
-      <div><a href="/configure" style="color:var(--accent)">/configure</a> — configurer la langue</div>
-    </div></div>
-  </div></section>
-  
-  <section><h2>Catalogue</h2><div class="search">
-    <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
-    <select id="lang-filter"><option value="all">🌍 Toutes langues</option><option value="fr" selected>🇷 Français</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="de">🇩🇪 Deutsch</option><option value="it">🇮🇹 Italiano</option><option value="ar">🇦 Arabe</option><option value="pt">🇵🇹 Português</option><option value="other">📺 Autres</option></select>
-    <div class="tabs"><button class="tab active" data-src="dlstreams">dlstreams</button><button class="tab" data-src="vavoo">Vavoo</button></div>
-  </div><div class="list" id="list"><div class="empty">chargement…</div></div></section>
-  
-  <footer>dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span></footer>
-</main>
+<div class="dashboard-container">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">▶</div>
+            <h2>dlstreams</h2>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-title">Navigation</div>
+            <a href="/dashboard" class="nav-item active">📊 Dashboard</a>
+            <a href="/configure" class="nav-item">🎨 Page Configure</a>
+            <a href="/manifest.json" class="nav-item" target="_blank">📦 Manifest Stremio</a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-title">API</div>
+            <a href="/api/stats" class="nav-item" target="_blank">📈 Stats</a>
+            <a href="/api/channels" class="nav-item" target="_blank">📺 Chaînes</a>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Dashboard</h1>
+                <p>Chaînes live DaddyLive + Vavoo — gestion et lecture</p>
+            </div>
+        </div>
+
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Chaînes dlstreams</div>
+                <div class="stat-value" id="c-dl">—</div>
+                <div class="stat-hint" id="c-dl-h">cache</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Chaînes Vavoo</div>
+                <div class="stat-value" id="c-vv">—</div>
+                <div class="stat-hint" id="c-vv-h">catalogue FR</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Uptime</div>
+                <div class="stat-value" id="c-up">—</div>
+                <div class="stat-hint">depuis démarrage</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Version</div>
+                <div class="stat-value" id="c-v">—</div>
+                <div class="stat-hint">addon Stremio</div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>🔗 Ajouter une source</h2>
+            <div class="add-source">
+                <input id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121)">
+                <button class="btn btn-primary" id="add-source-btn">🔍 Scraper & Ajouter</button>
+            </div>
+            <div id="add-source-result"></div>
+        </section>
+
+        <section class="card">
+            <h2>📱 Accès rapide</h2>
+            <div class="access-grid">
+                <div class="access-card">
+                    <div class="label">Stremio — installer l'addon</div>
+                    <div style="margin-top:6px">Addons → « Install via URL »</div>
+                    <a id="manifest" href="#">—</a>
+                    <button class="copy-btn" data-copy="manifest"> copier l'URL</button>
+                </div>
+                <div class="access-card">
+                    <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
+                    <div style="margin-top:6px">Ouvre un flux par son id :</div>
+                    <code id="vlc" style="color:var(--primary);word-break:break-all;font-size:12px">—</code>
+                    <button class="copy-btn" data-copy="vlc">📋 copier</button>
+                </div>
+                <div class="access-card">
+                    <div class="label">API Endpoints</div>
+                    <div style="margin-top:6px;font-size:12px;color:var(--text-secondary)">
+                        <div><a href="/manifest.json">/manifest.json</a> — Stremio</div>
+                        <div><a href="/api/stats">/api/stats</a> — statut serveur</div>
+                        <div><a href="/api/channels">/api/channels</a> — annuaire</div>
+                        <div><a href="/configure">/configure</a> — config langue</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>📺 Catalogue</h2>
+            <div class="search-bar">
+                <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
+                <select id="lang-filter">
+                    <option value="all"> Toutes langues</option>
+                    <option value="fr" selected>🇫🇷 Français</option>
+                    <option value="en">🇧 English</option>
+                    <option value="es">🇪🇸 Español</option>
+                    <option value="de">🇪 Deutsch</option>
+                    <option value="it">🇮 Italiano</option>
+                    <option value="ar">🇸🇦 Arabe</option>
+                    <option value="pt">🇵🇹 Português</option>
+                    <option value="other">📺 Autres</option>
+                </select>
+                <div class="tabs">
+                    <button class="tab active" data-src="dlstreams">dlstreams</button>
+                    <button class="tab" data-src="vavoo">Vavoo</button>
+                </div>
+            </div>
+            <div class="channel-list" id="list"><div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
+        </section>
+
+        <footer style="margin-top:40px;color:var(--text-secondary);font-size:12px;text-align:center">
+            dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span>
+        </footer>
+    </main>
+</div>
 
 <div class="player-modal" id="player-modal">
-  <div class="player-container">
-    <div class="player-header">
-      <h3 id="player-title">Lecture</h3>
-      <button class="player-close" id="player-close">×</button>
+    <div class="player-container">
+        <div class="player-header">
+            <h3 id="player-title">Lecture</h3>
+            <button class="player-close" id="player-close">×</button>
+        </div>
+        <div class="player-body">
+            <video class="player-frame" id="player-frame" controls autoplay></video>
+        </div>
     </div>
-    <div class="player-body">
-      <video class="player-frame" id="player-frame" controls autoplay></video>
-    </div>
-  </div>
 </div>
 
 <script>
-const BASE = location.origin;const $ = s => document.querySelector(s);
-const fmtDur = s => {if (s==null) return "—";const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");};
+const BASE = location.origin;
+const $ = s => document.querySelector(s);
+const fmtDur = s => {
+    if (s==null) return "—";
+    const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
+    return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");
+};
 const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
-async function refreshStats(){try{const r = await fetch("/api/stats"); const d = await r.json();$("#c-dl").textContent = d.dlstreams.count;$("#c-dl-h").textContent = "cache : " + fmtAge(d.dlstreams.age_seconds);$("#c-vv").textContent = d.vavoo.count;$("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);$("#c-up").textContent = fmtDur(d.uptime);$("#c-v").textContent = "v" + d.version;$("#dot").className = "dot ok"; $("#stxt").textContent = "en ligne";}catch(e){$("#dot").className = "dot err"; $("#stxt").textContent = "hors ligne";}}
-let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};let LANG_FILTER = "fr";
-async function loadCatalog(src){const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;try{ const r = await fetch(url); ALL[src] = await r.json(); }catch(e){ ALL[src]=[]; }}
-function render(){const q = $("#q").value.toLowerCase().trim();const words = q ? q.split(/\s+/) : [];const lang = LANG_FILTER === "all" ? null : LANG_FILTER;const items = (ALL[CURRENT]||[]).filter(c => {if (lang && c.lang !== lang) return false;return words.every(w => (c.name||"").toLowerCase().includes(w));}).slice(0, 300);const list = $("#list");if(!items.length){ list.innerHTML = '<div class="empty">aucun résultat</div>'; return; }list.innerHTML = items.map(c => {const encodedId = CURRENT==="vavoo" ? b64u(c.id) : c.id;const href = CURRENT==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}` : `${BASE}/hls/${c.id}/index.m3u8`;const logo = c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";return `<a class="item" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">${logo}<div class="name">${escapeHtml(c.name)}</div><div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div></a>`;}).join("");}
+
+async function refreshStats(){
+    try{
+        const r = await fetch("/api/stats");
+        const d = await r.json();
+        $("#c-dl").textContent = d.dlstreams.count;
+        $("#c-dl-h").textContent = "cache : " + fmtAge(d.dlstreams.age_seconds);
+        $("#c-vv").textContent = d.vavoo.count;
+        $("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);
+        $("#c-up").textContent = fmtDur(d.uptime);
+        $("#c-v").textContent = "v" + d.version;
+    }catch(e){
+        console.error("Stats error:", e);
+    }
+}
+
+let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
+let LANG_FILTER = "fr";
+
+async function loadCatalog(src){
+    const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;
+    try{
+        const r = await fetch(url);
+        ALL[src] = await r.json();
+    }catch(e){
+        ALL[src]=[];
+    }
+}
+
+function render(){
+    const q = $("#q").value.toLowerCase().trim();
+    const words = q ? q.split(/\s+/) : [];
+    const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
+    
+    const items = (ALL[CURRENT]||[]).filter(c => {
+        if (lang && c.lang !== lang) return false;
+        return words.every(w => (c.name||"").toLowerCase().includes(w));
+    }).slice(0, 300);
+    
+    const list = $("#list");
+    if(!items.length){
+        list.innerHTML = '<div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">aucun résultat</div>';
+        return;
+    }
+    list.innerHTML = items.map(c => {
+        const encodedId = CURRENT==="vavoo" ? b64u(c.id) : c.id;
+        const href = CURRENT==="vavoo"
+            ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}`
+            : `${BASE}/hls/${c.id}/index.m3u8`;
+        const logo = c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
+        return `<a class="channel-item" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
+            ${logo}
+            <div class="name">${escapeHtml(c.name)}</div>
+            <div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div>
+        </a>`;
+    }).join("");
+}
+
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 // Mini-player
 function openPlayer(url, title){
-  $("#player-title").textContent = title;
-  const video = $("#player-frame");
-  video.src = url;
-  video.play();
-  $("#player-modal").classList.add("active");
+    $("#player-title").textContent = title;
+    const video = $("#player-frame");
+    video.src = url;
+    video.play();
+    $("#player-modal").classList.add("active");
 }
 $("#player-close").addEventListener("click", ()=>{
-  const video = $("#player-frame");
-  video.pause();
-  video.src = "";
-  $("#player-modal").classList.remove("active");
+    const video = $("#player-frame");
+    video.pause();
+    video.src = "";
+    $("#player-modal").classList.remove("active");
 });
 document.addEventListener("click", (e)=>{
-  if(e.target.classList.contains("item") && e.target.dataset.play){
-    e.preventDefault();
-    const name = e.target.querySelector(".name").textContent;
-    openPlayer(e.target.dataset.play, name);
-  }
+    if(e.target.closest(".channel-item") && e.target.closest(".channel-item").dataset.play){
+        e.preventDefault();
+        const item = e.target.closest(".channel-item");
+        const name = item.querySelector(".name").textContent;
+        openPlayer(item.dataset.play, name);
+    }
 });
 
 // Ajout de source
 $("#add-source-btn").addEventListener("click", async ()=>{
-  const url = $("#source-url").value.trim();
-  if(!url){
-    $("#add-source-result").innerHTML = '<div class="alert alert-error">Veuillez entrer une URL</div>';
-    return;
-  }
-  $("#add-source-btn").disabled = true;
-  $("#add-source-btn").textContent = "⏳ Scraping...";
-  try{
-    const r = await fetch(`/api/add-source?url=${encodeURIComponent(url)}`);
-    const d = await r.json();
-    if(d.success){
-      $("#add-source-result").innerHTML = `<div class="alert alert-success">${d.message}</div>`;
-      $("#source-url").value = "";
-      await loadCatalog(CURRENT);
-      render();
-      await refreshStats();
-    }else{
-      $("#add-source-result").innerHTML = `<div class="alert alert-error">${d.message}</div>`;
+    const url = $("#source-url").value.trim();
+    if(!url){
+        $("#add-source-result").innerHTML = '<div class="alert alert-error">Veuillez entrer une URL</div>';
+        return;
     }
-  }catch(e){
-    $("#add-source-result").innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
-  }finally{
-    $("#add-source-btn").disabled = false;
-    $("#add-source-btn").textContent = "🔍 Scraper & Ajouter";
-  }
+    $("#add-source-btn").disabled = true;
+    $("#add-source-btn").textContent = "⏳ Scraping...";
+    try{
+        const r = await fetch(`/api/add-source?url=${encodeURIComponent(url)}`);
+        const d = await r.json();
+        if(d.success){
+            $("#add-source-result").innerHTML = `<div class="alert alert-success">${d.message}</div>`;
+            $("#source-url").value = "";
+            await loadCatalog(CURRENT);
+            render();
+            await refreshStats();
+        }else{
+            $("#add-source-result").innerHTML = `<div class="alert alert-error">${d.message}</div>`;
+        }
+    }catch(e){
+        $("#add-source-result").innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
+    }finally{
+        $("#add-source-btn").disabled = false;
+        $("#add-source-btn").textContent = " Scraper & Ajouter";
+    }
 });
 
 $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,120);}})());
-$("#lang-filter").addEventListener("change", (e) => {LANG_FILTER = e.target.value;loadCatalog(CURRENT);render();});
-document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active"); CURRENT = b.dataset.src;if(!ALL[CURRENT].length) await loadCatalog(CURRENT);render();}));
-document.querySelectorAll(".copy").forEach(b=>b.addEventListener("click",()=>{const el = $("#"+b.dataset.copy); const txt = el.href || el.textContent;navigator.clipboard.writeText(txt).then(()=>{const old = b.textContent; b.textContent = "✓ copié"; setTimeout(()=>b.textContent=old,1200);});}));
-(function initLinks(){const m = `${BASE}/manifest.json`;$("#manifest").href = m; $("#manifest").textContent = m;$("#vlc").textContent = `${BASE}/hls/121/index.m3u8`;$("#host").textContent = BASE;})();
-(async function boot(){await Promise.all([refreshStats(), loadCatalog("dlstreams")]);render();setInterval(refreshStats, 30000);})();
+$("#lang-filter").addEventListener("change", (e) => {
+    LANG_FILTER = e.target.value;
+    loadCatalog(CURRENT);
+    render();
+});
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    CURRENT = b.dataset.src;
+    if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
+    render();
+}));
+document.querySelectorAll(".copy-btn").forEach(b=>b.addEventListener("click",()=>{
+    const el = $("#"+b.dataset.copy);
+    const txt = el.href || el.textContent;
+    navigator.clipboard.writeText(txt).then(()=>{
+        const old = b.textContent;
+        b.textContent = "✓ copié";
+        setTimeout(()=>b.textContent=old,1200);
+    });
+}));
+
+(function initLinks(){
+    const m = `${BASE}/manifest.json`;
+    $("#manifest").href = m;
+    $("#manifest").textContent = m;
+    $("#vlc").textContent = `${BASE}/hls/121/index.m3u8`;
+    $("#host").textContent = BASE;
+})();
+
+(async function boot(){
+    await Promise.all([refreshStats(), loadCatalog("dlstreams")]);
+    render();
+    setInterval(refreshStats, 30000);
+})();
 </script>
 </body>
 </html>
@@ -810,25 +1328,25 @@ CONFIGURE_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dlstreams — configuration</title>
 <style>
-  :root{--bg:#0b0f1a;--bg2:#111827;--card:#151b2b;--border:#1f2937;--text:#e5e7eb;--muted:#94a3b8;--accent:#60a5fa;--accent2:#a78bfa;--ok:#34d399}
-  *{box-sizing:border-box}html,body{margin:0;padding:0;background:radial-gradient(1200px 600px at 10% -10%,#1e293b 0%,transparent 60%),radial-gradient(900px 500px at 110% 10%,#312e81 0%,transparent 60%),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
-  header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px}
-  header .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
-  header h1{margin:0;font-size:20px;letter-spacing:.3px}
-  main{padding:24px;max-width:800px;margin:0 auto}
-  .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
-  .card h2{margin:0 0 16px;color:var(--muted);font-size:15px;text-transform:uppercase;letter-spacing:.1em}
-  .lang-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
-  .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
-  .lang-btn:hover{border-color:var(--accent);transform:translateY(-2px)}
-  .lang-btn.selected{border-color:var(--ok);background:rgba(52,211,153,.1)}
-  .lang-flag{font-size:24px}.lang-name{font-weight:600}.lang-count{color:var(--muted);font-size:12px;margin-top:2px}
-  .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
-  .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
-  .copy:hover{color:var(--text);border-color:var(--accent)}
-  .info{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}
-  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
-  a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent2)}
+    :root{--bg:#0b0f1a;--bg2:#111827;--card:#151b2b;--border:#1f2937;--text:#e5e7eb;--muted:#94a3b8;--accent:#60a5fa;--accent2:#a78bfa;--ok:#34d399}
+    *{box-sizing:border-box}html,body{margin:0;padding:0;background:radial-gradient(1200px 600px at 10% -10%,#1e293b 0%,transparent 60%),radial-gradient(900px 500px at 110% 10%,#312e81 0%,transparent 60%),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+    header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px}
+    header .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
+    header h1{margin:0;font-size:20px;letter-spacing:.3px}
+    main{padding:24px;max-width:800px;margin:0 auto}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
+    .card h2{margin:0 0 16px;color:var(--muted);font-size:15px;text-transform:uppercase;letter-spacing:.1em}
+    .lang-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
+    .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
+    .lang-btn:hover{border-color:var(--accent);transform:translateY(-2px)}
+    .lang-btn.selected{border-color:var(--ok);background:rgba(52,211,153,.1)}
+    .lang-flag{font-size:24px}.lang-name{font-weight:600}.lang-count{color:var(--muted);font-size:12px;margin-top:2px}
+    .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
+    .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
+    .copy:hover{color:var(--text);border-color:var(--accent)}
+    .info{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}
+    .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
+    a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent2)}
 </style>
 </head>
 <body>
@@ -838,10 +1356,10 @@ CONFIGURE_HTML = r"""<!doctype html>
     <div class="lang-grid" id="lang-grid">
       <button class="lang-btn" data-lang="all"><span class="lang-flag"></span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
       <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
-      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
-      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇪🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
+      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
+      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
       <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
-      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
+      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
       <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
       <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇵🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
     </div>
@@ -851,7 +1369,7 @@ CONFIGURE_HTML = r"""<!doctype html>
     <button class="copy" id="copy-btn">📋 Copier l'URL</button>
     <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
   </div>
-  <div class="card"><h2> Liens rapides</h2><div style="display:grid;gap:8px">
+  <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
     <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
     <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
     <div><a href="/">→ Retour accueil</a></div>
