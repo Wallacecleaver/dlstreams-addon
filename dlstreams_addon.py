@@ -25,16 +25,25 @@ import base64
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
+START_TIME = time.time()
+
+# ---------------------------------------------------------------- telemetrie dashboard (en memoire, RAM only)
+_log_lock = threading.Lock()
+_request_log: deque = deque(maxlen=60)          # dernieres requetes (pour le journal du dashboard)
+_stats = {"total": 0, "ok": 0, "err": 0}        # compteurs cumules depuis le demarrage
+_DASH_PATHS = ("/dashboard", "/api/stats", "/api/test", "/favicon.ico")   # exclus du journal (bruit d'auto-refresh)
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 SITE = "https://dlstreams.st"                 # wrapper : sa home = l'annuaire, ses pages = le pointeur DaddyLive
 _CH_TTL = 1800                                # cache annuaire 30 min
@@ -342,6 +351,152 @@ def _rewrite_playlist(text: str, playlist_url: str, hdr_enc: str, self_base: str
     return "\n".join(out)
 
 
+_DASHBOARD_HTML = """<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dlstreams — Salle de signal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#10161c; --panel:#161e26; --panel2:#1b242e; --border:#26313d;
+    --text:#dce3ea; --dim:#7e8b98; --amber:#f5a623; --teal:#4fd1c5; --red:#e5484d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:'JetBrains Mono',ui-monospace,monospace;
+    background-image:radial-gradient(circle at 15% 0%, rgba(245,166,35,.06), transparent 40%);}
+  header{padding:28px 32px 18px;border-bottom:1px solid var(--border)}
+  .eyebrow{color:var(--amber);font-size:11px;letter-spacing:.28em;text-transform:uppercase;margin:0 0 6px}
+  h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:34px;letter-spacing:.02em;margin:0;
+     text-transform:uppercase;display:flex;align-items:center;gap:14px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--teal);
+       box-shadow:0 0 0 0 rgba(79,209,197,.6);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(79,209,197,.55)}70%{box-shadow:0 0 0 10px rgba(79,209,197,0)}100%{box-shadow:0 0 0 0 rgba(79,209,197,0)}}
+  .sub{color:var(--dim);font-size:13px;margin-top:6px}
+  .scan{margin-top:16px;height:3px;border-radius:2px;background:var(--panel2);overflow:hidden;position:relative}
+  .scan::after{content:"";position:absolute;top:0;left:-30%;width:30%;height:100%;
+    background:linear-gradient(90deg,transparent,var(--amber),transparent);
+    animation:sweep 3.2s linear infinite}
+  @keyframes sweep{0%{left:-30%}100%{left:100%}}
+  main{padding:24px 32px 48px;max-width:1180px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .card .lbl{color:var(--dim);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  .card .val{font-family:'Oswald',sans-serif;font-size:28px;font-weight:600;margin-top:6px;color:var(--text)}
+  .card .val small{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--dim);font-weight:400}
+  .cols{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .panel h2{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:14px;
+     margin:0;padding:12px 16px;border-bottom:1px solid var(--border);color:var(--dim)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  td,th{padding:7px 14px;text-align:left;border-bottom:1px solid var(--border)}
+  th{color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+  .st-ok{color:var(--teal)} .st-err{color:var(--red)}
+  #log{max-height:360px;overflow:auto}
+  .testbox{padding:16px}
+  .testbox input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;
+    color:var(--text);padding:9px 10px;font-family:'JetBrains Mono',monospace;font-size:13px}
+  .testbox button{margin-top:10px;width:100%;background:var(--amber);color:#1a1206;border:none;
+    border-radius:6px;padding:10px;font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:.05em;
+    text-transform:uppercase;cursor:pointer;font-size:13px}
+  .testbox button:active{transform:translateY(1px)}
+  #testresult{margin-top:12px;font-size:12.5px;line-height:1.7}
+  .tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;margin-right:6px}
+  .tag.ok{background:rgba(79,209,197,.15);color:var(--teal)}
+  .tag.bad{background:rgba(229,72,77,.15);color:var(--red)}
+  footer{color:var(--dim);font-size:11.5px;text-align:center;padding:20px;border-top:1px solid var(--border)}
+  a{color:var(--amber);text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Console de relais — dlstreams / vavoo</p>
+  <h1><span class="dot"></span>Salle de signal</h1>
+  <p class="sub">Uptime <span id="uptime">—</span> · <a href="/manifest.json">manifest.json</a> · <a href="/dashboard">actualiser</a></p>
+  <div class="scan"></div>
+</header>
+<main>
+  <div class="grid">
+    <div class="card"><div class="lbl">Chaînes dlstreams</div><div class="val" id="c-dl">—</div></div>
+    <div class="card"><div class="lbl">Chaînes Vavoo</div><div class="val" id="c-va">—</div></div>
+    <div class="card"><div class="lbl">Requêtes servies</div><div class="val" id="c-tot">—</div></div>
+    <div class="card"><div class="lbl">Erreurs (5xx/4xx)</div><div class="val" id="c-err">—</div></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h2>Journal des requêtes</h2>
+      <div id="log">
+        <table><thead><tr><th>Heure</th><th>Méthode</th><th>Route</th><th>Statut</th><th>ms</th></tr></thead>
+        <tbody id="log-body"><tr><td colspan="5" style="color:var(--dim)">en attente de trafic…</td></tr></tbody></table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Scanner une chaîne</h2>
+      <div class="testbox">
+        <input id="cid" placeholder="id dlstreams (ex: 121)" inputmode="numeric">
+        <button onclick="testChannel()">Scanner les players</button>
+        <div id="testresult"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<footer>Zéro dépendance · Python stdlib · relais autonome, sans MediaFlow</footer>
+<script>
+function fmtAge(s){
+  if(s===null||s===undefined) return "jamais chargé";
+  if(s<60) return s+"s";
+  if(s<3600) return Math.floor(s/60)+"min";
+  return Math.floor(s/3600)+"h"+Math.floor((s%3600)/60);
+}
+function fmtUptime(s){
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60;
+  return (h?h+"h ":"")+(m?m+"min ":"")+ss+"s";
+}
+async function refresh(){
+  try{
+    const r = await fetch('/api/stats'); const d = await r.json();
+    document.getElementById('uptime').textContent = fmtUptime(d.uptime_s);
+    document.getElementById('c-dl').innerHTML = d.dlstreams_count+' <small>maj il y a '+fmtAge(d.dlstreams_age_s)+'</small>';
+    document.getElementById('c-va').innerHTML = d.vavoo_count+' <small>maj il y a '+fmtAge(d.vavoo_age_s)+'</small>';
+    document.getElementById('c-tot').textContent = d.totals.total;
+    document.getElementById('c-err').textContent = d.totals.err;
+    const body = document.getElementById('log-body');
+    if(d.log.length===0){
+      body.innerHTML = '<tr><td colspan="5" style="color:var(--dim)">en attente de trafic…</td></tr>';
+    } else {
+      body.innerHTML = d.log.map(e=>{
+        const cls = e.status>=400 ? 'st-err' : 'st-ok';
+        return '<tr><td>'+e.time+'</td><td>'+e.method+'</td><td>'+e.path+'</td>'
+          +'<td class="'+cls+'">'+e.status+'</td><td>'+e.ms+'</td></tr>';
+      }).join('');
+    }
+  }catch(e){ /* silencieux : le poll suivant reessaiera */ }
+}
+async function testChannel(){
+  const id = document.getElementById('cid').value.trim();
+  const out = document.getElementById('testresult');
+  if(!id){ out.innerHTML = '<span class="tag bad">ID manquant</span>'; return; }
+  out.innerHTML = '<span style="color:var(--dim)">scan en cours…</span>';
+  try{
+    const r = await fetch('/api/test?id='+encodeURIComponent(id));
+    const d = await r.json();
+    if(d.error && !d.players){ out.innerHTML = '<span class="tag bad">erreur</span> '+d.error; return; }
+    if(!d.found){ out.innerHTML = '<span class="tag bad">hors-antenne</span> aucun player ne répond pour #'+id; return; }
+    out.innerHTML = '<span class="tag ok">'+d.players.length+' player(s) actif(s)</span><br>'
+      + d.players.map(p=>'Player '+p.index+' — '+p.label).join('<br>');
+  }catch(e){ out.innerHTML = '<span class="tag bad">erreur réseau</span>'; }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -358,6 +513,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
+        if not self.path.startswith(_DASH_PATHS):        # le dashboard ne se journalise pas lui-meme
+            dur_ms = int((time.time() - getattr(self, "_req_start", time.time())) * 1000)
+            with _log_lock:
+                _stats["total"] += 1
+                _stats["ok" if code < 400 else "err"] += 1
+                _request_log.appendleft({"t": time.time(), "method": self.command,
+                                          "path": self.path, "status": code, "ms": dur_ms})
 
     def _self_base(self) -> str:
         # Derriere un proxy TLS (Render, Railway, Cloudflare...) le scheme public est https :
@@ -381,6 +543,7 @@ class Handler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def do_GET(self):                                            # noqa: C901 (routeur plat, lisible)
+        self._req_start = time.time()
         u = urllib.parse.urlsplit(self.path)
         path = u.path
         qs = urllib.parse.parse_qs(u.query)
@@ -388,6 +551,38 @@ class Handler(BaseHTTPRequestHandler):
             # ---- addon Stremio ----
             if path in ("/", "/manifest.json"):
                 return self._send(200, json.dumps(self._manifest()).encode(), "application/json", True)
+            if path == "/dashboard":
+                return self._send(200, _DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8")
+            if path == "/api/stats":
+                now = time.time()
+                with _log_lock:
+                    log = list(_request_log)
+                    totals = dict(_stats)
+                data = {
+                    "uptime_s": int(now - START_TIME),
+                    "dlstreams_count": len(_ch_cache["list"]),
+                    "dlstreams_age_s": int(now - _ch_cache["at"]) if _ch_cache["at"] else None,
+                    "vavoo_count": len(_vavoo_cache["list"]),
+                    "vavoo_age_s": int(now - _vavoo_cache["at"]) if _vavoo_cache["at"] else None,
+                    "totals": totals,
+                    "log": [{"time": time.strftime("%H:%M:%S", time.localtime(e["t"])),
+                             "method": e["method"], "path": e["path"],
+                             "status": e["status"], "ms": e["ms"]} for e in log],
+                }
+                return self._send(200, json.dumps(data).encode(), "application/json")
+            if path == "/api/test":
+                cid = qs.get("id", [""])[0].strip()
+                if not cid:
+                    return self._send(400, json.dumps({"error": "id manquant"}).encode(), "application/json")
+                try:
+                    ok = working_players(cid)
+                    return self._send(200, json.dumps({
+                        "id": cid, "found": len(ok) > 0,
+                        "players": [{"index": i, "label": lbl} for i, lbl in ok],
+                    }).encode(), "application/json")
+                except Exception as e:
+                    return self._send(200, json.dumps({"id": cid, "found": False, "error": str(e)}).encode(),
+                                      "application/json")
             if path.startswith("/catalog/tv/"):
                 # /catalog/tv/<source>.json  OU  /catalog/tv/<source>/search=xxx&skip=100.json
                 extra = path[len("/catalog/tv/"):].removesuffix(".json")
