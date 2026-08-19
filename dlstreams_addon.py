@@ -32,21 +32,36 @@ SITE = "https://dlstreams.st"                 # wrapper : sa home = l'annuaire, 
 _CH_TTL = 1800                                # cache annuaire 30 min
 
 # ============================================================================
-# FILTRE CHAINES FRANCAISES - IDs DaddyLive
+# FILTRE CHAINES FRANCAISES - IDs DaddyLive (TOUS les IDs francais)
 # ============================================================================
 FRENCH_CHANNEL_IDS = {
-    "772",   # Eurosport 1 France
-    "773",   # Eurosport 2 France
-    "960",   # DAZN Ligue 1 France
-    "119",   # RMC Sport 1 France
-    "120",   # RMC Sport 2 France
+    # TNT / Generales
+    "469",   # TF1 France
+    "950",   # France 2
+    "951",   # France 3
+    "952",   # France 4
+    "953",   # France 5
+    "470",   # M6 France
+    "956",   # C8 France
+    "957",   # BFM TV France
+    "964",   # CNews France
+    "955",   # TMC France
+    "963",   # 6ter France
+    "959",   # W9 France
+    "958",   # Arte France
     "954",   # RMC Story France
+    "962",   # LCI France
+    "645",   # L'Equipe France
+    
+    # Canal+
     "121",   # Canal+ France
     "122",   # Canal+ Sport France
     "463",   # Canal+ Foot France
     "464",   # Canal+ Sport360
     "271",   # Canal+ MotoGP France
     "273",   # Canal+ Formula 1
+    
+    # beIN Sports
     "116",   # beIN SPORTS 1 France
     "117",   # beIN SPORTS 2 France
     "118",   # beIN SPORTS 3 France
@@ -57,6 +72,20 @@ FRENCH_CHANNEL_IDS = {
     "498",   # beIN Sports MAX 8 France
     "499",   # beIN Sports MAX 9 France
     "500",   # beIN Sports MAX 10 France
+    
+    # RMC Sport
+    "119",   # RMC Sport 1 France
+    "120",   # RMC Sport 2 France
+    
+    # Eurosport
+    "772",   # Eurosport 1 France
+    "773",   # Eurosport 2 France
+    
+    # DAZN
+    "960",   # DAZN Ligue 1 France
+    
+    # Sport
+    "965",   # Sport en France
 }
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
