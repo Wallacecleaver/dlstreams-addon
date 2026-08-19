@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """dlstreams -> Stremio : mini-addon + proxy autonome (stdlib pure, ZERO dependance).
-Dashboard redesigne avec style moderne (glassmorphism, gradients, sidebar).
+Dashboard redesigne avec couleurs violet/rose et sidebar moderne.
 """
 from __future__ import annotations
 import base64
@@ -22,7 +22,6 @@ SITE = "https://dlstreams.st"
 _CH_TTL = 1800
 _START_TIME = time.time()
 
-# ---------------------------------------------------------------- CHAÎNES POPULAIRES
 _POPULAR_CHANNELS = [
     {"id": "121", "name": "Canal+ France", "lang": "fr"},
     {"id": "122", "name": "Canal+ Sport", "lang": "fr"},
@@ -593,7 +592,7 @@ def main():
         print(f"  annuaire : erreur de chargement ({e})")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
-# ---------------------------------------------------------------- DASHBOARD HTML (NOUVEAU DESIGN)
+# ---------------------------------------------------------------- DASHBOARD HTML (COULEURS VIOLET/ROSE)
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="fr">
 <head>
@@ -642,6 +641,8 @@ DASHBOARD_HTML = r"""<!doctype html>
         padding: 24px;
         overflow-y: auto;
         z-index: 100;
+        display: flex;
+        flex-direction: column;
     }
     .sidebar-header {
         display: flex;
@@ -660,6 +661,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         place-items: center;
         font-weight: 800;
         color: #0b0f1a;
+        font-size: 20px;
     }
     .sidebar-header h2 {
         font-size: 18px;
@@ -676,6 +678,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         color: var(--text-secondary);
         margin-bottom: 12px;
         padding-left: 12px;
+        font-weight: 600;
     }
     .nav-item {
         display: flex;
@@ -688,6 +691,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         margin-bottom: 4px;
         color: var(--text-secondary);
         text-decoration: none;
+        font-size: 14px;
     }
     .nav-item:hover {
         background: var(--bg-hover);
@@ -696,6 +700,60 @@ DASHBOARD_HTML = r"""<!doctype html>
     .nav-item.active {
         background: rgba(99, 102, 241, 0.15);
         color: var(--primary);
+        font-weight: 500;
+    }
+    .nav-item .icon {
+        font-size: 18px;
+    }
+    .add-source-section {
+        margin-top: auto;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+    }
+    .add-source-section .nav-section-title {
+        margin-bottom: 12px;
+    }
+    .add-source-input {
+        width: 100%;
+        background: var(--bg-dark);
+        border: 2px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        color: var(--text-primary);
+        font-size: 13px;
+        margin-bottom: 10px;
+        transition: all 0.3s;
+    }
+    .add-source-input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .add-source-btn {
+        width: 100%;
+        padding: 10px;
+        background: var(--gradient);
+        border: none;
+        border-radius: 10px;
+        color: white;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    .add-source-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    }
+    .add-source-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+    .add-source-result {
+        margin-top: 10px;
+        font-size: 12px;
     }
     .main-content {
         margin-left: 280px;
@@ -718,7 +776,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
-    .page-title p { color: var(--text-secondary); }
+    .page-title p { color: var(--text-secondary); font-size: 14px; }
     .stats-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -779,54 +837,9 @@ DASHBOARD_HTML = r"""<!doctype html>
         font-size: 18px;
         font-weight: 600;
         margin-bottom: 20px;
-    }
-    .add-source {
         display: flex;
-        gap: 12px;
-        margin-bottom: 14px;
-        flex-wrap: wrap;
-    }
-    .add-source input {
-        flex: 1;
-        min-width: 200px;
-        background: var(--bg-dark);
-        border: 2px solid var(--border);
-        border-radius: 10px;
-        padding: 12px 16px;
-        color: var(--text-primary);
-        font-size: 14px;
-        transition: all 0.3s;
-    }
-    .add-source input:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
-    }
-    .btn {
-        padding: 12px 20px;
-        border-radius: 10px;
-        border: none;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: inline-flex;
         align-items: center;
-        gap: 8px;
-        font-size: 14px;
-    }
-    .btn-primary {
-        background: var(--gradient);
-        color: white;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-    .btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
-    }
-    .btn-primary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none;
+        gap: 10px;
     }
     .search-bar {
         display: flex;
@@ -845,6 +858,11 @@ DASHBOARD_HTML = r"""<!doctype html>
         color: var(--text-primary);
         font-size: 14px;
     }
+    .search-bar input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
     .search-bar select {
         background: var(--bg-dark);
         border: 2px solid var(--border);
@@ -862,6 +880,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         color: var(--text-secondary);
         cursor: pointer;
         transition: all 0.2s;
+        font-size: 13px;
     }
     .tab.active {
         background: var(--gradient);
@@ -904,21 +923,49 @@ DASHBOARD_HTML = r"""<!doctype html>
         font-size: 11px;
         font-family: ui-monospace, monospace;
     }
-    .alert {
-        padding: 12px 16px;
-        border-radius: 10px;
-        margin-top: 12px;
+    .access-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 14px;
+    }
+    .access-card {
+        background: var(--bg-dark);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+    }
+    .access-card .label {
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+        font-weight: 600;
+    }
+    .access-card a {
+        color: var(--primary);
+        text-decoration: none;
+        word-break: break-all;
         font-size: 13px;
     }
-    .alert-success {
-        background: rgba(16, 185, 129, 0.15);
-        border: 1px solid var(--success);
-        color: var(--success);
+    .access-card a:hover { color: var(--secondary); }
+    .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 6px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
     }
-    .alert-error {
-        background: rgba(239, 68, 68, 0.15);
-        border: 1px solid var(--error);
-        color: var(--error);
+    .copy-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--primary);
     }
     .player-modal {
         position: fixed;
@@ -975,47 +1022,21 @@ DASHBOARD_HTML = r"""<!doctype html>
         border-radius: 8px;
         border: none;
     }
-    .access-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 14px;
-    }
-    .access-card {
-        background: var(--bg-dark);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 16px;
-    }
-    .access-card .label {
-        font-size: 12px;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 8px;
-    }
-    .access-card a {
-        color: var(--primary);
-        text-decoration: none;
-        word-break: break-all;
-    }
-    .access-card a:hover { color: var(--secondary); }
-    .copy-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 8px;
-        padding: 6px 12px;
-        border: 1px solid var(--border);
+    .alert {
+        padding: 10px 14px;
         border-radius: 8px;
-        background: transparent;
-        color: var(--text-secondary);
+        margin-top: 8px;
         font-size: 12px;
-        cursor: pointer;
-        transition: all 0.2s;
     }
-    .copy-btn:hover {
-        color: var(--text-primary);
-        border-color: var(--primary);
+    .alert-success {
+        background: rgba(16, 185, 129, 0.15);
+        border: 1px solid var(--success);
+        color: var(--success);
+    }
+    .alert-error {
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid var(--error);
+        color: var(--error);
     }
     @media (max-width: 768px) {
         .sidebar { transform: translateX(-100%); }
@@ -1027,6 +1048,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
     }
+    .stat-card, .card { animation: slideUp 0.5s ease-out; }
 </style>
 </head>
 <body>
@@ -1038,14 +1060,20 @@ DASHBOARD_HTML = r"""<!doctype html>
         </div>
         <div class="nav-section">
             <div class="nav-section-title">Navigation</div>
-            <a href="/dashboard" class="nav-item active">📊 Dashboard</a>
-            <a href="/configure" class="nav-item">🎨 Page Configure</a>
-            <a href="/manifest.json" class="nav-item" target="_blank">📦 Manifest Stremio</a>
+            <a href="/dashboard" class="nav-item active"><span class="icon">📊</span> Dashboard</a>
+            <a href="/configure" class="nav-item"><span class="icon">🎨</span> Page Configure</a>
+            <a href="/manifest.json" class="nav-item" target="_blank"><span class="icon">📦</span> Manifest Stremio</a>
         </div>
         <div class="nav-section">
             <div class="nav-section-title">API</div>
-            <a href="/api/stats" class="nav-item" target="_blank">📈 Stats</a>
-            <a href="/api/channels" class="nav-item" target="_blank">📺 Chaînes</a>
+            <a href="/api/stats" class="nav-item" target="_blank"><span class="icon">📈</span> Stats</a>
+            <a href="/api/channels" class="nav-item" target="_blank"><span class="icon">📺</span> Chaînes</a>
+        </div>
+        <div class="add-source-section">
+            <div class="nav-section-title">Ajouter une source</div>
+            <input class="add-source-input" id="source-url" type="url" placeholder="URL dlstreams...">
+            <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
+            <div class="add-source-result" id="add-source-result"></div>
         </div>
     </aside>
 
@@ -1081,26 +1109,17 @@ DASHBOARD_HTML = r"""<!doctype html>
         </section>
 
         <section class="card">
-            <h2>🔗 Ajouter une source</h2>
-            <div class="add-source">
-                <input id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121)">
-                <button class="btn btn-primary" id="add-source-btn">🔍 Scraper & Ajouter</button>
-            </div>
-            <div id="add-source-result"></div>
-        </section>
-
-        <section class="card">
-            <h2>📱 Accès rapide</h2>
+            <h2> Accès rapide</h2>
             <div class="access-grid">
                 <div class="access-card">
                     <div class="label">Stremio — installer l'addon</div>
-                    <div style="margin-top:6px">Addons → « Install via URL »</div>
+                    <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Addons → « Install via URL »</div>
                     <a id="manifest" href="#">—</a>
-                    <button class="copy-btn" data-copy="manifest"> copier l'URL</button>
+                    <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
                 </div>
                 <div class="access-card">
                     <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
-                    <div style="margin-top:6px">Ouvre un flux par son id :</div>
+                    <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Ouvre un flux par son id :</div>
                     <code id="vlc" style="color:var(--primary);word-break:break-all;font-size:12px">—</code>
                     <button class="copy-btn" data-copy="vlc">📋 copier</button>
                 </div>
@@ -1117,16 +1136,16 @@ DASHBOARD_HTML = r"""<!doctype html>
         </section>
 
         <section class="card">
-            <h2>📺 Catalogue</h2>
+            <h2> Catalogue</h2>
             <div class="search-bar">
                 <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
                 <select id="lang-filter">
-                    <option value="all"> Toutes langues</option>
+                    <option value="all">🌍 Toutes langues</option>
                     <option value="fr" selected>🇫🇷 Français</option>
-                    <option value="en">🇧 English</option>
+                    <option value="en">🇬🇧 English</option>
                     <option value="es">🇪🇸 Español</option>
-                    <option value="de">🇪 Deutsch</option>
-                    <option value="it">🇮 Italiano</option>
+                    <option value="de">🇩🇪 Deutsch</option>
+                    <option value="it">🇮🇹 Italiano</option>
                     <option value="ar">🇸🇦 Arabe</option>
                     <option value="pt">🇵🇹 Português</option>
                     <option value="other">📺 Autres</option>
@@ -1227,7 +1246,6 @@ function render(){
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
-// Mini-player
 function openPlayer(url, title){
     $("#player-title").textContent = title;
     const video = $("#player-frame");
@@ -1250,7 +1268,6 @@ document.addEventListener("click", (e)=>{
     }
 });
 
-// Ajout de source
 $("#add-source-btn").addEventListener("click", async ()=>{
     const url = $("#source-url").value.trim();
     if(!url){
@@ -1320,7 +1337,6 @@ document.querySelectorAll(".copy-btn").forEach(b=>b.addEventListener("click",()=
 </html>
 """
 
-# ---------------------------------------------------------------- CONFIGURE HTML
 CONFIGURE_HTML = r"""<!doctype html>
 <html lang="fr">
 <head>
@@ -1328,25 +1344,25 @@ CONFIGURE_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dlstreams — configuration</title>
 <style>
-    :root{--bg:#0b0f1a;--bg2:#111827;--card:#151b2b;--border:#1f2937;--text:#e5e7eb;--muted:#94a3b8;--accent:#60a5fa;--accent2:#a78bfa;--ok:#34d399}
-    *{box-sizing:border-box}html,body{margin:0;padding:0;background:radial-gradient(1200px 600px at 10% -10%,#1e293b 0%,transparent 60%),radial-gradient(900px 500px at 110% 10%,#312e81 0%,transparent 60%),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+    :root{--primary:#6366f1;--secondary:#ec4899;--bg:#0f172a;--bg2:#1e293b;--card:#1e293b;--border:#334155;--text:#f1f5f9;--muted:#94a3b8;--ok:#10b981;--gradient:linear-gradient(135deg,#6366f1 0%,#ec4899 100%)}
+    *{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);background-image:radial-gradient(circle at 20% 50%,rgba(99,102,241,0.15) 0%,transparent 50%),radial-gradient(circle at 80% 80%,rgba(236,72,153,0.15) 0%,transparent 50%);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
     header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px}
-    header .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
-    header h1{margin:0;font-size:20px;letter-spacing:.3px}
+    header .logo{width:40px;height:40px;border-radius:10px;background:var(--gradient);display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(99,102,241,.3)}
+    header h1{margin:0;font-size:20px;letter-spacing:.3px;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
     main{padding:24px;max-width:800px;margin:0 auto}
-    .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
     .card h2{margin:0 0 16px;color:var(--muted);font-size:15px;text-transform:uppercase;letter-spacing:.1em}
     .lang-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
-    .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
-    .lang-btn:hover{border-color:var(--accent);transform:translateY(-2px)}
-    .lang-btn.selected{border-color:var(--ok);background:rgba(52,211,153,.1)}
+    .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
+    .lang-btn:hover{border-color:var(--primary);transform:translateY(-2px)}
+    .lang-btn.selected{border-color:var(--ok);background:rgba(16,185,129,.1)}
     .lang-flag{font-size:24px}.lang-name{font-weight:600}.lang-count{color:var(--muted);font-size:12px;margin-top:2px}
     .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
     .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
-    .copy:hover{color:var(--text);border-color:var(--accent)}
+    .copy:hover{color:var(--text);border-color:var(--primary)}
     .info{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}
-    .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
-    a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent2)}
+    .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(99,102,241,.15);color:var(--primary);margin-left:6px}
+    a{color:var(--primary);text-decoration:none}a:hover{color:var(--secondary)}
 </style>
 </head>
 <body>
@@ -1354,14 +1370,14 @@ CONFIGURE_HTML = r"""<!doctype html>
 <main>
   <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
     <div class="lang-grid" id="lang-grid">
-      <button class="lang-btn" data-lang="all"><span class="lang-flag"></span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
-      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
-      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
+      <button class="lang-btn" data-lang="all"><span class="lang-flag">🌍</span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
+      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
+      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
       <button class="lang-btn" data-lang="es"><span class="lang-flag">🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
       <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
-      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
-      <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
-      <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇵🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
+      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
+      <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
+      <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
     </div>
   </div>
   <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
