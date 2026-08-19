@@ -1,53 +1,41 @@
 #!/usr/bin/env python3
 """dlstreams -> Stremio : mini-addon + proxy autonome (stdlib pure, ZERO dependance).
-
 dlstreams.st enveloppe le reseau DaddyLive. Chaque chaine = un id (watch.php?id=N).
 Le flux reel est un m3u8 tokenise, MAIS deux pieges :
-  - la PLAYLIST exige les headers Referer/Origin de l'embed (sinon 403) ;
-  - les SEGMENTS sont du MPEG-TS servi avec un Content-Type mensonger `application/zstd`
-    (ffmpeg/hls.js s'y cassent les dents si on ne le corrige pas ; les octets, eux, sont du TS).
-
+- la PLAYLIST exige les headers Referer/Origin de l'embed (sinon 403) ;
+- les SEGMENTS sont du MPEG-TS servi avec un Content-Type mensonger `application/zstd`
+(ffmpeg/hls.js s'y cassent les dents si on ne le corrige pas ; les octets, eux, sont du TS).
 Ce script :
-  1. resout la chaine (dlstreams -> iframe DaddyLive -> m3u8 en base64) ;
-  2. sert un PROXY local qui injecte les headers sur les playlists et rebalise les
-     segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue, SANS MediaFlow ;
-  3. expose un ADDON STREMIO minimal (manifest + catalog + stream) par-dessus.
-
+1. resout la chaine (dlstreams -> iframe DaddyLive -> m3u8 en base64) ;
+2. sert un PROXY local qui injecte les headers sur les playlists et rebalise les
+segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue, SANS MediaFlow ;
+3. expose un ADDON STREMIO minimal (manifest + catalog + stream) par-dessus ;
+4. expose un DASHBOARD web moderne pour visualiser les stats et parcourir le catalogue.
 Lancer :    python3 dlstreams_addon.py            (port 8781 par defaut, override: PORT=... )
 VLC/ffmpeg: http://127.0.0.1:8781/hls/121/index.m3u8
 Stremio :   installer via  http://<ton-ip-LAN>:8781/manifest.json
-
+Dashboard:  http://127.0.0.1:8781/
 Rien d'autre a installer : Python 3.8+ suffit. Aucune cle, aucun compte.
 """
 from __future__ import annotations
-
 import base64
 import json
 import os
 import re
-import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-START_TIME = time.time()
-
-# ---------------------------------------------------------------- telemetrie dashboard (en memoire, RAM only)
-_log_lock = threading.Lock()
-_request_log: deque = deque(maxlen=60)          # dernieres requetes (pour le journal du dashboard)
-_stats = {"total": 0, "ok": 0, "err": 0}        # compteurs cumules depuis le demarrage
-_DASH_PATHS = ("/dashboard", "/api/stats", "/api/test", "/favicon.ico")   # exclus du journal (bruit d'auto-refresh)
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
-SITE = "https://dlstreams.st"                 # wrapper : sa home = l'annuaire, ses pages = le pointeur DaddyLive
-_CH_TTL = 1800                                # cache annuaire 30 min
-
+SITE = "https://dlstreams.st"
+_CH_TTL = 1800
+_START_TIME = time.time()
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
     """GET brut avec User-Agent + Referer (et Origin si fourni). Renvoie le corps (bytes)."""
@@ -55,14 +43,12 @@ def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout
     if extra:
         headers.update(extra)
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as r:      # noqa: S310 (URL de conf, pas d'entree user)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
-
 
 # ---------------------------------------------------------------- annuaire (id -> nom)
 class _LinkParser(HTMLParser):
     """Extrait les <a href=...watch.php?id=N ...>Nom</a> de la home dlstreams."""
-
     def __init__(self):
         super().__init__()
         self.items: list[tuple[str, str]] = []
@@ -89,9 +75,7 @@ class _LinkParser(HTMLParser):
                 self.items.append((self._cur_id, name))
             self._cur_id = None
 
-
 _ch_cache: dict = {"at": 0.0, "list": []}
-
 
 def channels() -> list[dict]:
     """Annuaire dlstreams -> [{id, name}]. Cache 30 min. Dedoublonne par id (garde le 1er nom)."""
@@ -101,7 +85,7 @@ def channels() -> list[dict]:
     try:
         html = _get(SITE + "/").decode("utf-8", "replace")
     except Exception:
-        return _ch_cache["list"]                                 # garde l'ancien annuaire si la home tombe
+        return _ch_cache["list"]
     p = _LinkParser()
     p.feed(html)
     seen: dict[str, str] = {}
@@ -111,29 +95,22 @@ def channels() -> list[dict]:
     _ch_cache.update(at=now, list=out)
     return out
 
-
 def search(query: str, limit: int = 40) -> list[dict]:
     q = query.lower().strip()
     hits = [c for c in channels() if q in c["name"].lower()]
     return hits[:limit]
 
-
 # ---------------------------------------------------------------- resolution du flux (MULTI-PLAYER)
-# dlstreams sert la MEME chaine sous plusieurs chemins de player, chacun pointant un embed/CDN DIFFERENT
-# (daddy2/romponalis, wideiptv/bluetier, brigittetv, livelive24...). On les propose TOUS + failover.
 _PLAYER_PATHS = ("stream", "watch", "player", "plus", "hub", "cast", "casting")
-
 
 def _txt(url: str, referer: str = SITE + "/") -> str:
     return _get(url, referer=referer).decode("utf-8", "replace")
 
-
 def players(cid: str) -> list[tuple[str, str]]:
-    """[(label, url_page_player)] dans l'ordre de watch.php (repli = chemins connus). Chaque player est
-    une source independante."""
+    """[(label, url_page_player)] dans l'ordre de watch.php (repli = chemins connus)."""
     try:
         w = _txt(f"{SITE}/watch.php?id={cid}")
-    except Exception:  # best-effort
+    except Exception:
         w = ""
     pairs = re.findall(r'data-url="([^"]+)"[^>]*title="([^"]*)"', w)
     out = [(title.strip() or f"Player {i + 1}", url)
@@ -141,10 +118,8 @@ def players(cid: str) -> list[tuple[str, str]]:
     return out or [(f"Player {i + 1}", f"{SITE}/{p}/stream-{cid}.php")
                    for i, p in enumerate(_PLAYER_PATHS)]
 
-
 def _first_iframe(html: str) -> str | None:
     return next((m for m in re.findall(r'<iframe[^>]+src="([^"]+)"', html) if m.startswith("http")), None)
-
 
 def _find_m3u8(html: str) -> str | None:
     """m3u8 d'une page embed : `atob('<b64>')` (daddy2) OU en clair/echappe \\/ (wideiptv...)."""
@@ -160,7 +135,6 @@ def _find_m3u8(html: str) -> str | None:
             return dec
     m = re.search(r'https?://\S+?\.m3u8[^"\'\s\\]*', html.replace("\\/", "/"))
     return m.group(0) if m else None
-
 
 def resolve_player(stream_url: str) -> tuple[str, str]:
     """Page-player -> (m3u8, host_embed pour Referer/Origin). Suit l'iframe (+1 hop si CDN imbrique)."""
@@ -179,7 +153,6 @@ def resolve_player(stream_url: str) -> tuple[str, str]:
         raise ValueError("m3u8 introuvable (hors-antenne ?)")
     return mu, host
 
-
 def resolve(cid: str) -> tuple[str, str]:
     """FAILOVER : (m3u8, host) du 1er player qui livre un flux. Leve si aucun."""
     for _label, url in players(cid):
@@ -189,12 +162,9 @@ def resolve(cid: str) -> tuple[str, str]:
             continue
     raise ValueError("aucun player ne resout")
 
-
 def working_players(cid: str) -> list[tuple[int, str]]:
-    """[(index, label)] des players qui resolvent REELLEMENT un flux (verifies en parallele) -> on ne
-    propose que les serveurs jouables, pas de boutons morts. L'index sert a l'URL /hls/<id>/p<index>."""
+    """[(index, label)] des players qui resolvent REELLEMENT un flux (verifies en parallele)."""
     pls = players(cid)
-
     def _chk(item: tuple[int, tuple[str, str]]) -> tuple[int, str] | None:
         i, (label, url) = item
         try:
@@ -202,18 +172,13 @@ def working_players(cid: str) -> list[tuple[int, str]]:
             return (i, label)
         except Exception:
             return None
-
     with ThreadPoolExecutor(max_workers=8) as ex:
         return [x for x in ex.map(_chk, enumerate(pls)) if x]
 
-
-# ---------------------------------------------------------------- proxy HLS (headers + fix content-type)
 # ---------------------------------------------------------------- Vavoo (protocole mediahubmx)
-# Meme protocole que l'app Onyx/VYPN. La signature est FETCHEE (pas calculee) -> aucune crypto.
-# Le flux Vavoo est du HLS qui exige juste User-Agent: MediaHubMX/2 -> le proxy l'injecte, sans MFP.
-_VAVOO_MIRRORS = (("https://oha.cx", "mediaurl", False),          # sert le VRAI flux (pas de signature)
-                  ("http://178.239.115.119", "mediaurl", False),  # meme service, repli DNS
-                  ("https://vavoo.net", "mediahubmx", True),      # repli : ne sert que la mire promo
+_VAVOO_MIRRORS = (("https://oha.cx", "mediaurl", False),
+                  ("http://178.239.115.119", "mediaurl", False),
+                  ("https://vavoo.net", "mediahubmx", True),
                   ("https://kool.ws", "mediahubmx", True))
 _VAVOO_PINGS = ("https://www.lokke.app/api/app/ping", "https://www.vavoo.tv/api/app/ping",
                 "https://www.vypn.net/api/app/ping")
@@ -222,14 +187,12 @@ _vavoo_cache: dict = {"at": 0.0, "list": []}
 _vavoo_sig: dict = {"v": "", "at": 0.0}
 _vavoo_base: dict = {"url": ""}
 
-
 def _post_json(url: str, body: dict, headers: dict, timeout: int = 20):
     data = json.dumps(body).encode()
     h = {"content-type": "application/json; charset=utf-8", **headers}
-    req = urllib.request.Request(url, data=data, headers=h, method="POST")   # noqa: S310
+    req = urllib.request.Request(url, data=data, headers=h, method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
-
 
 def _vavoo_ping_body() -> dict:
     now = int(time.time() * 1000)
@@ -246,7 +209,6 @@ def _vavoo_ping_body() -> dict:
             "proxy": {"supported": ["ss"], "engine": "Mu", "ssVersion": "2022", "enabled": False,
                       "autoServer": True, "id": ""}}
 
-
 def _vavoo_signature(force: bool = False) -> str:
     if not force and _vavoo_sig["v"] and time.time() - _vavoo_sig["at"] < 3600:
         return _vavoo_sig["v"]
@@ -260,7 +222,6 @@ def _vavoo_signature(force: bool = False) -> str:
             _vavoo_sig.update(v=v, at=time.time())
             return v
     return ""
-
 
 def _vavoo_post(action: str, body: dict):
     """POST {base}/{prefixe}-{action}.json sur le 1er mirror qui repond. -> JSON ou None."""
@@ -283,9 +244,8 @@ def _vavoo_post(action: str, body: dict):
             return d
     return None
 
-
 def vavoo_channels(country: str = "France") -> list[dict]:
-    """Catalogue Vavoo d'un pays -> [{id, name, logo}] (id = url mediahubmx opaque). Cache 6 h, pagine."""
+    """Catalogue Vavoo d'un pays -> [{id, name, logo}]. Cache 6 h, pagine."""
     if _vavoo_cache["list"] and time.time() - _vavoo_cache["at"] < 6 * 3600:
         return _vavoo_cache["list"]
     items, cursor, pages = [], 0, 0
@@ -305,7 +265,6 @@ def vavoo_channels(country: str = "France") -> list[dict]:
         _vavoo_cache.update(at=time.time(), list=items)
     return _vavoo_cache["list"]
 
-
 def vavoo_resolve(vurl: str) -> str:
     """URL de flux reelle pour une chaine Vavoo (resolution PARESSEUSE, URLs ephemeres)."""
     if not vurl:
@@ -315,29 +274,23 @@ def vavoo_resolve(vurl: str) -> str:
         return d[0].get("url") or d[0].get("streamUrl") or ""
     return ""
 
-
 # ---------------------------------------------------------------- proxy HLS (headers par source)
 def _b64u(s: str) -> str:
     return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
 
-
 def _unb64u(s: str) -> str:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4)).decode()
 
-
 def _proxy_get(url: str, hdr: dict, timeout: int = 25) -> bytes:
-    """GET une URL avec un jeu de headers arbitraire (UA par defaut si absent). Chaque source porte
-    SON profil : Referer/Origin (dlstreams), User-Agent MediaHubMX/2 (Vavoo)."""
+    """GET une URL avec un jeu de headers arbitraire."""
     headers = {"User-Agent": UA}
     headers.update(hdr or {})
-    req = urllib.request.Request(url, headers=headers)                       # noqa: S310
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
-
 def _rewrite_playlist(text: str, playlist_url: str, hdr_enc: str, self_base: str) -> str:
-    """Reecrit une playlist HLS : chaque URL (sous-playlist .m3u8 ou segment) passe par NOTRE proxy,
-    en propageant le jeu de headers `hdr_enc` (b64 JSON) -> le proxy refetch avec les bons en-tetes."""
+    """Reecrit une playlist HLS : chaque URL passe par NOTRE proxy."""
     base = playlist_url.rsplit("/", 1)[0] + "/"
     out = []
     for line in text.splitlines():
@@ -350,157 +303,27 @@ def _rewrite_playlist(text: str, playlist_url: str, hdr_enc: str, self_base: str
         out.append(f"{self_base}/{route}?u={_b64u(absu)}&h={hdr_enc}")
     return "\n".join(out)
 
-
-_DASHBOARD_HTML = """<!doctype html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dlstreams — Salle de signal</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#10161c; --panel:#161e26; --panel2:#1b242e; --border:#26313d;
-    --text:#dce3ea; --dim:#7e8b98; --amber:#f5a623; --teal:#4fd1c5; --red:#e5484d;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-    font-family:'JetBrains Mono',ui-monospace,monospace;
-    background-image:radial-gradient(circle at 15% 0%, rgba(245,166,35,.06), transparent 40%);}
-  header{padding:28px 32px 18px;border-bottom:1px solid var(--border)}
-  .eyebrow{color:var(--amber);font-size:11px;letter-spacing:.28em;text-transform:uppercase;margin:0 0 6px}
-  h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:34px;letter-spacing:.02em;margin:0;
-     text-transform:uppercase;display:flex;align-items:center;gap:14px}
-  .dot{width:10px;height:10px;border-radius:50%;background:var(--teal);
-       box-shadow:0 0 0 0 rgba(79,209,197,.6);animation:pulse 2s infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(79,209,197,.55)}70%{box-shadow:0 0 0 10px rgba(79,209,197,0)}100%{box-shadow:0 0 0 0 rgba(79,209,197,0)}}
-  .sub{color:var(--dim);font-size:13px;margin-top:6px}
-  .scan{margin-top:16px;height:3px;border-radius:2px;background:var(--panel2);overflow:hidden;position:relative}
-  .scan::after{content:"";position:absolute;top:0;left:-30%;width:30%;height:100%;
-    background:linear-gradient(90deg,transparent,var(--amber),transparent);
-    animation:sweep 3.2s linear infinite}
-  @keyframes sweep{0%{left:-30%}100%{left:100%}}
-  main{padding:24px 32px 48px;max-width:1180px;margin:0 auto}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:22px}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
-  .card .lbl{color:var(--dim);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
-  .card .val{font-family:'Oswald',sans-serif;font-size:28px;font-weight:600;margin-top:6px;color:var(--text)}
-  .card .val small{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--dim);font-weight:400}
-  .cols{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
-  @media(max-width:820px){.cols{grid-template-columns:1fr}}
-  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-  .panel h2{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:14px;
-     margin:0;padding:12px 16px;border-bottom:1px solid var(--border);color:var(--dim)}
-  table{width:100%;border-collapse:collapse;font-size:12.5px}
-  td,th{padding:7px 14px;text-align:left;border-bottom:1px solid var(--border)}
-  th{color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
-  .st-ok{color:var(--teal)} .st-err{color:var(--red)}
-  #log{max-height:360px;overflow:auto}
-  .testbox{padding:16px}
-  .testbox input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;
-    color:var(--text);padding:9px 10px;font-family:'JetBrains Mono',monospace;font-size:13px}
-  .testbox button{margin-top:10px;width:100%;background:var(--amber);color:#1a1206;border:none;
-    border-radius:6px;padding:10px;font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:.05em;
-    text-transform:uppercase;cursor:pointer;font-size:13px}
-  .testbox button:active{transform:translateY(1px)}
-  #testresult{margin-top:12px;font-size:12.5px;line-height:1.7}
-  .tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;margin-right:6px}
-  .tag.ok{background:rgba(79,209,197,.15);color:var(--teal)}
-  .tag.bad{background:rgba(229,72,77,.15);color:var(--red)}
-  footer{color:var(--dim);font-size:11.5px;text-align:center;padding:20px;border-top:1px solid var(--border)}
-  a{color:var(--amber);text-decoration:none}
-</style>
-</head>
-<body>
-<header>
-  <p class="eyebrow">Console de relais — dlstreams / vavoo</p>
-  <h1><span class="dot"></span>Salle de signal</h1>
-  <p class="sub">Uptime <span id="uptime">—</span> · <a href="/manifest.json">manifest.json</a> · <a href="/dashboard">actualiser</a></p>
-  <div class="scan"></div>
-</header>
-<main>
-  <div class="grid">
-    <div class="card"><div class="lbl">Chaînes dlstreams</div><div class="val" id="c-dl">—</div></div>
-    <div class="card"><div class="lbl">Chaînes Vavoo</div><div class="val" id="c-va">—</div></div>
-    <div class="card"><div class="lbl">Requêtes servies</div><div class="val" id="c-tot">—</div></div>
-    <div class="card"><div class="lbl">Erreurs (5xx/4xx)</div><div class="val" id="c-err">—</div></div>
-  </div>
-  <div class="cols">
-    <div class="panel">
-      <h2>Journal des requêtes</h2>
-      <div id="log">
-        <table><thead><tr><th>Heure</th><th>Méthode</th><th>Route</th><th>Statut</th><th>ms</th></tr></thead>
-        <tbody id="log-body"><tr><td colspan="5" style="color:var(--dim)">en attente de trafic…</td></tr></tbody></table>
-      </div>
-    </div>
-    <div class="panel">
-      <h2>Scanner une chaîne</h2>
-      <div class="testbox">
-        <input id="cid" placeholder="id dlstreams (ex: 121)" inputmode="numeric">
-        <button onclick="testChannel()">Scanner les players</button>
-        <div id="testresult"></div>
-      </div>
-    </div>
-  </div>
-</main>
-<footer>Zéro dépendance · Python stdlib · relais autonome, sans MediaFlow</footer>
-<script>
-function fmtAge(s){
-  if(s===null||s===undefined) return "jamais chargé";
-  if(s<60) return s+"s";
-  if(s<3600) return Math.floor(s/60)+"min";
-  return Math.floor(s/3600)+"h"+Math.floor((s%3600)/60);
-}
-function fmtUptime(s){
-  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60;
-  return (h?h+"h ":"")+(m?m+"min ":"")+ss+"s";
-}
-async function refresh(){
-  try{
-    const r = await fetch('/api/stats'); const d = await r.json();
-    document.getElementById('uptime').textContent = fmtUptime(d.uptime_s);
-    document.getElementById('c-dl').innerHTML = d.dlstreams_count+' <small>maj il y a '+fmtAge(d.dlstreams_age_s)+'</small>';
-    document.getElementById('c-va').innerHTML = d.vavoo_count+' <small>maj il y a '+fmtAge(d.vavoo_age_s)+'</small>';
-    document.getElementById('c-tot').textContent = d.totals.total;
-    document.getElementById('c-err').textContent = d.totals.err;
-    const body = document.getElementById('log-body');
-    if(d.log.length===0){
-      body.innerHTML = '<tr><td colspan="5" style="color:var(--dim)">en attente de trafic…</td></tr>';
-    } else {
-      body.innerHTML = d.log.map(e=>{
-        const cls = e.status>=400 ? 'st-err' : 'st-ok';
-        return '<tr><td>'+e.time+'</td><td>'+e.method+'</td><td>'+e.path+'</td>'
-          +'<td class="'+cls+'">'+e.status+'</td><td>'+e.ms+'</td></tr>';
-      }).join('');
+# ---------------------------------------------------------------- helpers dashboard
+def _stats() -> dict:
+    return {
+        "status": "ok",
+        "uptime": int(time.time() - _START_TIME),
+        "version": "1.2.0",
+        "port": PORT,
+        "dlstreams": {
+            "count": len(_ch_cache.get("list") or []),
+            "age_seconds": int(time.time() - _ch_cache.get("at", 0)) if _ch_cache.get("at") else None,
+        },
+        "vavoo": {
+            "count": len(_vavoo_cache.get("list") or []),
+            "age_seconds": int(time.time() - _vavoo_cache.get("at", 0)) if _vavoo_cache.get("at") else None,
+        },
     }
-  }catch(e){ /* silencieux : le poll suivant reessaiera */ }
-}
-async function testChannel(){
-  const id = document.getElementById('cid').value.trim();
-  const out = document.getElementById('testresult');
-  if(!id){ out.innerHTML = '<span class="tag bad">ID manquant</span>'; return; }
-  out.innerHTML = '<span style="color:var(--dim)">scan en cours…</span>';
-  try{
-    const r = await fetch('/api/test?id='+encodeURIComponent(id));
-    const d = await r.json();
-    if(d.error && !d.players){ out.innerHTML = '<span class="tag bad">erreur</span> '+d.error; return; }
-    if(!d.found){ out.innerHTML = '<span class="tag bad">hors-antenne</span> aucun player ne répond pour #'+id; return; }
-    out.innerHTML = '<span class="tag ok">'+d.players.length+' player(s) actif(s)</span><br>'
-      + d.players.map(p=>'Player '+p.index+' — '+p.label).join('<br>');
-  }catch(e){ out.innerHTML = '<span class="tag bad">erreur réseau</span>'; }
-}
-refresh();
-setInterval(refresh, 5000);
-</script>
-</body>
-</html>"""
-
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, *a):                                   # silencieux
+    def log_message(self, *a):
         pass
 
     def _send(self, code: int, body: bytes, ctype: str, cache: bool = False):
@@ -513,25 +336,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
-        if not self.path.startswith(_DASH_PATHS):        # le dashboard ne se journalise pas lui-meme
-            dur_ms = int((time.time() - getattr(self, "_req_start", time.time())) * 1000)
-            with _log_lock:
-                _stats["total"] += 1
-                _stats["ok" if code < 400 else "err"] += 1
-                _request_log.appendleft({"t": time.time(), "method": self.command,
-                                          "path": self.path, "status": code, "ms": dur_ms})
 
     def _self_base(self) -> str:
-        # Derriere un proxy TLS (Render, Railway, Cloudflare...) le scheme public est https :
-        # on suit X-Forwarded-Proto, sinon http en local. Sans ca, les URLs de flux sortent en
-        # http:// sur un host https -> Stremio les bloque.
         host = self.headers.get("Host") or f"127.0.0.1:{PORT}"
         proto = self.headers.get("X-Forwarded-Proto", "http").split(",")[0].strip()
         return f"{proto}://{host}"
 
     def do_OPTIONS(self):
-        # Preflight CORS de Stremio Web (app.strem.io) : sans reponse valide, l'install du manifest
-        # echoue. On repond 204 + en-tetes CORS complets.
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
@@ -542,51 +353,31 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.do_GET()
 
-    def do_GET(self):                                            # noqa: C901 (routeur plat, lisible)
-        self._req_start = time.time()
+    def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
         path = u.path
         qs = urllib.parse.parse_qs(u.query)
         try:
-            # ---- addon Stremio ----
-            if path in ("/", "/manifest.json"):
-                return self._send(200, json.dumps(self._manifest()).encode(), "application/json", True)
-            if path == "/dashboard":
-                return self._send(200, _DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8")
+            # ---- dashboard & API ----
+            if path == "/" or path == "/index.html":
+                return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
+
             if path == "/api/stats":
-                now = time.time()
-                with _log_lock:
-                    log = list(_request_log)
-                    totals = dict(_stats)
-                data = {
-                    "uptime_s": int(now - START_TIME),
-                    "dlstreams_count": len(_ch_cache["list"]),
-                    "dlstreams_age_s": int(now - _ch_cache["at"]) if _ch_cache["at"] else None,
-                    "vavoo_count": len(_vavoo_cache["list"]),
-                    "vavoo_age_s": int(now - _vavoo_cache["at"]) if _vavoo_cache["at"] else None,
-                    "totals": totals,
-                    "log": [{"time": time.strftime("%H:%M:%S", time.localtime(e["t"])),
-                             "method": e["method"], "path": e["path"],
-                             "status": e["status"], "ms": e["ms"]} for e in log],
-                }
-                return self._send(200, json.dumps(data).encode(), "application/json")
-            if path == "/api/test":
-                cid = qs.get("id", [""])[0].strip()
-                if not cid:
-                    return self._send(400, json.dumps({"error": "id manquant"}).encode(), "application/json")
-                try:
-                    ok = working_players(cid)
-                    return self._send(200, json.dumps({
-                        "id": cid, "found": len(ok) > 0,
-                        "players": [{"index": i, "label": lbl} for i, lbl in ok],
-                    }).encode(), "application/json")
-                except Exception as e:
-                    return self._send(200, json.dumps({"id": cid, "found": False, "error": str(e)}).encode(),
-                                      "application/json")
+                return self._send(200, json.dumps(_stats()).encode(), "application/json")
+
+            if path == "/api/channels":
+                return self._send(200, json.dumps(channels()).encode(), "application/json", True)
+
+            if path == "/api/vavoo-channels":
+                return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
+
+            # ---- addon Stremio ----
+            if path == "/manifest.json":
+                return self._send(200, json.dumps(self._manifest()).encode(), "application/json", True)
+
             if path.startswith("/catalog/tv/"):
-                # /catalog/tv/<source>.json  OU  /catalog/tv/<source>/search=xxx&skip=100.json
                 extra = path[len("/catalog/tv/"):].removesuffix(".json")
-                catid = extra.split("/", 1)[0]                   # "dlstreams" | "vavoo"
+                catid = extra.split("/", 1)[0]
                 params = {}
                 if "/" in extra:
                     for kv in extra.split("/", 1)[1].split("&"):
@@ -595,15 +386,14 @@ class Handler(BaseHTTPRequestHandler):
                             params[k] = urllib.parse.unquote_plus(v)
                 chans = vavoo_channels() if catid == "vavoo" else channels()
                 q = params.get("search", "").lower().strip()
-                if q:                                            # tous les mots présents (le « + » de
-                    words = q.replace("+", " ").split()          # « Canal+ Foot » ne casse plus la recherche)
-                    chans = [c for c in chans
-                             if all(w in c["name"].lower() for w in words)]
+                if q:
+                    words = q.replace("+", " ").split()
+                    chans = [c for c in chans if all(w in c["name"].lower() for w in words)]
                 skip = int(params.get("skip") or 0)
-                metas = [self._meta(c, catid) for c in chans[skip:skip + 100]]   # pagination (100/page)
+                metas = [self._meta(c, catid) for c in chans[skip:skip + 100]]
                 return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
+
             if path.startswith("/meta/tv/"):
-                # Stremio percent-encode le ':' de l'id (vavoo%3A...) -> décoder avant de parser.
                 seg = urllib.parse.unquote(path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 if source == "vavoo":
@@ -613,21 +403,23 @@ class Handler(BaseHTTPRequestHandler):
                     c = next((x for x in channels() if x["id"] == cid), {"id": cid, "name": f"dlstreams {cid}"})
                 return self._send(200, json.dumps({"meta": self._meta(c, source)}).encode(),
                                   "application/json", True)
+
             if path.startswith("/stream/tv/"):
-                seg = urllib.parse.unquote(path.rsplit("/", 1)[1].removesuffix(".json"))  # ':' encodé %3A
+                seg = urllib.parse.unquote(path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
-                if source == "vavoo":                            # 1 flux (Vavoo n'a pas de multi-serveur)
-                    streams = [{"name": "Vavoo", "title": "🔴 Direct", "url": f"{b}/vhls?v={cid}"}]
+                if source == "vavoo":
+                    streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
-                ok = working_players(cid)                        # dlstreams : multi-player, que les vivants
+                ok = working_players(cid)
                 streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
                             "url": f"{b}/hls/{cid}/index.m3u8"}] if ok else []
                 streams += [{"name": "dlstreams", "title": label,
                              "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
-            # ---- proxy HLS ---- (headers par source : dlstreams=Referer/Origin, Vavoo=UA MediaHubMX/2)
-            if path.startswith("/hls/") and path.endswith("/index.m3u8"):    # dlstreams
+
+            # ---- proxy HLS ----
+            if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
                 cid = parts[2]
                 if len(parts) == 5 and parts[3].startswith("p") and parts[3][1:].isdigit():
@@ -643,7 +435,8 @@ class Handler(BaseHTTPRequestHandler):
                 text = _proxy_get(m3u8, hdr).decode("utf-8", "replace")
                 return self._send(200, _rewrite_playlist(text, m3u8, henc, self._self_base()).encode(),
                                   "application/vnd.apple.mpegurl")
-            if path == "/vhls":                                  # Vavoo : résout puis proxifie en HLS
+
+            if path == "/vhls":
                 real = vavoo_resolve(_unb64u(qs["v"][0]))
                 if not real:
                     return self._send(502, b"vavoo: flux introuvable (hors-antenne ?)", "text/plain")
@@ -652,20 +445,24 @@ class Handler(BaseHTTPRequestHandler):
                 text = _proxy_get(real, hdr).decode("utf-8", "replace")
                 return self._send(200, _rewrite_playlist(text, real, henc, self._self_base()).encode(),
                                   "application/vnd.apple.mpegurl")
-            if path == "/px":                                    # sous-playlist -> refetch (headers) + reecrit
+
+            if path == "/px":
                 url = _unb64u(qs["u"][0])
                 henc = qs.get("h", [""])[0]
                 hdr = json.loads(_unb64u(henc)) if henc else {}
                 text = _proxy_get(url, hdr).decode("utf-8", "replace")
                 return self._send(200, _rewrite_playlist(text, url, henc, self._self_base()).encode(),
                                   "application/vnd.apple.mpegurl")
-            if path == "/sx":                                    # segment -> refetch (headers) + rebalise TS
+
+            if path == "/sx":
                 url = _unb64u(qs["u"][0])
                 henc = qs.get("h", [""])[0]
                 hdr = json.loads(_unb64u(henc)) if henc else {}
                 return self._send(200, _proxy_get(url, hdr), "video/mp2t")
+
             return self._send(404, b"not found", "text/plain")
-        except Exception as e:                                   # noqa: BLE001 -- un flux mort ne tue pas le serveur
+
+        except Exception as e:
             return self._send(502, f"resolve/proxy error: {type(e).__name__}: {e}".encode(), "text/plain")
 
     # ---- helpers addon ----
@@ -673,10 +470,10 @@ class Handler(BaseHTTPRequestHandler):
         _extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]
         return {
             "id": "st.dlstreams.proxy",
-            "version": "1.1.0",
+            "version": "1.2.0",
             "name": "dlstreams + Vavoo",
             "description": "Chaines live dlstreams (DaddyLive) + Vavoo, proxifiees (headers + content-type "
-                           "corriges). Sans MediaFlow.",
+                           "corriges). Dashboard web integre. Sans MediaFlow.",
             "resources": ["catalog", "meta", "stream"],
             "types": ["tv"],
             "idPrefixes": ["dlstreams:", "vavoo:"],
@@ -687,15 +484,14 @@ class Handler(BaseHTTPRequestHandler):
         }
 
     def _meta(self, c: dict, source: str) -> dict:
-        # dlstreams : id numerique ; vavoo : url mediahubmx opaque -> b64 dans l'id Stremio.
         cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
         logo = c.get("logo") or ""
         return {"id": f"{source}:{cid}", "type": "tv", "name": c["name"],
                 "poster": logo, "logo": logo, "posterShape": "landscape"}
 
-
 def main():
     print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
+    print(f"  Dashboard: http://127.0.0.1:{PORT}/")
     print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json")
     print(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
     try:
@@ -705,6 +501,224 @@ def main():
         print(f"  annuaire : erreur de chargement ({e})")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
+# ---------------------------------------------------------------- DASHBOARD HTML (inline, zero dependance)
+DASHBOARD_HTML = r"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dlstreams — dashboard</title>
+<style>
+  :root{
+    --bg:#0b0f1a; --bg2:#111827; --card:#151b2b; --border:#1f2937;
+    --text:#e5e7eb; --muted:#94a3b8; --accent:#60a5fa; --accent2:#a78bfa;
+    --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:
+    radial-gradient(1200px 600px at 10% -10%, #1e293b 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #312e81 0%, transparent 60%),
+    var(--bg);
+    color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+  header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header .logo{width:40px;height:40px;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
+  header h1{margin:0;font-size:20px;letter-spacing:.3px}
+  header .sub{color:var(--muted);font-size:12px}
+  .status{margin-left:auto;display:flex;align-items:center;gap:8px;
+    padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 0 rgba(52,211,153,.6)}
+  .dot.ok{background:var(--ok);animation:pulse 2s infinite}
+  .dot.err{background:var(--err)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 10px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+  main{padding:16px 24px 60px;max-width:1200px;margin:0 auto}
+  .grid{display:grid;gap:14px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));
+    border:1px solid var(--border);border-radius:14px;padding:16px 18px;backdrop-filter:blur(8px)}
+  .card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+  .card .val{font-size:26px;font-weight:700;margin-top:6px;letter-spacing:.3px}
+  .card .hint{color:var(--muted);font-size:12px;margin-top:4px}
+  section{margin-top:22px}
+  section h2{font-size:15px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  .access{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  .access .card a{color:var(--accent);text-decoration:none;word-break:break-all}
+  .access .card a:hover{color:var(--accent2)}
+  .copy{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:6px 10px;
+    border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);
+    color:var(--muted);font-size:12px;cursor:pointer;transition:.15s}
+  .copy:hover{color:var(--text);border-color:var(--accent)}
+  .search{position:sticky;top:0;z-index:5;background:rgba(11,15,26,.85);backdrop-filter:blur(10px);
+    padding:10px 0;display:flex;gap:10px;align-items:center}
+  .search input{flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);
+    padding:10px 14px;border-radius:10px;font-size:14px;outline:none;transition:.15s}
+  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
+  .tabs{display:flex;gap:6px}
+  .tab{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);cursor:pointer;font-size:13px;transition:.15s}
+  .tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0f1a;border-color:transparent;font-weight:600}
+  .list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:10px}
+  .item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);
+    border-radius:10px;background:var(--card);cursor:pointer;transition:.15s;text-decoration:none;color:var(--text)}
+  .item:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .item .name{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .id{color:var(--muted);font-size:11px;font-family:ui-monospace,monospace}
+  .empty{color:var(--muted);text-align:center;padding:30px}
+  footer{margin-top:40px;color:var(--muted);font-size:12px;text-align:center}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;
+    background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
+  @media (max-width:600px){header{padding:18px 14px}main{padding:10px 14px 40px}.card .val{font-size:22px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">▶</div>
+  <div>
+    <h1>dlstreams <span class="badge">addon + proxy</span></h1>
+    <div class="sub">Chaînes live DaddyLive + Vavoo — servi sur le port 8781</div>
+  </div>
+  <div class="status"><span id="dot" class="dot"></span><span id="stxt">vérification…</span></div>
+</header>
+
+<main>
+  <section>
+    <div class="grid cards" id="cards">
+      <div class="card"><div class="label">Chaînes dlstreams</div><div class="val" id="c-dl">—</div><div class="hint" id="c-dl-h">cache</div></div>
+      <div class="card"><div class="label">Chaînes Vavoo</div><div class="val" id="c-vv">—</div><div class="hint" id="c-vv-h">catalogue FR</div></div>
+      <div class="card"><div class="label">Uptime</div><div class="val" id="c-up">—</div><div class="hint">depuis démarrage</div></div>
+      <div class="card"><div class="label">Version</div><div class="val" id="c-v">—</div><div class="hint">addon Stremio</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Accès rapide</h2>
+    <div class="grid access">
+      <div class="card">
+        <div class="label">Stremio — installer l'addon</div>
+        <div style="margin-top:6px">Addons → « Install via URL »</div>
+        <a id="manifest" href="#">—</a>
+        <div><button class="copy" data-copy="manifest">📋 copier l'URL</button></div>
+      </div>
+      <div class="card">
+        <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
+        <div style="margin-top:6px">Ouvre un flux par son id :</div>
+        <code id="vlc" style="color:var(--accent);word-break:break-all;font-size:12px">—</code>
+        <div><button class="copy" data-copy="vlc">📋 copier</button></div>
+      </div>
+      <div class="card">
+        <div class="label">API</div>
+        <div style="margin-top:6px;font-size:12px;color:var(--muted)">
+          <div><a href="/manifest.json" style="color:var(--accent)">/manifest.json</a> — Stremio</div>
+          <div><a href="/api/stats" style="color:var(--accent)">/api/stats</a> — statut serveur</div>
+          <div><a href="/api/channels" style="color:var(--accent)">/api/channels</a> — annuaire dlstreams</div>
+          <div><a href="/api/vavoo-channels" style="color:var(--accent)">/api/vavoo-channels</a> — catalogue Vavoo FR</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Catalogue</h2>
+    <div class="search">
+      <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
+      <div class="tabs">
+        <button class="tab active" data-src="dlstreams">dlstreams</button>
+        <button class="tab" data-src="vavoo">Vavoo</button>
+      </div>
+    </div>
+    <div class="list" id="list"><div class="empty">chargement…</div></div>
+  </section>
+
+  <footer>
+    dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span>
+  </footer>
+</main>
+
+<script>
+const BASE = location.origin;
+const $ = s => document.querySelector(s);
+const fmtDur = s => {
+  if (s==null) return "—";
+  const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
+  return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");
+};
+const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
+
+async function refreshStats(){
+  try{
+    const r = await fetch("/api/stats"); const d = await r.json();
+    $("#c-dl").textContent = d.dlstreams.count;
+    $("#c-dl-h").textContent = "cache : " + fmtAge(d.dlstreams.age_seconds);
+    $("#c-vv").textContent = d.vavoo.count;
+    $("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);
+    $("#c-up").textContent = fmtDur(d.uptime);
+    $("#c-v").textContent = "v" + d.version;
+    $("#dot").className = "dot ok"; $("#stxt").textContent = "en ligne";
+  }catch(e){
+    $("#dot").className = "dot err"; $("#stxt").textContent = "hors ligne";
+  }
+}
+
+let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
+async function loadCatalog(src){
+  const url = src==="vavoo" ? "/api/vavoo-channels" : "/api/channels";
+  try{ const r = await fetch(url); ALL[src] = await r.json(); }catch(e){ ALL[src]=[]; }
+}
+function render(){
+  const q = $("#q").value.toLowerCase().trim();
+  const words = q ? q.split(/\s+/) : [];
+  const items = (ALL[CURRENT]||[]).filter(c =>
+    words.every(w => (c.name||"").toLowerCase().includes(w))
+  ).slice(0, 300);
+  const list = $("#list");
+  if(!items.length){ list.innerHTML = '<div class="empty">aucun résultat</div>'; return; }
+  list.innerHTML = items.map(c => {
+    const encodedId = CURRENT==="vavoo" ? b64u(c.id) : c.id;
+    const href = CURRENT==="vavoo"
+      ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}`
+      : `${BASE}/hls/${c.id}/index.m3u8`;
+    const logo = c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
+    return `<a class="item" href="${href}" target="_blank" title="${escapeHtml(c.name)}">
+      ${logo}
+      <div class="name">${escapeHtml(c.name)}</div>
+      <div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div>
+    </a>`;
+  }).join("");
+}
+function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+$("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,120);}})());
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); CURRENT = b.dataset.src;
+  if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
+  render();
+}));
+document.querySelectorAll(".copy").forEach(b=>b.addEventListener("click",()=>{
+  const el = $("#"+b.dataset.copy); const txt = el.href || el.textContent;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const old = b.textContent; b.textContent = "✓ copié"; setTimeout(()=>b.textContent=old,1200);
+  });
+}));
+
+(function initLinks(){
+  const m = `${BASE}/manifest.json`;
+  $("#manifest").href = m; $("#manifest").textContent = m;
+  $("#vlc").textContent = `${BASE}/hls/121/index.m3u8`;
+  $("#host").textContent = BASE;
+})();
+
+(async function boot(){
+  await Promise.all([refreshStats(), loadCatalog("dlstreams")]);
+  render();
+  setInterval(refreshStats, 30000);
+})();
+</script>
+</body>
+</html>
+"""
 
 if __name__ == "__main__":
     main()
