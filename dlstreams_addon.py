@@ -10,7 +10,8 @@ Ce script :
 2. sert un PROXY local qui injecte les headers sur les playlists et rebalise les
 segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue, SANS MediaFlow ;
 3. expose un ADDON STREMIO minimal (manifest + catalog + stream) par-dessus ;
-4. permet de filtrer par langue via /configure pour Stremio.
+4. permet de filtrer par langue via /configure pour Stremio ;
+5. dashboard avec mini-player integre et ajout de sources par URL.
 Lancer :    python3 dlstreams_addon.py            (port 8781 par defaut, override: PORT=... )
 VLC/ffmpeg: http://127.0.0.1:8781/hls/121/index.m3u8
 Stremio :   installer via  http://<ton-ip-LAN>:8781/manifest.json?lang=fr
@@ -166,6 +167,39 @@ def search(query: str, limit: int = 40, lang_filter: str | None = None) -> list[
     q = query.lower().strip()
     hits = [c for c in channels(lang_filter=lang_filter) if q in c["name"].lower()]
     return hits[:limit]
+
+# ---------------------------------------------------------------- Ajout de sources par URL
+def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
+    """Scrape une URL dlstreams pour extraire les chaînes.
+    Retourne (liste_chaines, message_statut)."""
+    try:
+        html = _get(url).decode("utf-8", "replace")
+        p = _LinkParser()
+        p.feed(html)
+        
+        if not p.items:
+            return [], "Aucune chaîne trouvée sur cette page"
+        
+        added = []
+        existing_count = 0
+        
+        current_channels = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
+        
+        for idv, name in p.items:
+            if idv not in current_channels:
+                current_channels[idv] = {"id": idv, "name": name, "lang": _detect_lang(name)}
+                added.append(current_channels[idv])
+            else:
+                existing_count += 1
+        
+        message = f"✅ {len(added)} chaîne(s) ajoutée(s)"
+        if existing_count > 0:
+            message += f" ({existing_count} déjà existantes)"
+        
+        return added, message
+        
+    except Exception as e:
+        return [], f"❌ Erreur: {type(e).__name__}: {e}"
 
 # ---------------------------------------------------------------- resolution du flux
 _PLAYER_PATHS = ("stream", "watch", "player", "plus", "hub", "cast", "casting")
@@ -415,7 +449,6 @@ class Handler(BaseHTTPRequestHandler):
         path = u.path
         qs = urllib.parse.parse_qs(u.query)
         try:
-            # ---- dashboard & API ----
             if path == "/dashboard" or path == "/dashboard.html":
                 return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
@@ -432,7 +465,28 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vavoo-channels":
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
 
-            # ---- addon Stremio ----
+            # ---- API: Ajouter une source par URL ----
+            if path == "/api/add-source":
+                url = qs.get("url", [None])[0]
+                if not url:
+                    return self._send(400, json.dumps({"success": False, "message": "URL manquante"}).encode(), "application/json")
+                
+                added_channels, message = scrape_channels_from_url(url)
+                
+                # Ajoute les nouvelles chaînes au cache
+                if added_channels:
+                    current = {ch["id"]: ch for ch in _ch_cache.get("list", [])}
+                    for ch in added_channels:
+                        current[ch["id"]] = ch
+                    _ch_cache["list"] = list(current.values())
+                
+                return self._send(200, json.dumps({
+                    "success": True,
+                    "message": message,
+                    "added": len(added_channels),
+                    "channels": added_channels
+                }).encode(), "application/json")
+
             if path in ("/", "/manifest.json"):
                 lang = qs.get("lang", [None])[0]
                 return self._send(200, json.dumps(self._manifest(lang_filter=lang)).encode(), "application/json", True)
@@ -447,7 +501,6 @@ class Handler(BaseHTTPRequestHandler):
                             k, v = kv.split("=", 1)
                             params[k] = urllib.parse.unquote_plus(v)
                 
-                # CORRECTION ICI : lire le filtre de langue depuis les query params
                 lang_filter = qs.get("lang", [None])[0]
                 
                 chans = vavoo_channels() if catid == "vavoo" else channels(lang_filter=lang_filter)
@@ -475,7 +528,7 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
-                    streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
+                    streams = [{"name": "Vavoo", "title": " Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 ok = working_players(cid)
                 streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
@@ -484,7 +537,6 @@ class Handler(BaseHTTPRequestHandler):
                              "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
 
-            # ---- proxy HLS ----
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
                 cid = parts[2]
@@ -606,6 +658,23 @@ DASHBOARD_HTML = r"""<!doctype html>
   .item .name{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.item .id{color:var(--muted);font-size:11px;font-family:ui-monospace,monospace}
   .empty{color:var(--muted);text-align:center;padding:30px}footer{margin-top:40px;color:var(--muted);font-size:12px;text-align:center}
   .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
+  .player-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.95);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+  .player-modal.active{display:flex}.player-container{width:100%;max-width:1200px;background:var(--bg2);border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .player-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .player-header h3{margin:0;font-size:16px}.player-close{background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;padding:0;width:32px;height:32px;display:grid;place-items:center;border-radius:6px;transition:.15s}
+  .player-close:hover{background:rgba(255,255,255,.1);color:var(--text)}
+  .player-body{padding:20px}.player-frame{width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;border:none}
+  .add-source{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .add-source input{flex:1;min-width:200px;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:14px;outline:none;transition:.15s}
+  .add-source input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
+  .btn{padding:10px 16px;border:none;border-radius:8px;font-size:14px;cursor:pointer;transition:.15s;font-weight:500}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0f1a}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(96,165,250,.4)}
+  .btn-secondary{background:var(--bg2);color:var(--text);border:1px solid var(--border)}
+  .btn-secondary:hover{border-color:var(--accent)}
+  .alert{padding:12px 16px;border-radius:8px;margin-top:10px;font-size:13px}
+  .alert-success{background:rgba(52,211,153,.15);border:1px solid var(--ok);color:var(--ok)}
+  .alert-error{background:rgba(248,113,113,.15);border:1px solid var(--err);color:var(--err)}
   @media (max-width:600px){header{padding:18px 14px}main{padding:10px 14px 40px}.card .val{font-size:22px}}
 </style>
 </head>
@@ -618,6 +687,15 @@ DASHBOARD_HTML = r"""<!doctype html>
     <div class="card"><div class="label">Uptime</div><div class="val" id="c-up">—</div><div class="hint">depuis démarrage</div></div>
     <div class="card"><div class="label">Version</div><div class="val" id="c-v">—</div><div class="hint">addon Stremio</div></div>
   </div></section>
+  
+  <section><h2>Ajouter une source</h2>
+    <div class="add-source">
+      <input id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121 ou https://dlstreams.st/)">
+      <button class="btn btn-primary" id="add-source-btn"> Scraper & Ajouter</button>
+    </div>
+    <div id="add-source-result"></div>
+  </section>
+  
   <section><h2>Accès rapide</h2><div class="grid access">
     <div class="card"><div class="label">Stremio — installer l'addon</div><div style="margin-top:6px">Addons → « Install via URL »</div><a id="manifest" href="#">—</a><div><button class="copy" data-copy="manifest">📋 copier l'URL</button></div></div>
     <div class="card"><div class="label">VLC / mpv / ffmpeg — lecture directe</div><div style="margin-top:6px">Ouvre un flux par son id :</div><code id="vlc" style="color:var(--accent);word-break:break-all;font-size:12px">—</code><div><button class="copy" data-copy="vlc">📋 copier</button></div></div>
@@ -629,13 +707,28 @@ DASHBOARD_HTML = r"""<!doctype html>
       <div><a href="/configure" style="color:var(--accent)">/configure</a> — configurer la langue</div>
     </div></div>
   </div></section>
+  
   <section><h2>Catalogue</h2><div class="search">
     <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
-    <select id="lang-filter"><option value="all">🌍 Toutes langues</option><option value="fr" selected>🇷 Français</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="de">🇩 Deutsch</option><option value="it">🇹 Italiano</option><option value="ar">🇸🇦 Arabe</option><option value="pt">🇵🇹 Português</option><option value="other">📺 Autres</option></select>
+    <select id="lang-filter"><option value="all">🌍 Toutes langues</option><option value="fr" selected>🇷 Français</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="de">🇩🇪 Deutsch</option><option value="it">🇮🇹 Italiano</option><option value="ar">🇦 Arabe</option><option value="pt">🇵🇹 Português</option><option value="other">📺 Autres</option></select>
     <div class="tabs"><button class="tab active" data-src="dlstreams">dlstreams</button><button class="tab" data-src="vavoo">Vavoo</button></div>
   </div><div class="list" id="list"><div class="empty">chargement…</div></div></section>
+  
   <footer>dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span></footer>
 </main>
+
+<div class="player-modal" id="player-modal">
+  <div class="player-container">
+    <div class="player-header">
+      <h3 id="player-title">Lecture</h3>
+      <button class="player-close" id="player-close">×</button>
+    </div>
+    <div class="player-body">
+      <video class="player-frame" id="player-frame" controls autoplay></video>
+    </div>
+  </div>
+</div>
+
 <script>
 const BASE = location.origin;const $ = s => document.querySelector(s);
 const fmtDur = s => {if (s==null) return "—";const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");};
@@ -643,9 +736,61 @@ const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60
 async function refreshStats(){try{const r = await fetch("/api/stats"); const d = await r.json();$("#c-dl").textContent = d.dlstreams.count;$("#c-dl-h").textContent = "cache : " + fmtAge(d.dlstreams.age_seconds);$("#c-vv").textContent = d.vavoo.count;$("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);$("#c-up").textContent = fmtDur(d.uptime);$("#c-v").textContent = "v" + d.version;$("#dot").className = "dot ok"; $("#stxt").textContent = "en ligne";}catch(e){$("#dot").className = "dot err"; $("#stxt").textContent = "hors ligne";}}
 let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};let LANG_FILTER = "fr";
 async function loadCatalog(src){const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;try{ const r = await fetch(url); ALL[src] = await r.json(); }catch(e){ ALL[src]=[]; }}
-function render(){const q = $("#q").value.toLowerCase().trim();const words = q ? q.split(/\s+/) : [];const lang = LANG_FILTER === "all" ? null : LANG_FILTER;const items = (ALL[CURRENT]||[]).filter(c => {if (lang && c.lang !== lang) return false;return words.every(w => (c.name||"").toLowerCase().includes(w));}).slice(0, 300);const list = $("#list");if(!items.length){ list.innerHTML = '<div class="empty">aucun résultat</div>'; return; }list.innerHTML = items.map(c => {const encodedId = CURRENT==="vavoo" ? b64u(c.id) : c.id;const href = CURRENT==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}` : `${BASE}/hls/${c.id}/index.m3u8`;const logo = c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";return `<a class="item" href="${href}" target="_blank" title="${escapeHtml(c.name)}">${logo}<div class="name">${escapeHtml(c.name)}</div><div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div></a>`;}).join("");}
+function render(){const q = $("#q").value.toLowerCase().trim();const words = q ? q.split(/\s+/) : [];const lang = LANG_FILTER === "all" ? null : LANG_FILTER;const items = (ALL[CURRENT]||[]).filter(c => {if (lang && c.lang !== lang) return false;return words.every(w => (c.name||"").toLowerCase().includes(w));}).slice(0, 300);const list = $("#list");if(!items.length){ list.innerHTML = '<div class="empty">aucun résultat</div>'; return; }list.innerHTML = items.map(c => {const encodedId = CURRENT==="vavoo" ? b64u(c.id) : c.id;const href = CURRENT==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}` : `${BASE}/hls/${c.id}/index.m3u8`;const logo = c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";return `<a class="item" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">${logo}<div class="name">${escapeHtml(c.name)}</div><div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div></a>`;}).join("");}
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+// Mini-player
+function openPlayer(url, title){
+  $("#player-title").textContent = title;
+  const video = $("#player-frame");
+  video.src = url;
+  video.play();
+  $("#player-modal").classList.add("active");
+}
+$("#player-close").addEventListener("click", ()=>{
+  const video = $("#player-frame");
+  video.pause();
+  video.src = "";
+  $("#player-modal").classList.remove("active");
+});
+document.addEventListener("click", (e)=>{
+  if(e.target.classList.contains("item") && e.target.dataset.play){
+    e.preventDefault();
+    const name = e.target.querySelector(".name").textContent;
+    openPlayer(e.target.dataset.play, name);
+  }
+});
+
+// Ajout de source
+$("#add-source-btn").addEventListener("click", async ()=>{
+  const url = $("#source-url").value.trim();
+  if(!url){
+    $("#add-source-result").innerHTML = '<div class="alert alert-error">Veuillez entrer une URL</div>';
+    return;
+  }
+  $("#add-source-btn").disabled = true;
+  $("#add-source-btn").textContent = "⏳ Scraping...";
+  try{
+    const r = await fetch(`/api/add-source?url=${encodeURIComponent(url)}`);
+    const d = await r.json();
+    if(d.success){
+      $("#add-source-result").innerHTML = `<div class="alert alert-success">${d.message}</div>`;
+      $("#source-url").value = "";
+      await loadCatalog(CURRENT);
+      render();
+      await refreshStats();
+    }else{
+      $("#add-source-result").innerHTML = `<div class="alert alert-error">${d.message}</div>`;
+    }
+  }catch(e){
+    $("#add-source-result").innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
+  }finally{
+    $("#add-source-btn").disabled = false;
+    $("#add-source-btn").textContent = "🔍 Scraper & Ajouter";
+  }
+});
+
 $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,120);}})());
 $("#lang-filter").addEventListener("change", (e) => {LANG_FILTER = e.target.value;loadCatalog(CURRENT);render();});
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active"); CURRENT = b.dataset.src;if(!ALL[CURRENT].length) await loadCatalog(CURRENT);render();}));
@@ -689,7 +834,7 @@ CONFIGURE_HTML = r"""<!doctype html>
 <body>
 <header><div class="logo">▶</div><div><h1>Configuration <span class="badge">langue</span></h1></div></header>
 <main>
-  <div class="card"><h2> Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
+  <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
     <div class="lang-grid" id="lang-grid">
       <button class="lang-btn" data-lang="all"><span class="lang-flag"></span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
       <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
@@ -706,7 +851,7 @@ CONFIGURE_HTML = r"""<!doctype html>
     <button class="copy" id="copy-btn">📋 Copier l'URL</button>
     <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
   </div>
-  <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
+  <div class="card"><h2> Liens rapides</h2><div style="display:grid;gap:8px">
     <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
     <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
     <div><a href="/">→ Retour accueil</a></div>
