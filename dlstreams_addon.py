@@ -14,7 +14,7 @@ segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue,
 Lancer :    python3 dlstreams_addon.py            (port 8781 par defaut, override: PORT=... )
 VLC/ffmpeg: http://127.0.0.1:8781/hls/121/index.m3u8
 Stremio :   installer via  http://<ton-ip-LAN>:8781/manifest.json
-Dashboard:  http://127.0.0.1:8781/
+Dashboard:  http://127.0.0.1:8781/dashboard
 Rien d'autre a installer : Python 3.8+ suffit. Aucune cle, aucun compte.
 """
 from __future__ import annotations
@@ -359,8 +359,8 @@ class Handler(BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(u.query)
         try:
             # ---- dashboard & API ----
-if path == "/dashboard" or path == "/dashboard.html":
-    return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
+            if path == "/dashboard" or path == "/dashboard.html":
+                return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
             if path == "/api/stats":
                 return self._send(200, json.dumps(_stats()).encode(), "application/json")
@@ -372,7 +372,7 @@ if path == "/dashboard" or path == "/dashboard.html":
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
 
             # ---- addon Stremio ----
-            if path == "/manifest.json":
+            if path in ("/", "/manifest.json"):
                 return self._send(200, json.dumps(self._manifest()).encode(), "application/json", True)
 
             if path.startswith("/catalog/tv/"):
@@ -491,7 +491,7 @@ if path == "/dashboard" or path == "/dashboard.html":
 
 def main():
     print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
-    print(f"  Dashboard: http://127.0.0.1:{PORT}/")
+    print(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json")
     print(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
     try:
@@ -598,7 +598,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         <div class="label">Stremio — installer l'addon</div>
         <div style="margin-top:6px">Addons → « Install via URL »</div>
         <a id="manifest" href="#">—</a>
-        <div><button class="copy" data-copy="manifest">📋 copier l'URL</button></div>
+        <div><button class="copy" data-copy="manifest"> copier l'URL</button></div>
       </div>
       <div class="card">
         <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
