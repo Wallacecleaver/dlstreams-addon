@@ -10,11 +10,13 @@ Ce script :
 2. sert un PROXY local qui injecte les headers sur les playlists et rebalise les
 segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue, SANS MediaFlow ;
 3. expose un ADDON STREMIO minimal (manifest + catalog + stream) par-dessus ;
-4. expose un DASHBOARD web moderne pour visualiser les stats et parcourir le catalogue.
+4. expose un DASHBOARD web moderne avec filtrage par langue et recherche live ;
+5. permet de configurer la langue via /configure pour filtrer dans Stremio.
 Lancer :    python3 dlstreams_addon.py            (port 8781 par defaut, override: PORT=... )
 VLC/ffmpeg: http://127.0.0.1:8781/hls/121/index.m3u8
 Stremio :   installer via  http://<ton-ip-LAN>:8781/manifest.json
 Dashboard:  http://127.0.0.1:8781/dashboard
+Configure:  http://127.0.0.1:8781/configure
 Rien d'autre a installer : Python 3.8+ suffit. Aucune cle, aucun compte.
 """
 from __future__ import annotations
@@ -38,107 +40,125 @@ _CH_TTL = 1800
 _START_TIME = time.time()
 
 # ---------------------------------------------------------------- CHAÎNES POPULAIRES (manuelles)
-# Ajout manuel des chaînes françaises importantes qui peuvent manquer au scraping
 _POPULAR_CHANNELS = [
-    {"id": "121", "name": "Canal+ France"},
-    {"id": "122", "name": "Canal+ Sport"},
-    {"id": "123", "name": "Canal+ Cinéma"},
-    {"id": "124", "name": "Canal+ Séries"},
-    {"id": "125", "name": "Canal+ Family"},
-    {"id": "201", "name": "beIN Sports 1"},
-    {"id": "202", "name": "beIN Sports 2"},
-    {"id": "203", "name": "beIN Sports 3"},
-    {"id": "211", "name": "RMC Sport 1"},
-    {"id": "212", "name": "RMC Sport 2"},
-    {"id": "213", "name": "RMC Sport 3"},
-    {"id": "214", "name": "RMC Sport 4"},
-    {"id": "301", "name": "Eurosport 1"},
-    {"id": "302", "name": "Eurosport 2"},
-    {"id": "401", "name": "TF1"},
-    {"id": "402", "name": "France 2"},
-    {"id": "403", "name": "France 3"},
-    {"id": "404", "name": "France 4"},
-    {"id": "405", "name": "France 5"},
-    {"id": "406", "name": "M6"},
-    {"id": "407", "name": "Arte"},
-    {"id": "408", "name": "C8"},
-    {"id": "409", "name": "W9"},
-    {"id": "410", "name": "TMC"},
-    {"id": "411", "name": "TFX"},
-    {"id": "412", "name": "NRJ 12"},
-    {"id": "413", "name": "LCP"},
-    {"id": "414", "name": "France Info"},
-    {"id": "415", "name": "BFM TV"},
-    {"id": "416", "name": "CNews"},
-    {"id": "417", "name": "CStar"},
-    {"id": "418", "name": "Gulli"},
-    {"id": "419", "name": "TF1 Séries Films"},
-    {"id": "420", "name": "L'Équipe"},
-    {"id": "421", "name": "6ter"},
-    {"id": "422", "name": "RMC Story"},
-    {"id": "423", "name": "RMC Découverte"},
-    {"id": "424", "name": "Chérie 25"},
-    {"id": "501", "name": "Paris Première"},
-    {"id": "502", "name": "Planète+"},
-    {"id": "503", "name": "Série Club"},
-    {"id": "504", "name": "Téva"},
-    {"id": "505", "name": "M6 Music"},
-    {"id": "506", "name": "M6 Boutique"},
-    {"id": "601", "name": "RTL9"},
-    {"id": "602", "name": "AB1"},
-    {"id": "603", "name": "AB3"},
-    {"id": "604", "name": "AB Moteurs"},
-    {"id": "605", "name": "Action"},
-    {"id": "606", "name": "Ciné+ Classic"},
-    {"id": "607", "name": "Ciné+ Club"},
-    {"id": "608", "name": "Ciné+ Émotion"},
-    {"id": "609", "name": "Ciné+ Famiz"},
-    {"id": "610", "name": "Ciné+ Frisson"},
-    {"id": "611", "name": "Ciné+ Premier"},
-    {"id": "612", "name": "Comédie+"},
-    {"id": "613", "name": "Crime District"},
-    {"id": "614", "name": "Elle Girl"},
-    {"id": "615", "name": "Encyclo"},
-    {"id": "616", "name": "Equidia"},
-    {"id": "617", "name": "Escales"},
-    {"id": "618", "name": "Golf Channel"},
-    {"id": "619", "name": "Historia"},
-    {"id": "620", "name": "Hustler"},
-    {"id": "621", "name": "Infosport+"},
-    {"id": "622", "name": "JimJam"},
-    {"id": "623", "name": "KTO"},
-    {"id": "624", "name": "LCI"},
-    {"id": "625", "name": "Mangas"},
-    {"id": "626", "name": "Mezzo"},
-    {"id": "627", "name": "MTV"},
-    {"id": "628", "name": "National Geographic"},
-    {"id": "629", "name": "Nickelodeon Junior"},
-    {"id": "630", "name": "NT1"},
-    {"id": "631", "name": "OCS Choc"},
-    {"id": "632", "name": "OCS City"},
-    {"id": "633", "name": "OCS Géants"},
-    {"id": "634", "name": "OCS Max"},
-    {"id": "635", "name": "Penthouse"},
-    {"id": "636", "name": "Piwi+"},
-    {"id": "637", "name": "Planète+ A&E"},
-    {"id": "638", "name": "Planète+ CI"},
-    {"id": "639", "name": "Polar+"},
-    {"id": "640", "name": "RTL Living"},
-    {"id": "641", "name": "Science & Vie TV"},
-    {"id": "642", "name": "Seasons"},
-    {"id": "643", "name": "Sport+"},
-    {"id": "644", "name": "Stingray Brava"},
-    {"id": "645", "name": "Stingray DJazz"},
-    {"id": "646", "name": "Stingray iConcerts"},
-    {"id": "647", "name": "Télétoon+"},
-    {"id": "648", "name": "Toonami"},
-    {"id": "649", "name": "Trace Tropical"},
-    {"id": "650", "name": "TV Breizh"},
-    {"id": "651", "name": "TV5 Monde"},
-    {"id": "652", "name": "Ushuaïa TV"},
-    {"id": "653", "name": "Vivolta"},
-    {"id": "654", "name": "XXL"},
+    {"id": "121", "name": "Canal+ France", "lang": "fr"},
+    {"id": "122", "name": "Canal+ Sport", "lang": "fr"},
+    {"id": "123", "name": "Canal+ Cinéma", "lang": "fr"},
+    {"id": "124", "name": "Canal+ Séries", "lang": "fr"},
+    {"id": "125", "name": "Canal+ Family", "lang": "fr"},
+    {"id": "201", "name": "beIN Sports 1", "lang": "fr"},
+    {"id": "202", "name": "beIN Sports 2", "lang": "fr"},
+    {"id": "203", "name": "beIN Sports 3", "lang": "fr"},
+    {"id": "211", "name": "RMC Sport 1", "lang": "fr"},
+    {"id": "212", "name": "RMC Sport 2", "lang": "fr"},
+    {"id": "213", "name": "RMC Sport 3", "lang": "fr"},
+    {"id": "214", "name": "RMC Sport 4", "lang": "fr"},
+    {"id": "301", "name": "Eurosport 1", "lang": "fr"},
+    {"id": "302", "name": "Eurosport 2", "lang": "fr"},
+    {"id": "401", "name": "TF1", "lang": "fr"},
+    {"id": "402", "name": "France 2", "lang": "fr"},
+    {"id": "403", "name": "France 3", "lang": "fr"},
+    {"id": "404", "name": "France 4", "lang": "fr"},
+    {"id": "405", "name": "France 5", "lang": "fr"},
+    {"id": "406", "name": "M6", "lang": "fr"},
+    {"id": "407", "name": "Arte", "lang": "fr"},
+    {"id": "408", "name": "C8", "lang": "fr"},
+    {"id": "409", "name": "W9", "lang": "fr"},
+    {"id": "410", "name": "TMC", "lang": "fr"},
+    {"id": "411", "name": "TFX", "lang": "fr"},
+    {"id": "412", "name": "NRJ 12", "lang": "fr"},
+    {"id": "413", "name": "LCP", "lang": "fr"},
+    {"id": "414", "name": "France Info", "lang": "fr"},
+    {"id": "415", "name": "BFM TV", "lang": "fr"},
+    {"id": "416", "name": "CNews", "lang": "fr"},
+    {"id": "417", "name": "CStar", "lang": "fr"},
+    {"id": "418", "name": "Gulli", "lang": "fr"},
+    {"id": "419", "name": "TF1 Séries Films", "lang": "fr"},
+    {"id": "420", "name": "L'Équipe", "lang": "fr"},
+    {"id": "421", "name": "6ter", "lang": "fr"},
+    {"id": "422", "name": "RMC Story", "lang": "fr"},
+    {"id": "423", "name": "RMC Découverte", "lang": "fr"},
+    {"id": "424", "name": "Chérie 25", "lang": "fr"},
+    {"id": "501", "name": "Paris Première", "lang": "fr"},
+    {"id": "502", "name": "Planète+", "lang": "fr"},
+    {"id": "503", "name": "Série Club", "lang": "fr"},
+    {"id": "504", "name": "Téva", "lang": "fr"},
+    {"id": "505", "name": "M6 Music", "lang": "fr"},
+    {"id": "506", "name": "M6 Boutique", "lang": "fr"},
+    {"id": "601", "name": "RTL9", "lang": "fr"},
+    {"id": "602", "name": "AB1", "lang": "fr"},
+    {"id": "603", "name": "AB3", "lang": "fr"},
+    {"id": "604", "name": "AB Moteurs", "lang": "fr"},
+    {"id": "605", "name": "Action", "lang": "fr"},
+    {"id": "606", "name": "Ciné+ Classic", "lang": "fr"},
+    {"id": "607", "name": "Ciné+ Club", "lang": "fr"},
+    {"id": "608", "name": "Ciné+ Émotion", "lang": "fr"},
+    {"id": "609", "name": "Ciné+ Famiz", "lang": "fr"},
+    {"id": "610", "name": "Ciné+ Frisson", "lang": "fr"},
+    {"id": "611", "name": "Ciné+ Premier", "lang": "fr"},
+    {"id": "612", "name": "Comédie+", "lang": "fr"},
+    {"id": "613", "name": "Crime District", "lang": "fr"},
+    {"id": "614", "name": "Elle Girl", "lang": "fr"},
+    {"id": "615", "name": "Encyclo", "lang": "fr"},
+    {"id": "616", "name": "Equidia", "lang": "fr"},
+    {"id": "617", "name": "Escales", "lang": "fr"},
+    {"id": "618", "name": "Golf Channel", "lang": "fr"},
+    {"id": "619", "name": "Historia", "lang": "fr"},
+    {"id": "620", "name": "Hustler", "lang": "fr"},
+    {"id": "621", "name": "Infosport+", "lang": "fr"},
+    {"id": "622", "name": "JimJam", "lang": "fr"},
+    {"id": "623", "name": "KTO", "lang": "fr"},
+    {"id": "624", "name": "LCI", "lang": "fr"},
+    {"id": "625", "name": "Mangas", "lang": "fr"},
+    {"id": "626", "name": "Mezzo", "lang": "fr"},
+    {"id": "627", "name": "MTV", "lang": "fr"},
+    {"id": "628", "name": "National Geographic", "lang": "fr"},
+    {"id": "629", "name": "Nickelodeon Junior", "lang": "fr"},
+    {"id": "630", "name": "NT1", "lang": "fr"},
+    {"id": "631", "name": "OCS Choc", "lang": "fr"},
+    {"id": "632", "name": "OCS City", "lang": "fr"},
+    {"id": "633", "name": "OCS Géants", "lang": "fr"},
+    {"id": "634", "name": "OCS Max", "lang": "fr"},
+    {"id": "635", "name": "Penthouse", "lang": "fr"},
+    {"id": "636", "name": "Piwi+", "lang": "fr"},
+    {"id": "637", "name": "Planète+ A&E", "lang": "fr"},
+    {"id": "638", "name": "Planète+ CI", "lang": "fr"},
+    {"id": "639", "name": "Polar+", "lang": "fr"},
+    {"id": "640", "name": "RTL Living", "lang": "fr"},
+    {"id": "641", "name": "Science & Vie TV", "lang": "fr"},
+    {"id": "642", "name": "Seasons", "lang": "fr"},
+    {"id": "643", "name": "Sport+", "lang": "fr"},
+    {"id": "644", "name": "Stingray Brava", "lang": "fr"},
+    {"id": "645", "name": "Stingray DJazz", "lang": "fr"},
+    {"id": "646", "name": "Stingray iConcerts", "lang": "fr"},
+    {"id": "647", "name": "Télétoon+", "lang": "fr"},
+    {"id": "648", "name": "Toonami", "lang": "fr"},
+    {"id": "649", "name": "Trace Tropical", "lang": "fr"},
+    {"id": "650", "name": "TV Breizh", "lang": "fr"},
+    {"id": "651", "name": "TV5 Monde", "lang": "fr"},
+    {"id": "652", "name": "Ushuaïa TV", "lang": "fr"},
+    {"id": "653", "name": "Vivolta", "lang": "fr"},
+    {"id": "654", "name": "XXL", "lang": "fr"},
 ]
+
+def _detect_lang(name: str) -> str:
+    """Détecte la langue probable d'une chaîne à partir de son nom."""
+    n = name.lower()
+    if any(x in n for x in ["france", "français", "french", " fr ", " fr.", "-fr", "_fr", "tf1", "france 2", "france 3", "france 4", "france 5", "m6", "canal+", "rmc", "l'équipe", "arte", "bein sports 1", "bein sports 2", "bein sports 3"]):
+        return "fr"
+    if any(x in n for x in ["uk", "english", "usa", " us ", "espn", "fox", "cnn", "nbc", "abc ", "sky sports"]):
+        return "en"
+    if any(x in n for x in ["españa", "spanish", "spain", " es ", "movistar", "la liga"]):
+        return "es"
+    if any(x in n for x in ["deutsch", "german", "germany", " de ", "sky de", "ard", "zdf"]):
+        return "de"
+    if any(x in n for x in ["italia", "italian", "italy", " it ", "rai ", "mediaset"]):
+        return "it"
+    if any(x in n for x in ["arabic", "arabe", "mbc", "al jazeera", "bein arabic"]):
+        return "ar"
+    if any(x in n for x in ["portugal", "portuguese", " pt ", "sport tv", "rtp"]):
+        return "pt"
+    return "other"
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
     """GET brut avec User-Agent + Referer (et Origin si fourni). Renvoie le corps (bytes)."""
@@ -180,14 +200,16 @@ class _LinkParser(HTMLParser):
 
 _ch_cache: dict = {"at": 0.0, "list": []}
 
-def channels() -> list[dict]:
-    """Annuaire dlstreams -> [{id, name}]. Fusionne chaînes populaires + scraping. Cache 30 min."""
+def channels(lang_filter: str | None = None) -> list[dict]:
+    """Annuaire dlstreams -> [{id, name, lang}]. Fusionne chaînes populaires + scraping. Cache 30 min.
+    Si lang_filter est défini, ne retourne QUE les chaînes de cette langue."""
     now = time.time()
-    if _ch_cache["list"] and now - _ch_cache["at"] < _CH_TTL:
+    # Note: on ne cache pas si filtrage langue actif pour éviter les problèmes
+    if _ch_cache["list"] and now - _ch_cache["at"] < _CH_TTL and lang_filter is None:
         return _ch_cache["list"]
     
-    # Commence toujours avec les chaînes populaires
-    seen: dict[str, str] = {ch["id"]: ch["name"] for ch in _POPULAR_CHANNELS}
+    # Commence avec les chaînes populaires (langue déjà définie)
+    seen: dict[str, dict] = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
     
     # Ajoute le scraping de la page d'accueil
     try:
@@ -195,17 +217,24 @@ def channels() -> list[dict]:
         p = _LinkParser()
         p.feed(html)
         for idv, name in p.items:
-            seen.setdefault(idv, name)  # Garde les noms populaires si déjà définis
+            if idv not in seen:
+                seen[idv] = {"id": idv, "name": name, "lang": _detect_lang(name)}
     except Exception:
         pass  # Garde au moins les chaînes populaires si le scraping échoue
     
-    out = [{"id": i, "name": n} for i, n in seen.items()]
-    _ch_cache.update(at=now, list=out)
+    out = list(seen.values())
+    
+    # Applique le filtre de langue si demandé
+    if lang_filter and lang_filter != "all":
+        out = [c for c in out if c.get("lang") == lang_filter]
+    
+    if lang_filter is None:
+        _ch_cache.update(at=now, list=out)
     return out
 
-def search(query: str, limit: int = 40) -> list[dict]:
+def search(query: str, limit: int = 40, lang_filter: str | None = None) -> list[dict]:
     q = query.lower().strip()
-    hits = [c for c in channels() if q in c["name"].lower()]
+    hits = [c for c in channels(lang_filter=lang_filter) if q in c["name"].lower()]
     return hits[:limit]
 
 # ---------------------------------------------------------------- resolution du flux (MULTI-PLAYER)
@@ -353,7 +382,7 @@ def _vavoo_post(action: str, body: dict):
     return None
 
 def vavoo_channels(country: str = "France") -> list[dict]:
-    """Catalogue Vavoo d'un pays -> [{id, name, logo}]. Cache 6 h, pagine."""
+    """Catalogue Vavoo d'un pays -> [{id, name, logo, lang}]. Cache 6 h, pagine."""
     if _vavoo_cache["list"] and time.time() - _vavoo_cache["at"] < 6 * 3600:
         return _vavoo_cache["list"]
     items, cursor, pages = [], 0, 0
@@ -366,7 +395,7 @@ def vavoo_channels(country: str = "France") -> list[dict]:
         batch = d.get("items") or []
         if not batch:
             break
-        items += [{"id": x.get("url"), "name": x.get("name") or "", "logo": x.get("logo") or ""}
+        items += [{"id": x.get("url"), "name": x.get("name") or "", "logo": x.get("logo") or "", "lang": "fr"}
                   for x in batch if x.get("url")]
         cursor, pages = d.get("nextCursor"), pages + 1
     if items:
@@ -416,7 +445,7 @@ def _stats() -> dict:
     return {
         "status": "ok",
         "uptime": int(time.time() - _START_TIME),
-        "version": "1.2.0",
+        "version": "1.3.0",
         "port": PORT,
         "dlstreams": {
             "count": len(_ch_cache.get("list") or []),
@@ -470,18 +499,27 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/dashboard" or path == "/dashboard.html":
                 return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
+            if path == "/configure" or path == "/configure.html":
+                return self._send(200, CONFIGURE_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
+
             if path == "/api/stats":
                 return self._send(200, json.dumps(_stats()).encode(), "application/json")
 
             if path == "/api/channels":
-                return self._send(200, json.dumps(channels()).encode(), "application/json", True)
+                lang = qs.get("lang", [None])[0]
+                return self._send(200, json.dumps(channels(lang_filter=lang)).encode(), "application/json", True)
 
             if path == "/api/vavoo-channels":
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
 
             # ---- addon Stremio ----
-            if path in ("/", "/manifest.json"):
+            if path == "/manifest.json":
                 return self._send(200, json.dumps(self._manifest()).encode(), "application/json", True)
+
+            # Manifest personnalisé avec filtrage langue
+            if path.startswith("/manifest-") and path.endswith(".json"):
+                lang = path.replace("/manifest-", "").replace(".json", "")
+                return self._send(200, json.dumps(self._manifest(lang_filter=lang)).encode(), "application/json", True)
 
             if path.startswith("/catalog/tv/"):
                 extra = path[len("/catalog/tv/"):].removesuffix(".json")
@@ -492,7 +530,11 @@ class Handler(BaseHTTPRequestHandler):
                         if "=" in kv:
                             k, v = kv.split("=", 1)
                             params[k] = urllib.parse.unquote_plus(v)
-                chans = vavoo_channels() if catid == "vavoo" else channels()
+                
+                # Récupère le filtre de langue depuis les params ou l'URL
+                lang_filter = params.get("lang")
+                
+                chans = vavoo_channels() if catid == "vavoo" else channels(lang_filter=lang_filter)
                 q = params.get("search", "").lower().strip()
                 if q:
                     words = q.replace("+", " ").split()
@@ -517,7 +559,7 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
-                    streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
+                    streams = [{"name": "Vavoo", "title": " Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 ok = working_players(cid)
                 streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
@@ -574,14 +616,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(502, f"resolve/proxy error: {type(e).__name__}: {e}".encode(), "text/plain")
 
     # ---- helpers addon ----
-    def _manifest(self) -> dict:
+    def _manifest(self, lang_filter: str | None = None) -> dict:
         _extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]
+        name = "dlstreams + Vavoo"
+        desc = "Chaines live dlstreams (DaddyLive) + Vavoo, proxifiees (headers + content-type corriges). Dashboard web integre avec filtre langue. Sans MediaFlow."
+        
+        if lang_filter and lang_filter != "all":
+            lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
+            lang_name = lang_names.get(lang_filter, lang_filter)
+            name = f"dlstreams {lang_name}"
+            desc = f"Chaines {lang_name} uniquement. Filtre actif: {lang_name}."
+        
         return {
-            "id": "st.dlstreams.proxy",
-            "version": "1.2.0",
-            "name": "dlstreams + Vavoo",
-            "description": "Chaines live dlstreams (DaddyLive) + Vavoo, proxifiees (headers + content-type "
-                           "corriges). Dashboard web integre. Sans MediaFlow.",
+            "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
+            "version": "1.3.0",
+            "name": name,
+            "description": desc,
             "resources": ["catalog", "meta", "stream"],
             "types": ["tv"],
             "idPrefixes": ["dlstreams:", "vavoo:"],
@@ -600,11 +650,12 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     print(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
+    print(f"  Configure: http://127.0.0.1:{PORT}/configure")
     print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json")
     print(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
     try:
         n = len(channels())
-        print(f"  annuaire : {n} chaines chargees (dont {_len(_POPULAR_CHANNELS)} populaires)")
+        print(f"  annuaire : {n} chaines chargees (dont {len(_POPULAR_CHANNELS)} populaires)")
     except Exception as e:
         print(f"  annuaire : erreur de chargement ({e})")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
@@ -658,10 +709,13 @@ DASHBOARD_HTML = r"""<!doctype html>
     color:var(--muted);font-size:12px;cursor:pointer;transition:.15s}
   .copy:hover{color:var(--text);border-color:var(--accent)}
   .search{position:sticky;top:0;z-index:5;background:rgba(11,15,26,.85);backdrop-filter:blur(10px);
-    padding:10px 0;display:flex;gap:10px;align-items:center}
-  .search input{flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);
+    padding:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .search input{flex:1;min-width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);
     padding:10px 14px;border-radius:10px;font-size:14px;outline:none;transition:.15s}
   .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
+  .search select{background:var(--card);border:1px solid var(--border);color:var(--text);
+    padding:10px 14px;border-radius:10px;font-size:14px;outline:none;cursor:pointer;transition:.15s}
+  .search select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
   .tabs{display:flex;gap:6px}
   .tab{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;
     color:var(--muted);cursor:pointer;font-size:13px;transition:.15s}
@@ -706,7 +760,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         <div class="label">Stremio — installer l'addon</div>
         <div style="margin-top:6px">Addons → « Install via URL »</div>
         <a id="manifest" href="#">—</a>
-        <div><button class="copy" data-copy="manifest"> copier l'URL</button></div>
+        <div><button class="copy" data-copy="manifest">📋 copier l'URL</button></div>
       </div>
       <div class="card">
         <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
@@ -721,6 +775,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div><a href="/api/stats" style="color:var(--accent)">/api/stats</a> — statut serveur</div>
           <div><a href="/api/channels" style="color:var(--accent)">/api/channels</a> — annuaire dlstreams</div>
           <div><a href="/api/vavoo-channels" style="color:var(--accent)">/api/vavoo-channels</a> — catalogue Vavoo FR</div>
+          <div><a href="/configure" style="color:var(--accent)">/configure</a> — configurer la langue</div>
         </div>
       </div>
     </div>
@@ -730,6 +785,17 @@ DASHBOARD_HTML = r"""<!doctype html>
     <h2>Catalogue</h2>
     <div class="search">
       <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
+      <select id="lang-filter">
+        <option value="all"> Toutes langues</option>
+        <option value="fr" selected>🇫🇷 Français</option>
+        <option value="en">🇬🇧 English</option>
+        <option value="es">🇪 Español</option>
+        <option value="de">🇩🇪 Deutsch</option>
+        <option value="it">🇮 Italiano</option>
+        <option value="ar">🇸🇦 Arabe</option>
+        <option value="pt">🇹 Português</option>
+        <option value="other">📺 Autres</option>
+      </select>
       <div class="tabs">
         <button class="tab active" data-src="dlstreams">dlstreams</button>
         <button class="tab" data-src="vavoo">Vavoo</button>
@@ -769,16 +835,23 @@ async function refreshStats(){
 }
 
 let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
+let LANG_FILTER = "fr"; // Par défaut sur Français
+
 async function loadCatalog(src){
-  const url = src==="vavoo" ? "/api/vavoo-channels" : "/api/channels";
+  const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;
   try{ const r = await fetch(url); ALL[src] = await r.json(); }catch(e){ ALL[src]=[]; }
 }
+
 function render(){
   const q = $("#q").value.toLowerCase().trim();
   const words = q ? q.split(/\s+/) : [];
-  const items = (ALL[CURRENT]||[]).filter(c =>
-    words.every(w => (c.name||"").toLowerCase().includes(w))
-  ).slice(0, 300);
+  const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
+  
+  const items = (ALL[CURRENT]||[]).filter(c => {
+    if (lang && c.lang !== lang) return false;
+    return words.every(w => (c.name||"").toLowerCase().includes(w));
+  }).slice(0, 300);
+  
   const list = $("#list");
   if(!items.length){ list.innerHTML = '<div class="empty">aucun résultat</div>'; return; }
   list.innerHTML = items.map(c => {
@@ -794,16 +867,24 @@ function render(){
     </a>`;
   }).join("");
 }
+
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,120);}})());
+$("#lang-filter").addEventListener("change", (e) => {
+  LANG_FILTER = e.target.value;
+  loadCatalog(CURRENT);
+  render();
+});
+
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   b.classList.add("active"); CURRENT = b.dataset.src;
   if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
   render();
 }));
+
 document.querySelectorAll(".copy").forEach(b=>b.addEventListener("click",()=>{
   const el = $("#"+b.dataset.copy); const txt = el.href || el.textContent;
   navigator.clipboard.writeText(txt).then(()=>{
@@ -823,6 +904,166 @@ document.querySelectorAll(".copy").forEach(b=>b.addEventListener("click",()=>{
   render();
   setInterval(refreshStats, 30000);
 })();
+</script>
+</body>
+</html>
+"""
+
+# ---------------------------------------------------------------- CONFIGURE HTML (page de configuration langue)
+CONFIGURE_HTML = r"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dlstreams — configuration</title>
+<style>
+  :root{
+    --bg:#0b0f1a; --bg2:#111827; --card:#151b2b; --border:#1f2937;
+    --text:#e5e7eb; --muted:#94a3b8; --accent:#60a5fa; --accent2:#a78bfa;
+    --ok:#34d399;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:
+    radial-gradient(1200px 600px at 10% -10%, #1e293b 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #312e81 0%, transparent 60%),
+    var(--bg);
+    color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+  header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px}
+  header .logo{width:40px;height:40px;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
+  header h1{margin:0;font-size:20px;letter-spacing:.3px}
+  main{padding:24px;max-width:800px;margin:0 auto}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));
+    border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
+  .card h2{margin:0 0 16px;color:var(--muted);font-size:15px;text-transform:uppercase;letter-spacing:.1em}
+  .lang-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
+  .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--card);
+    color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
+  .lang-btn:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .lang-btn.selected{border-color:var(--ok);background:rgba(52,211,153,.1)}
+  .lang-flag{font-size:24px}
+  .lang-name{font-weight:600}
+  .lang-count{color:var(--muted);font-size:12px;margin-top:2px}
+  .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+    padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
+  .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;
+    border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);
+    color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
+  .copy:hover{color:var(--text);border-color:var(--accent)}
+  .info{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;
+    background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"></div>
+  <div>
+    <h1>Configuration <span class="badge">langue</span></h1>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <h2>🌍 Choisir votre langue</h2>
+    <p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
+    <div class="lang-grid" id="lang-grid">
+      <button class="lang-btn" data-lang="all">
+        <span class="lang-flag"></span>
+        <div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div>
+      </button>
+      <button class="lang-btn selected" data-lang="fr">
+        <span class="lang-flag">🇫🇷</span>
+        <div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div>
+      </button>
+      <button class="lang-btn" data-lang="en">
+        <span class="lang-flag">🇬🇧</span>
+        <div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div>
+      </button>
+      <button class="lang-btn" data-lang="es">
+        <span class="lang-flag">🇪🇸</span>
+        <div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div>
+      </button>
+      <button class="lang-btn" data-lang="de">
+        <span class="lang-flag">🇩</span>
+        <div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div>
+      </button>
+      <button class="lang-btn" data-lang="it">
+        <span class="lang-flag">🇹</span>
+        <div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div>
+      </button>
+      <button class="lang-btn" data-lang="ar">
+        <span class="lang-flag">🇸🇦</span>
+        <div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div>
+      </button>
+      <button class="lang-btn" data-lang="pt">
+        <span class="lang-flag">🇵🇹</span>
+        <div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div>
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📥 Installer dans Stremio</h2>
+    <p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
+    <div class="manifest-box" id="manifest-url">—</div>
+    <button class="copy" id="copy-btn">📋 Copier l'URL</button>
+    <div class="info">
+      <strong>Comment faire :</strong><br>
+      1. Choisissez votre langue ci-dessus<br>
+      2. Copiez l'URL du manifest<br>
+      3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>
+      4. Collez l'URL et validez<br><br>
+      <em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2> Liens rapides</h2>
+    <div style="display:grid;gap:8px">
+      <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
+      <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
+      <div><a href="/">→ Retour accueil</a></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const BASE = location.origin;
+let CURRENT_LANG = "fr";
+
+// Gestion des boutons de langue
+document.querySelectorAll(".lang-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    CURRENT_LANG = btn.dataset.lang;
+    updateManifest();
+  });
+});
+
+function updateManifest() {
+  const url = CURRENT_LANG === "all" 
+    ? `${BASE}/manifest.json`
+    : `${BASE}/manifest-${CURRENT_LANG}.json`;
+  $("#manifest-url").textContent = url;
+}
+
+// Copie dans le presse-papier
+$("#copy-btn").addEventListener("click", () => {
+  const url = $("#manifest-url").textContent;
+  navigator.clipboard.writeText(url).then(() => {
+    const old = $("#copy-btn").textContent;
+    $("#copy-btn").textContent = "✓ Copié !";
+    setTimeout(() => $("#copy-btn").textContent = old, 2000);
+  });
+});
+
+// Init
+updateManifest();
 </script>
 </body>
 </html>
