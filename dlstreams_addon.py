@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""dlstreams -> Stremio : mini-addon + proxy autonome avec dashboard sécurisé et complet.
-Dashboard avec mot de passe, animations, notifications, et fonctionnalités avancées.
+"""dlstreams -> Stremio : mini-addon + proxy autonome avec dashboard complet.
+Dashboard avec session persistante, gestion des sources, et navigation SPA.
 """
 from __future__ import annotations
 import base64
@@ -121,6 +121,16 @@ class _LinkParser(HTMLParser):
 
 _ch_cache: dict = {"at": 0.0, "list": []}
 _manual_channels: dict[str, dict] = {}
+_activity_log: list[dict] = []
+
+def _log_activity(action: str, details: str = ""):
+    _activity_log.append({
+        "time": time.strftime("%H:%M:%S"),
+        "action": action,
+        "details": details
+    })
+    if len(_activity_log) > 100:
+        _activity_log.pop(0)
 
 def channels(lang_filter: str | None = None) -> list[dict]:
     now = time.time()
@@ -165,7 +175,7 @@ def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
         
         for idv, name in p.items:
             if idv not in current_channels:
-                ch = {"id": idv, "name": name, "lang": _detect_lang(name)}
+                ch = {"id": idv, "name": name, "lang": _detect_lang(name), "added_at": time.strftime("%Y-%m-%d %H:%M")}
                 _manual_channels[idv] = ch
                 added.append(ch)
             else:
@@ -175,9 +185,21 @@ def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
         if existing_count > 0:
             message += f" ({existing_count} déjà existantes)"
         
+        if added:
+            _log_activity("Ajout de sources", f"{len(added)} chaînes depuis {url}")
+        
         return added, message
     except Exception as e:
-        return [], f" Erreur: {type(e).__name__}: {e}"
+        return [], f"❌ Erreur: {type(e).__name__}: {e}"
+
+def remove_manual_channel(channel_id: str) -> bool:
+    if channel_id in _manual_channels:
+        removed = _manual_channels.pop(channel_id)
+        _log_activity("Suppression", f"Chaîne {removed['name']} (ID: {channel_id})")
+        _ch_cache["list"] = []
+        _ch_cache["at"] = 0
+        return True
+    return False
 
 _PLAYER_PATHS = ("stream", "watch", "player", "plus", "hub", "cast", "casting")
 
@@ -379,7 +401,7 @@ def _stats() -> dict:
     return {
         "status": "ok",
         "uptime": int(time.time() - _START_TIME),
-        "version": "1.4.0",
+        "version": "1.5.0",
         "port": PORT,
         "requests": _request_count,
         "errors": _error_count,
@@ -432,6 +454,29 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.do_GET()
 
+    def do_POST(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length) if content_length > 0 else b''
+        
+        u = urllib.parse.urlsplit(self.path)
+        path = u.path
+        
+        if path == "/api/remove-channel":
+            try:
+                data = json.loads(body) if body else {}
+                channel_id = data.get("id")
+                if not channel_id:
+                    return self._send(400, json.dumps({"success": False, "message": "ID manquant"}).encode(), "application/json")
+                
+                if remove_manual_channel(channel_id):
+                    return self._send(200, json.dumps({"success": True, "message": "Chaîne supprimée"}).encode(), "application/json")
+                else:
+                    return self._send(404, json.dumps({"success": False, "message": "Chaîne non trouvée"}).encode(), "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"success": False, "message": str(e)}).encode(), "application/json")
+        
+        return self._send(404, b"not found", "text/plain")
+
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
         path = u.path
@@ -453,6 +498,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vavoo-channels":
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
 
+            if path == "/api/manual-channels":
+                return self._send(200, json.dumps(list(_manual_channels.values())).encode(), "application/json")
+
+            if path == "/api/activity":
+                return self._send(200, json.dumps(_activity_log).encode(), "application/json")
+
             if path == "/api/add-source":
                 url = qs.get("url", [None])[0]
                 if not url:
@@ -472,13 +523,16 @@ class Handler(BaseHTTPRequestHandler):
                 _ch_cache["at"] = 0
                 _vavoo_cache["list"] = []
                 _vavoo_cache["at"] = 0
+                _log_activity("Cache rafraîchi")
                 return self._send(200, json.dumps({"success": True, "message": "Cache rafraîchi"}).encode(), "application/json")
 
             if path == "/api/auth":
                 password = qs.get("password", [None])[0]
                 if password == DASHBOARD_PASSWORD:
+                    _log_activity("Connexion réussie")
                     return self._send(200, json.dumps({"success": True}).encode(), "application/json")
                 else:
+                    _log_activity("Tentative de connexion échouée")
                     return self._send(401, json.dumps({"success": False, "message": "Mot de passe incorrect"}).encode(), "application/json")
 
             if path in ("/", "/manifest.json"):
@@ -590,7 +644,7 @@ class Handler(BaseHTTPRequestHandler):
         
         return {
             "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
-            "version": "1.4.0",
+            "version": "1.5.0",
             "name": name,
             "description": desc,
             "resources": ["catalog", "meta", "stream"],
@@ -760,30 +814,6 @@ DASHBOARD_HTML = r"""<!doctype html>
         display: flex; align-items: center; gap: 12px; font-size: 14px;
     }
     .logout-btn:hover { background: rgba(239, 68, 68, 0.2); }
-    .add-source-section {
-        margin-top: auto; padding-top: 24px; border-top: 1px solid var(--border);
-    }
-    .add-source-input {
-        width: 100%; background: var(--bg-dark); border: 2px solid var(--border);
-        border-radius: 10px; padding: 10px 12px; color: var(--text-primary);
-        font-size: 13px; margin-bottom: 10px; transition: all 0.3s;
-    }
-    .add-source-input:focus {
-        outline: none; border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-    }
-    .add-source-btn {
-        width: 100%; padding: 10px; background: var(--gradient);
-        border: none; border-radius: 10px; color: white;
-        font-weight: 600; font-size: 13px; cursor: pointer;
-        transition: all 0.2s; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-    .add-source-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
-    }
-    .add-source-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-    .add-source-result { margin-top: 10px; font-size: 12px; }
     .main-content { margin-left: 280px; padding: 32px; flex: 1; }
     .top-bar {
         display: flex; justify-content: space-between; align-items: center;
@@ -840,6 +870,53 @@ DASHBOARD_HTML = r"""<!doctype html>
         font-size: 18px; font-weight: 600; margin-bottom: 20px;
         display: flex; align-items: center; gap: 10px;
     }
+    .add-source-box {
+        background: var(--bg-dark); border: 2px dashed var(--border);
+        border-radius: 12px; padding: 24px; margin-bottom: 20px;
+        transition: all 0.3s;
+    }
+    .add-source-box:hover { border-color: var(--primary); }
+    .add-source-input {
+        width: 100%; background: var(--bg-card); border: 2px solid var(--border);
+        border-radius: 10px; padding: 12px 16px; color: var(--text-primary);
+        font-size: 14px; margin-bottom: 12px; transition: all 0.3s;
+    }
+    .add-source-input:focus {
+        outline: none; border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .add-source-btn {
+        padding: 12px 24px; background: var(--gradient);
+        border: none; border-radius: 10px; color: white;
+        font-weight: 600; font-size: 14px; cursor: pointer;
+        transition: all 0.2s; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    .add-source-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    }
+    .add-source-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .add-source-result { margin-top: 12px; font-size: 13px; }
+    .manual-channels-list {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 12px; margin-top: 16px;
+    }
+    .manual-channel-item {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px; background: var(--bg-dark); border: 1px solid var(--border);
+        border-radius: 10px; transition: all 0.2s;
+    }
+    .manual-channel-item:hover { border-color: var(--primary); }
+    .manual-channel-info { flex: 1; }
+    .manual-channel-name { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+    .manual-channel-meta { font-size: 11px; color: var(--text-secondary); }
+    .remove-btn {
+        padding: 6px 12px; background: rgba(239, 68, 68, 0.1);
+        border: 1px solid var(--error); border-radius: 6px;
+        color: var(--error); cursor: pointer; font-size: 12px;
+        transition: all 0.2s;
+    }
+    .remove-btn:hover { background: rgba(239, 68, 68, 0.2); }
     .search-bar {
         display: flex; gap: 10px; align-items: center;
         flex-wrap: wrap; margin-bottom: 20px;
@@ -973,6 +1050,8 @@ DASHBOARD_HTML = r"""<!doctype html>
         width: 8px; height: 8px; border-radius: 50%;
         background: var(--success); animation: pulse 2s infinite;
     }
+    .page { display: none; }
+    .page.active { display: block; }
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
@@ -1021,20 +1100,18 @@ DASHBOARD_HTML = r"""<!doctype html>
         </div>
         <div class="nav-section">
             <div class="nav-section-title">Navigation</div>
-            <a href="/dashboard" class="nav-item active"><span class="icon">📊</span> Dashboard</a>
+            <a class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')"><span class="icon">📊</span> Dashboard</a>
+            <a class="nav-item" data-page="sources" onclick="navigateTo('sources')"><span class="icon"></span> Sources</a>
+            <a class="nav-item" data-page="catalog" onclick="navigateTo('catalog')"><span class="icon">📺</span> Catalogue</a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-title">Configuration</div>
             <a href="/configure" class="nav-item"><span class="icon">🎨</span> Page Configure</a>
             <a href="/manifest.json" class="nav-item" target="_blank"><span class="icon"></span> Manifest Stremio</a>
         </div>
         <div class="nav-section">
             <div class="nav-section-title">API</div>
             <a href="/api/stats" class="nav-item" target="_blank"><span class="icon">📈</span> Stats</a>
-            <a href="/api/channels" class="nav-item" target="_blank"><span class="icon">📺</span> Chaînes</a>
-        </div>
-        <div class="add-source-section">
-            <div class="nav-section-title">Ajouter une source</div>
-            <input class="add-source-input" id="source-url" type="url" placeholder="URL dlstreams...">
-            <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
-            <div class="add-source-result" id="add-source-result"></div>
         </div>
         <button class="logout-btn" onclick="logout()">
             <span class="icon">🚪</span> Déconnexion
@@ -1044,8 +1121,8 @@ DASHBOARD_HTML = r"""<!doctype html>
     <main class="main-content">
         <div class="top-bar">
             <div class="page-title">
-                <h1>Dashboard</h1>
-                <p>Chaînes live DaddyLive + Vavoo — gestion et lecture</p>
+                <h1 id="pageTitle">Dashboard</h1>
+                <p id="pageSubtitle">Vue d'ensemble de votre addon</p>
             </div>
             <div style="display: flex; gap: 12px; align-items: center;">
                 <div class="status-indicator">
@@ -1058,78 +1135,104 @@ DASHBOARD_HTML = r"""<!doctype html>
             </div>
         </div>
 
-        <section class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">Chaînes dlstreams</div>
-                <div class="stat-value" id="c-dl">—</div>
-                <div class="stat-hint" id="c-dl-h">cache</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Chaînes Vavoo</div>
-                <div class="stat-value" id="c-vv">—</div>
-                <div class="stat-hint" id="c-vv-h">catalogue FR</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Uptime</div>
-                <div class="stat-value" id="c-up">—</div>
-                <div class="stat-hint">depuis démarrage</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Requêtes</div>
-                <div class="stat-value" id="c-req">—</div>
-                <div class="stat-hint">total</div>
-            </div>
-        </section>
+        <!-- Page Dashboard -->
+        <div class="page active" id="page-dashboard">
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Chaînes dlstreams</div>
+                    <div class="stat-value" id="c-dl">—</div>
+                    <div class="stat-hint" id="c-dl-h">cache</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Chaînes Vavoo</div>
+                    <div class="stat-value" id="c-vv">—</div>
+                    <div class="stat-hint" id="c-vv-h">catalogue FR</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Sources manuelles</div>
+                    <div class="stat-value" id="c-manual">0</div>
+                    <div class="stat-hint">ajoutées par vous</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Uptime</div>
+                    <div class="stat-value" id="c-up">—</div>
+                    <div class="stat-hint">depuis démarrage</div>
+                </div>
+            </section>
 
-        <section class="card">
-            <h2>📱 Accès rapide</h2>
-            <div class="access-grid">
-                <div class="access-card">
-                    <div class="label">Stremio — installer l'addon</div>
-                    <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Addons → « Install via URL »</div>
-                    <a id="manifest" href="#">—</a>
-                    <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
-                </div>
-                <div class="access-card">
-                    <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
-                    <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Ouvre un flux par son id :</div>
-                    <code id="vlc" style="color:var(--primary);word-break:break-all;font-size:12px">—</code>
-                    <button class="copy-btn" data-copy="vlc">📋 copier</button>
-                </div>
-                <div class="access-card">
-                    <div class="label">API Endpoints</div>
-                    <div style="margin-top:6px;font-size:12px;color:var(--text-secondary)">
-                        <div><a href="/manifest.json">/manifest.json</a> — Stremio</div>
-                        <div><a href="/api/stats">/api/stats</a> — statut serveur</div>
-                        <div><a href="/api/channels">/api/channels</a> — annuaire</div>
-                        <div><a href="/configure">/configure</a> — config langue</div>
+            <section class="card">
+                <h2>📱 Accès rapide</h2>
+                <div class="access-grid">
+                    <div class="access-card">
+                        <div class="label">Stremio — installer l'addon</div>
+                        <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Addons → « Install via URL »</div>
+                        <a id="manifest" href="#">—</a>
+                        <button class="copy-btn" data-copy="manifest"> copier l'URL</button>
+                    </div>
+                    <div class="access-card">
+                        <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
+                        <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Ouvre un flux par son id :</div>
+                        <code id="vlc" style="color:var(--primary);word-break:break-all;font-size:12px">—</code>
+                        <button class="copy-btn" data-copy="vlc">📋 copier</button>
+                    </div>
+                    <div class="access-card">
+                        <div class="label">API Endpoints</div>
+                        <div style="margin-top:6px;font-size:12px;color:var(--text-secondary)">
+                            <div><a href="/manifest.json">/manifest.json</a> — Stremio</div>
+                            <div><a href="/api/stats">/api/stats</a> — statut serveur</div>
+                            <div><a href="/api/channels">/api/channels</a> — annuaire</div>
+                            <div><a href="/configure">/configure</a> — config langue</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
 
-        <section class="card">
-            <h2>📺 Catalogue</h2>
-            <div class="search-bar">
-                <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
-                <select id="lang-filter">
-                    <option value="all">🌍 Toutes langues</option>
-                    <option value="fr" selected>🇫🇷 Français</option>
-                    <option value="en">🇬🇧 English</option>
-                    <option value="es">🇪🇸 Español</option>
-                    <option value="de">🇩🇪 Deutsch</option>
-                    <option value="it">🇮🇹 Italiano</option>
-                    <option value="ar">🇸🇦 Arabe</option>
-                    <option value="pt">🇵 Português</option>
-                    <option value="other">📺 Autres</option>
-                </select>
-                <div class="tabs">
-                    <button class="tab active" data-src="dlstreams">dlstreams</button>
-                    <button class="tab" data-src="vavoo">Vavoo</button>
+        <!-- Page Sources -->
+        <div class="page" id="page-sources">
+            <section class="card">
+                <h2>📡 Ajouter une source</h2>
+                <div class="add-source-box">
+                    <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121)">
+                    <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
+                    <div class="add-source-result" id="add-source-result"></div>
                 </div>
-            </div>
-            <div class="channel-list" id="list"><div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
-        </section>
+            </section>
+
+            <section class="card">
+                <h2>📋 Sources ajoutées manuellement</h2>
+                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">Ces chaînes ont été ajoutées via le scraper et sont conservées en mémoire.</p>
+                <div class="manual-channels-list" id="manual-channels-list">
+                    <div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Page Catalogue -->
+        <div class="page" id="page-catalog">
+            <section class="card">
+                <h2>📺 Catalogue complet</h2>
+                <div class="search-bar">
+                    <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
+                    <select id="lang-filter">
+                        <option value="all">🌍 Toutes langues</option>
+                        <option value="fr" selected>🇫 Français</option>
+                        <option value="en">🇬🇧 English</option>
+                        <option value="es">🇪 Español</option>
+                        <option value="de">🇩🇪 Deutsch</option>
+                        <option value="it">🇮 Italiano</option>
+                        <option value="ar">🇸🇦 Arabe</option>
+                        <option value="pt">🇹 Português</option>
+                        <option value="other">📺 Autres</option>
+                    </select>
+                    <div class="tabs">
+                        <button class="tab active" data-src="dlstreams">dlstreams</button>
+                        <button class="tab" data-src="vavoo">Vavoo</button>
+                    </div>
+                </div>
+                <div class="channel-list" id="list"><div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
+            </section>
+        </div>
 
         <footer style="margin-top:40px;color:var(--text-secondary);font-size:12px;text-align:center">
             dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span>
@@ -1159,6 +1262,16 @@ const fmtDur = s => {
 };
 const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
 
+// Session persistante avec localStorage
+function checkSession() {
+    const isLoggedIn = localStorage.getItem('dlstreams_logged_in');
+    if (isLoggedIn === 'true') {
+        $('#loginScreen').style.display = 'none';
+        $('#dashboard').classList.add('active');
+        boot();
+    }
+}
+
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -1174,6 +1287,7 @@ function handleLogin(e) {
         .then(r => r.json())
         .then(data => {
             if (data.success) {
+                localStorage.setItem('dlstreams_logged_in', 'true');
                 $('#loginScreen').style.display = 'none';
                 $('#dashboard').classList.add('active');
                 showToast('✅ Connecté avec succès');
@@ -1185,10 +1299,34 @@ function handleLogin(e) {
 }
 
 function logout() {
+    localStorage.removeItem('dlstreams_logged_in');
     $('#dashboard').classList.remove('active');
     $('#loginScreen').style.display = 'flex';
     $('#passwordInput').value = '';
     showToast('👋 Déconnecté');
+}
+
+function navigateTo(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    
+    $(`#page-${page}`).classList.add('active');
+    document.querySelector(`[data-page="${page}"]`).classList.add('active');
+    
+    const titles = {
+        dashboard: ['Dashboard', 'Vue d\'ensemble de votre addon'],
+        sources: ['Sources', 'Gérer vos sources personnalisées'],
+        catalog: ['Catalogue', 'Explorer toutes les chaînes disponibles']
+    };
+    
+    $('#pageTitle').textContent = titles[page][0];
+    $('#pageSubtitle').textContent = titles[page][1];
+    
+    if (page === 'sources') loadManualChannels();
+    if (page === 'catalog') {
+        if (!ALL.dlstreams.length) loadCatalog('dlstreams');
+        render();
+    }
 }
 
 async function refreshStats(){
@@ -1200,17 +1338,63 @@ async function refreshStats(){
         $("#c-vv").textContent = d.vavoo.count;
         $("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);
         $("#c-up").textContent = fmtDur(d.uptime);
-        $("#c-req").textContent = d.requests || 0;
+        $("#c-manual").textContent = d.manual_channels || 0;
     }catch(e){
         console.error("Stats error:", e);
+    }
+}
+
+async function loadManualChannels() {
+    try {
+        const r = await fetch("/api/manual-channels");
+        const channels = await r.json();
+        const list = $("#manual-channels-list");
+        
+        if (channels.length === 0) {
+            list.innerHTML = '<div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>';
+            return;
+        }
+        
+        list.innerHTML = channels.map(ch => `
+            <div class="manual-channel-item">
+                <div class="manual-channel-info">
+                    <div class="manual-channel-name">${escapeHtml(ch.name)}</div>
+                    <div class="manual-channel-meta">ID: ${ch.id} · Ajoutée le ${ch.added_at || 'N/A'}</div>
+                </div>
+                <button class="remove-btn" onclick="removeChannel('${ch.id}')">🗑️ Supprimer</button>
+            </div>
+        `).join('');
+    } catch(e) {
+        console.error("Load manual channels error:", e);
+    }
+}
+
+async function removeChannel(id) {
+    if (!confirm('Supprimer cette chaîne ?')) return;
+    
+    try {
+        const r = await fetch('/api/remove-channel', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id})
+        });
+        const d = await r.json();
+        
+        if (d.success) {
+            showToast('✅ Chaîne supprimée');
+            await loadManualChannels();
+            await refreshStats();
+        } else {
+            showToast('❌ Erreur: ' + d.message, 'error');
+        }
+    } catch(e) {
+        showToast('❌ Erreur: ' + e.message, 'error');
     }
 }
 
 async function refreshAll() {
     await fetch("/api/refresh-cache");
     await refreshStats();
-    await loadCatalog(CURRENT);
-    render();
     showToast('✅ Cache rafraîchi');
 }
 
@@ -1296,8 +1480,7 @@ $("#add-source-btn").addEventListener("click", async ()=>{
             $("#add-source-result").innerHTML = `<div class="alert alert-success">${d.message}</div>`;
             $("#source-url").value = "";
             showToast(d.message);
-            await loadCatalog(CURRENT);
-            render();
+            await loadManualChannels();
             await refreshStats();
         }else{
             $("#add-source-result").innerHTML = `<div class="alert alert-error">${d.message}</div>`;
@@ -1308,7 +1491,7 @@ $("#add-source-btn").addEventListener("click", async ()=>{
         showToast('Erreur: ' + e.message, 'error');
     }finally{
         $("#add-source-btn").disabled = false;
-        $("#add-source-btn").textContent = "🔍 Scraper & Ajouter";
+        $("#add-source-btn").textContent = " Scraper & Ajouter";
     }
 });
 
@@ -1350,6 +1533,9 @@ async function boot(){
     initLinks();
     setInterval(refreshStats, 30000);
 }
+
+// Vérifier la session au chargement
+checkSession();
 </script>
 </body>
 </html>
@@ -1386,24 +1572,24 @@ CONFIGURE_HTML = r"""<!doctype html>
 <body>
 <header><div class="logo">▶</div><div><h1>Configuration <span class="badge">langue</span></h1></div></header>
 <main>
-  <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
+  <div class="card"><h2> Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
     <div class="lang-grid" id="lang-grid">
       <button class="lang-btn" data-lang="all"><span class="lang-flag">🌍</span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
-      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
-      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
+      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
+      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
       <button class="lang-btn" data-lang="es"><span class="lang-flag">🇪🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
-      <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
+      <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
       <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
       <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
       <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇵🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
     </div>
   </div>
-  <div class="card"><h2> Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
+  <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
     <div class="manifest-box" id="manifest-url">—</div>
     <button class="copy" id="copy-btn">📋 Copier l'URL</button>
     <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
   </div>
-  <div class="card"><h2> Liens rapides</h2><div style="display:grid;gap:8px">
+  <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
     <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
     <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
     <div><a href="/">→ Retour accueil</a></div>
