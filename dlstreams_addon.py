@@ -37,6 +37,109 @@ SITE = "https://dlstreams.st"
 _CH_TTL = 1800
 _START_TIME = time.time()
 
+# ---------------------------------------------------------------- CHAÎNES POPULAIRES (manuelles)
+# Ajout manuel des chaînes françaises importantes qui peuvent manquer au scraping
+_POPULAR_CHANNELS = [
+    {"id": "121", "name": "Canal+ France"},
+    {"id": "122", "name": "Canal+ Sport"},
+    {"id": "123", "name": "Canal+ Cinéma"},
+    {"id": "124", "name": "Canal+ Séries"},
+    {"id": "125", "name": "Canal+ Family"},
+    {"id": "201", "name": "beIN Sports 1"},
+    {"id": "202", "name": "beIN Sports 2"},
+    {"id": "203", "name": "beIN Sports 3"},
+    {"id": "211", "name": "RMC Sport 1"},
+    {"id": "212", "name": "RMC Sport 2"},
+    {"id": "213", "name": "RMC Sport 3"},
+    {"id": "214", "name": "RMC Sport 4"},
+    {"id": "301", "name": "Eurosport 1"},
+    {"id": "302", "name": "Eurosport 2"},
+    {"id": "401", "name": "TF1"},
+    {"id": "402", "name": "France 2"},
+    {"id": "403", "name": "France 3"},
+    {"id": "404", "name": "France 4"},
+    {"id": "405", "name": "France 5"},
+    {"id": "406", "name": "M6"},
+    {"id": "407", "name": "Arte"},
+    {"id": "408", "name": "C8"},
+    {"id": "409", "name": "W9"},
+    {"id": "410", "name": "TMC"},
+    {"id": "411", "name": "TFX"},
+    {"id": "412", "name": "NRJ 12"},
+    {"id": "413", "name": "LCP"},
+    {"id": "414", "name": "France Info"},
+    {"id": "415", "name": "BFM TV"},
+    {"id": "416", "name": "CNews"},
+    {"id": "417", "name": "CStar"},
+    {"id": "418", "name": "Gulli"},
+    {"id": "419", "name": "TF1 Séries Films"},
+    {"id": "420", "name": "L'Équipe"},
+    {"id": "421", "name": "6ter"},
+    {"id": "422", "name": "RMC Story"},
+    {"id": "423", "name": "RMC Découverte"},
+    {"id": "424", "name": "Chérie 25"},
+    {"id": "501", "name": "Paris Première"},
+    {"id": "502", "name": "Planète+"},
+    {"id": "503", "name": "Série Club"},
+    {"id": "504", "name": "Téva"},
+    {"id": "505", "name": "M6 Music"},
+    {"id": "506", "name": "M6 Boutique"},
+    {"id": "601", "name": "RTL9"},
+    {"id": "602", "name": "AB1"},
+    {"id": "603", "name": "AB3"},
+    {"id": "604", "name": "AB Moteurs"},
+    {"id": "605", "name": "Action"},
+    {"id": "606", "name": "Ciné+ Classic"},
+    {"id": "607", "name": "Ciné+ Club"},
+    {"id": "608", "name": "Ciné+ Émotion"},
+    {"id": "609", "name": "Ciné+ Famiz"},
+    {"id": "610", "name": "Ciné+ Frisson"},
+    {"id": "611", "name": "Ciné+ Premier"},
+    {"id": "612", "name": "Comédie+"},
+    {"id": "613", "name": "Crime District"},
+    {"id": "614", "name": "Elle Girl"},
+    {"id": "615", "name": "Encyclo"},
+    {"id": "616", "name": "Equidia"},
+    {"id": "617", "name": "Escales"},
+    {"id": "618", "name": "Golf Channel"},
+    {"id": "619", "name": "Historia"},
+    {"id": "620", "name": "Hustler"},
+    {"id": "621", "name": "Infosport+"},
+    {"id": "622", "name": "JimJam"},
+    {"id": "623", "name": "KTO"},
+    {"id": "624", "name": "LCI"},
+    {"id": "625", "name": "Mangas"},
+    {"id": "626", "name": "Mezzo"},
+    {"id": "627", "name": "MTV"},
+    {"id": "628", "name": "National Geographic"},
+    {"id": "629", "name": "Nickelodeon Junior"},
+    {"id": "630", "name": "NT1"},
+    {"id": "631", "name": "OCS Choc"},
+    {"id": "632", "name": "OCS City"},
+    {"id": "633", "name": "OCS Géants"},
+    {"id": "634", "name": "OCS Max"},
+    {"id": "635", "name": "Penthouse"},
+    {"id": "636", "name": "Piwi+"},
+    {"id": "637", "name": "Planète+ A&E"},
+    {"id": "638", "name": "Planète+ CI"},
+    {"id": "639", "name": "Polar+"},
+    {"id": "640", "name": "RTL Living"},
+    {"id": "641", "name": "Science & Vie TV"},
+    {"id": "642", "name": "Seasons"},
+    {"id": "643", "name": "Sport+"},
+    {"id": "644", "name": "Stingray Brava"},
+    {"id": "645", "name": "Stingray DJazz"},
+    {"id": "646", "name": "Stingray iConcerts"},
+    {"id": "647", "name": "Télétoon+"},
+    {"id": "648", "name": "Toonami"},
+    {"id": "649", "name": "Trace Tropical"},
+    {"id": "650", "name": "TV Breizh"},
+    {"id": "651", "name": "TV5 Monde"},
+    {"id": "652", "name": "Ushuaïa TV"},
+    {"id": "653", "name": "Vivolta"},
+    {"id": "654", "name": "XXL"},
+]
+
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
     """GET brut avec User-Agent + Referer (et Origin si fourni). Renvoie le corps (bytes)."""
     headers = {"User-Agent": UA, "Referer": referer}
@@ -78,19 +181,24 @@ class _LinkParser(HTMLParser):
 _ch_cache: dict = {"at": 0.0, "list": []}
 
 def channels() -> list[dict]:
-    """Annuaire dlstreams -> [{id, name}]. Cache 30 min. Dedoublonne par id (garde le 1er nom)."""
+    """Annuaire dlstreams -> [{id, name}]. Fusionne chaînes populaires + scraping. Cache 30 min."""
     now = time.time()
     if _ch_cache["list"] and now - _ch_cache["at"] < _CH_TTL:
         return _ch_cache["list"]
+    
+    # Commence toujours avec les chaînes populaires
+    seen: dict[str, str] = {ch["id"]: ch["name"] for ch in _POPULAR_CHANNELS}
+    
+    # Ajoute le scraping de la page d'accueil
     try:
         html = _get(SITE + "/").decode("utf-8", "replace")
+        p = _LinkParser()
+        p.feed(html)
+        for idv, name in p.items:
+            seen.setdefault(idv, name)  # Garde les noms populaires si déjà définis
     except Exception:
-        return _ch_cache["list"]
-    p = _LinkParser()
-    p.feed(html)
-    seen: dict[str, str] = {}
-    for idv, name in p.items:
-        seen.setdefault(idv, name)
+        pass  # Garde au moins les chaînes populaires si le scraping échoue
+    
     out = [{"id": i, "name": n} for i, n in seen.items()]
     _ch_cache.update(at=now, list=out)
     return out
@@ -496,7 +604,7 @@ def main():
     print(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
     try:
         n = len(channels())
-        print(f"  annuaire : {n} chaines chargees")
+        print(f"  annuaire : {n} chaines chargees (dont {_len(_POPULAR_CHANNELS)} populaires)")
     except Exception as e:
         print(f"  annuaire : erreur de chargement ({e})")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
