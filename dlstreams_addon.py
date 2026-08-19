@@ -359,8 +359,8 @@ class Handler(BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(u.query)
         try:
             # ---- dashboard & API ----
-            if path == "/" or path == "/index.html":
-                return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
+if path == "/dashboard" or path == "/dashboard.html":
+    return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
             if path == "/api/stats":
                 return self._send(200, json.dumps(_stats()).encode(), "application/json")
