@@ -204,14 +204,11 @@ def channels(lang_filter: str | None = None) -> list[dict]:
     """Annuaire dlstreams -> [{id, name, lang}]. Fusionne chaînes populaires + scraping. Cache 30 min.
     Si lang_filter est défini, ne retourne QUE les chaînes de cette langue."""
     now = time.time()
-    # Note: on ne cache pas si filtrage langue actif pour éviter les problèmes
     if _ch_cache["list"] and now - _ch_cache["at"] < _CH_TTL and lang_filter is None:
         return _ch_cache["list"]
     
-    # Commence avec les chaînes populaires (langue déjà définie)
     seen: dict[str, dict] = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
     
-    # Ajoute le scraping de la page d'accueil
     try:
         html = _get(SITE + "/").decode("utf-8", "replace")
         p = _LinkParser()
@@ -220,11 +217,10 @@ def channels(lang_filter: str | None = None) -> list[dict]:
             if idv not in seen:
                 seen[idv] = {"id": idv, "name": name, "lang": _detect_lang(name)}
     except Exception:
-        pass  # Garde au moins les chaînes populaires si le scraping échoue
+        pass
     
     out = list(seen.values())
     
-    # Applique le filtre de langue si demandé
     if lang_filter and lang_filter != "all":
         out = [c for c in out if c.get("lang") == lang_filter]
     
@@ -495,7 +491,6 @@ class Handler(BaseHTTPRequestHandler):
         path = u.path
         qs = urllib.parse.parse_qs(u.query)
         try:
-            # ---- dashboard & API ----
             if path == "/dashboard" or path == "/dashboard.html":
                 return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
@@ -512,11 +507,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vavoo-channels":
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
 
-            # ---- addon Stremio ----
-            if path == "/manifest.json":
+            if path in ("/", "/manifest.json"):
                 return self._send(200, json.dumps(self._manifest()).encode(), "application/json", True)
 
-            # Manifest personnalisé avec filtrage langue
             if path.startswith("/manifest-") and path.endswith(".json"):
                 lang = path.replace("/manifest-", "").replace(".json", "")
                 return self._send(200, json.dumps(self._manifest(lang_filter=lang)).encode(), "application/json", True)
@@ -531,7 +524,6 @@ class Handler(BaseHTTPRequestHandler):
                             k, v = kv.split("=", 1)
                             params[k] = urllib.parse.unquote_plus(v)
                 
-                # Récupère le filtre de langue depuis les params ou l'URL
                 lang_filter = params.get("lang")
                 
                 chans = vavoo_channels() if catid == "vavoo" else channels(lang_filter=lang_filter)
@@ -559,7 +551,7 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
-                    streams = [{"name": "Vavoo", "title": " Direct", "url": f"{b}/vhls?v={cid}"}]
+                    streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 ok = working_players(cid)
                 streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
@@ -568,7 +560,6 @@ class Handler(BaseHTTPRequestHandler):
                              "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
 
-            # ---- proxy HLS ----
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
                 cid = parts[2]
@@ -615,7 +606,6 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send(502, f"resolve/proxy error: {type(e).__name__}: {e}".encode(), "text/plain")
 
-    # ---- helpers addon ----
     def _manifest(self, lang_filter: str | None = None) -> dict:
         _extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]
         name = "dlstreams + Vavoo"
@@ -786,14 +776,14 @@ DASHBOARD_HTML = r"""<!doctype html>
     <div class="search">
       <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
       <select id="lang-filter">
-        <option value="all"> Toutes langues</option>
+        <option value="all">🌍 Toutes langues</option>
         <option value="fr" selected>🇫🇷 Français</option>
         <option value="en">🇬🇧 English</option>
-        <option value="es">🇪 Español</option>
-        <option value="de">🇩🇪 Deutsch</option>
-        <option value="it">🇮 Italiano</option>
-        <option value="ar">🇸🇦 Arabe</option>
-        <option value="pt">🇹 Português</option>
+        <option value="es">🇪🇸 Español</option>
+        <option value="de">🇩 Deutsch</option>
+        <option value="it">🇮🇹 Italiano</option>
+        <option value="ar">🇦 Arabe</option>
+        <option value="pt">🇵🇹 Português</option>
         <option value="other">📺 Autres</option>
       </select>
       <div class="tabs">
@@ -835,7 +825,7 @@ async function refreshStats(){
 }
 
 let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
-let LANG_FILTER = "fr"; // Par défaut sur Français
+let LANG_FILTER = "fr";
 
 async function loadCatalog(src){
   const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;
@@ -960,7 +950,7 @@ CONFIGURE_HTML = r"""<!doctype html>
 </head>
 <body>
 <header>
-  <div class="logo"></div>
+  <div class="logo">▶</div>
   <div>
     <h1>Configuration <span class="badge">langue</span></h1>
   </div>
@@ -988,7 +978,7 @@ CONFIGURE_HTML = r"""<!doctype html>
         <div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div>
       </button>
       <button class="lang-btn" data-lang="de">
-        <span class="lang-flag">🇩</span>
+        <span class="lang-flag">🇪</span>
         <div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div>
       </button>
       <button class="lang-btn" data-lang="it">
@@ -996,11 +986,11 @@ CONFIGURE_HTML = r"""<!doctype html>
         <div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div>
       </button>
       <button class="lang-btn" data-lang="ar">
-        <span class="lang-flag">🇸🇦</span>
+        <span class="lang-flag">🇦</span>
         <div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div>
       </button>
       <button class="lang-btn" data-lang="pt">
-        <span class="lang-flag">🇵🇹</span>
+        <span class="lang-flag">🇹</span>
         <div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div>
       </button>
     </div>
@@ -1022,7 +1012,7 @@ CONFIGURE_HTML = r"""<!doctype html>
   </div>
 
   <div class="card">
-    <h2> Liens rapides</h2>
+    <h2>🔗 Liens rapides</h2>
     <div style="display:grid;gap:8px">
       <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
       <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
@@ -1033,6 +1023,7 @@ CONFIGURE_HTML = r"""<!doctype html>
 
 <script>
 const BASE = location.origin;
+const $ = s => document.querySelector(s);
 let CURRENT_LANG = "fr";
 
 // Gestion des boutons de langue
