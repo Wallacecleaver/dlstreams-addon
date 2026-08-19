@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""dlstreams -> Stremio : mini-addon + proxy autonome avec dashboard sécurisé.
+"""dlstreams -> Stremio : mini-addon + proxy autonome avec dashboard sécurisé et complet.
 Dashboard avec mot de passe, animations, notifications, et fonctionnalités avancées.
 """
 from __future__ import annotations
@@ -120,6 +120,7 @@ class _LinkParser(HTMLParser):
             self._cur_id = None
 
 _ch_cache: dict = {"at": 0.0, "list": []}
+_manual_channels: dict[str, dict] = {}
 
 def channels(lang_filter: str | None = None) -> list[dict]:
     now = time.time()
@@ -127,6 +128,7 @@ def channels(lang_filter: str | None = None) -> list[dict]:
         return _ch_cache["list"]
     
     seen: dict[str, dict] = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
+    seen.update(_manual_channels)
     
     try:
         html = _get(SITE + "/").decode("utf-8", "replace")
@@ -159,11 +161,13 @@ def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
         added = []
         existing_count = 0
         current_channels = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
+        current_channels.update(_manual_channels)
         
         for idv, name in p.items:
             if idv not in current_channels:
-                current_channels[idv] = {"id": idv, "name": name, "lang": _detect_lang(name)}
-                added.append(current_channels[idv])
+                ch = {"id": idv, "name": name, "lang": _detect_lang(name)}
+                _manual_channels[idv] = ch
+                added.append(ch)
             else:
                 existing_count += 1
         
@@ -366,6 +370,12 @@ def _rewrite_playlist(text: str, playlist_url: str, hdr_enc: str, self_base: str
     return "\n".join(out)
 
 def _stats() -> dict:
+    all_ch = channels()
+    lang_counts = {}
+    for ch in all_ch:
+        lang = ch.get("lang", "other")
+        lang_counts[lang] = lang_counts.get(lang, 0) + 1
+    
     return {
         "status": "ok",
         "uptime": int(time.time() - _START_TIME),
@@ -373,6 +383,7 @@ def _stats() -> dict:
         "port": PORT,
         "requests": _request_count,
         "errors": _error_count,
+        "manual_channels": len(_manual_channels),
         "dlstreams": {
             "count": len(_ch_cache.get("list") or []),
             "age_seconds": int(time.time() - _ch_cache.get("at", 0)) if _ch_cache.get("at") else None,
@@ -381,6 +392,7 @@ def _stats() -> dict:
             "count": len(_vavoo_cache.get("list") or []),
             "age_seconds": int(time.time() - _vavoo_cache.get("at", 0)) if _vavoo_cache.get("at") else None,
         },
+        "lang_counts": lang_counts,
     }
 
 class Handler(BaseHTTPRequestHandler):
@@ -448,18 +460,19 @@ class Handler(BaseHTTPRequestHandler):
                 
                 added_channels, message = scrape_channels_from_url(url)
                 
-                if added_channels:
-                    current = {ch["id"]: ch for ch in _ch_cache.get("list", [])}
-                    for ch in added_channels:
-                        current[ch["id"]] = ch
-                    _ch_cache["list"] = list(current.values())
-                
                 return self._send(200, json.dumps({
                     "success": True,
                     "message": message,
                     "added": len(added_channels),
                     "channels": added_channels
                 }).encode(), "application/json")
+
+            if path == "/api/refresh-cache":
+                _ch_cache["list"] = []
+                _ch_cache["at"] = 0
+                _vavoo_cache["list"] = []
+                _vavoo_cache["at"] = 0
+                return self._send(200, json.dumps({"success": True, "message": "Cache rafraîchi"}).encode(), "application/json")
 
             if path == "/api/auth":
                 password = qs.get("password", [None])[0]
@@ -509,10 +522,10 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
-                    streams = [{"name": "Vavoo", "title": " Direct", "url": f"{b}/vhls?v={cid}"}]
+                    streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 ok = working_players(cid)
-                streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
+                streams = [{"name": "dlstreams", "title": " Auto (1er dispo)",
                             "url": f"{b}/hls/{cid}/index.m3u8"}] if ok else []
                 streams += [{"name": "dlstreams", "title": label,
                              "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
@@ -647,9 +660,6 @@ DASHBOARD_HTML = r"""<!doctype html>
         display: flex;
         align-items: center;
         justify-content: center;
-        background: 
-            radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-            radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%);
     }
     .login-container {
         background: rgba(30, 41, 59, 0.8);
@@ -662,251 +672,159 @@ DASHBOARD_HTML = r"""<!doctype html>
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         animation: slideUp 0.5s ease-out;
     }
-    .login-logo {
-        text-align: center;
-        margin-bottom: 32px;
-    }
+    .login-logo { text-align: center; margin-bottom: 32px; }
     .login-logo .logo-icon {
-        width: 80px;
-        height: 80px;
-        margin: 0 auto 16px;
-        background: var(--gradient);
-        border-radius: 20px;
-        display: grid;
-        place-items: center;
-        font-size: 40px;
-        font-weight: 800;
-        color: #0b0f1a;
+        width: 80px; height: 80px; margin: 0 auto 16px;
+        background: var(--gradient); border-radius: 20px;
+        display: grid; place-items: center; font-size: 40px;
+        font-weight: 800; color: #0b0f1a;
         box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
     }
     .login-logo h1 {
-        font-size: 28px;
-        font-weight: 700;
+        font-size: 28px; font-weight: 700;
         background: var(--gradient);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
     .login-form input {
-        width: 100%;
-        padding: 14px 18px;
-        background: var(--bg-dark);
-        border: 2px solid var(--border);
-        border-radius: 12px;
-        color: var(--text-primary);
-        font-size: 15px;
-        transition: all 0.3s;
-        margin-bottom: 16px;
+        width: 100%; padding: 14px 18px;
+        background: var(--bg-dark); border: 2px solid var(--border);
+        border-radius: 12px; color: var(--text-primary);
+        font-size: 15px; transition: all 0.3s; margin-bottom: 16px;
     }
     .login-form input:focus {
-        outline: none;
-        border-color: var(--primary);
+        outline: none; border-color: var(--primary);
         box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
     }
     .login-form button {
-        width: 100%;
-        padding: 14px;
-        background: var(--gradient);
-        border: none;
-        border-radius: 12px;
-        color: white;
-        font-weight: 600;
-        font-size: 15px;
-        cursor: pointer;
-        transition: all 0.3s;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        width: 100%; padding: 14px; background: var(--gradient);
+        border: none; border-radius: 12px; color: white;
+        font-weight: 600; font-size: 15px; cursor: pointer;
+        transition: all 0.3s; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
     }
     .login-form button:hover {
         transform: translateY(-2px);
         box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
     }
     .error-message {
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid var(--error);
-        color: var(--error);
-        padding: 12px;
-        border-radius: 8px;
-        margin-bottom: 16px;
-        text-align: center;
-        animation: shake 0.5s;
+        background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error);
+        color: var(--error); padding: 12px; border-radius: 8px;
+        margin-bottom: 16px; text-align: center; animation: shake 0.5s;
     }
     .dashboard-container { display: none; }
     .dashboard-container.active { display: flex; }
     .sidebar {
-        position: fixed;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 280px;
-        background: var(--bg-card);
-        border-right: 1px solid var(--border);
-        padding: 24px;
-        overflow-y: auto;
-        z-index: 100;
-        display: flex;
-        flex-direction: column;
+        position: fixed; left: 0; top: 0; bottom: 0; width: 280px;
+        background: var(--bg-card); border-right: 1px solid var(--border);
+        padding: 24px; overflow-y: auto; z-index: 100;
+        display: flex; flex-direction: column;
     }
     .sidebar-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding-bottom: 24px;
-        border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 12px;
+        padding-bottom: 24px; border-bottom: 1px solid var(--border);
         margin-bottom: 24px;
     }
     .sidebar-header .logo {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
-        background: var(--gradient);
-        display: grid;
-        place-items: center;
-        font-weight: 800;
-        color: #0b0f1a;
-        font-size: 20px;
+        width: 40px; height: 40px; border-radius: 10px;
+        background: var(--gradient); display: grid; place-items: center;
+        font-weight: 800; color: #0b0f1a; font-size: 20px;
     }
     .sidebar-header h2 {
-        font-size: 18px;
-        font-weight: 700;
+        font-size: 18px; font-weight: 700;
         background: var(--gradient);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
     .nav-section { margin-bottom: 24px; }
     .nav-section-title {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--text-secondary);
-        margin-bottom: 12px;
-        padding-left: 12px;
-        font-weight: 600;
+        font-size: 11px; text-transform: uppercase;
+        letter-spacing: 0.05em; color: var(--text-secondary);
+        margin-bottom: 12px; padding-left: 12px; font-weight: 600;
     }
     .nav-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        transition: all 0.2s;
-        margin-bottom: 4px;
-        color: var(--text-secondary);
-        text-decoration: none;
-        font-size: 14px;
+        display: flex; align-items: center; gap: 12px;
+        padding: 12px; border-radius: 10px; cursor: pointer;
+        transition: all 0.2s; margin-bottom: 4px;
+        color: var(--text-secondary); text-decoration: none; font-size: 14px;
     }
-    .nav-item:hover {
-        background: var(--bg-hover);
-        color: var(--text-primary);
-    }
+    .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
     .nav-item.active {
         background: rgba(99, 102, 241, 0.15);
-        color: var(--primary);
-        font-weight: 500;
+        color: var(--primary); font-weight: 500;
     }
     .nav-item .icon { font-size: 18px; }
+    .logout-btn {
+        margin-top: auto; padding: 12px; border-radius: 10px;
+        background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error);
+        color: var(--error); cursor: pointer; transition: all 0.2s;
+        display: flex; align-items: center; gap: 12px; font-size: 14px;
+    }
+    .logout-btn:hover { background: rgba(239, 68, 68, 0.2); }
     .add-source-section {
-        margin-top: auto;
-        padding-top: 24px;
-        border-top: 1px solid var(--border);
+        margin-top: auto; padding-top: 24px; border-top: 1px solid var(--border);
     }
     .add-source-input {
-        width: 100%;
-        background: var(--bg-dark);
-        border: 2px solid var(--border);
-        border-radius: 10px;
-        padding: 10px 12px;
-        color: var(--text-primary);
-        font-size: 13px;
-        margin-bottom: 10px;
-        transition: all 0.3s;
+        width: 100%; background: var(--bg-dark); border: 2px solid var(--border);
+        border-radius: 10px; padding: 10px 12px; color: var(--text-primary);
+        font-size: 13px; margin-bottom: 10px; transition: all 0.3s;
     }
     .add-source-input:focus {
-        outline: none;
-        border-color: var(--primary);
+        outline: none; border-color: var(--primary);
         box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
     }
     .add-source-btn {
-        width: 100%;
-        padding: 10px;
-        background: var(--gradient);
-        border: none;
-        border-radius: 10px;
-        color: white;
-        font-weight: 600;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.2s;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        width: 100%; padding: 10px; background: var(--gradient);
+        border: none; border-radius: 10px; color: white;
+        font-weight: 600; font-size: 13px; cursor: pointer;
+        transition: all 0.2s; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
     }
     .add-source-btn:hover {
         transform: translateY(-2px);
         box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
     }
-    .add-source-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none;
-    }
+    .add-source-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     .add-source-result { margin-top: 10px; font-size: 12px; }
-    .main-content {
-        margin-left: 280px;
-        padding: 32px;
-        flex: 1;
-    }
+    .main-content { margin-left: 280px; padding: 32px; flex: 1; }
     .top-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 32px;
-        padding-bottom: 24px;
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 32px; padding-bottom: 24px;
         border-bottom: 1px solid var(--border);
     }
     .page-title h1 {
-        font-size: 28px;
-        font-weight: 700;
-        margin-bottom: 4px;
+        font-size: 28px; font-weight: 700; margin-bottom: 4px;
         background: var(--gradient);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
     .page-title p { color: var(--text-secondary); font-size: 14px; }
+    .refresh-btn {
+        padding: 10px 20px; background: var(--bg-card);
+        border: 1px solid var(--border); border-radius: 10px;
+        color: var(--text-primary); cursor: pointer; transition: all 0.2s;
+        display: flex; align-items: center; gap: 8px; font-size: 14px;
+    }
+    .refresh-btn:hover { background: var(--bg-hover); border-color: var(--primary); }
     .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 20px;
-        margin-bottom: 32px;
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px; margin-bottom: 32px;
     }
     .stat-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 24px;
-        transition: all 0.3s;
-        position: relative;
-        overflow: hidden;
-        animation: slideUp 0.5s ease-out;
+        background: var(--bg-card); border: 1px solid var(--border);
+        border-radius: 16px; padding: 24px; transition: all 0.3s;
+        position: relative; overflow: hidden; animation: slideUp 0.5s ease-out;
     }
     .stat-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: var(--gradient);
-        opacity: 0;
-        transition: opacity 0.3s;
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        background: var(--gradient); opacity: 0; transition: opacity 0.3s;
     }
     .stat-card:hover {
-        transform: translateY(-4px);
-        border-color: var(--primary);
+        transform: translateY(-4px); border-color: var(--primary);
         box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
     }
     .stat-card:hover::before { opacity: 1; }
     .stat-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
     .stat-value {
-        font-size: 32px;
-        font-weight: 700;
+        font-size: 32px; font-weight: 700;
         background: var(--gradient);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -914,235 +832,151 @@ DASHBOARD_HTML = r"""<!doctype html>
     }
     .stat-hint { font-size: 12px; color: var(--text-secondary); }
     .card {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 24px;
+        background: var(--bg-card); border: 1px solid var(--border);
+        border-radius: 16px; padding: 24px; margin-bottom: 24px;
         animation: slideUp 0.5s ease-out;
     }
     .card h2 {
-        font-size: 18px;
-        font-weight: 600;
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        font-size: 18px; font-weight: 600; margin-bottom: 20px;
+        display: flex; align-items: center; gap: 10px;
     }
     .search-bar {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        flex-wrap: wrap;
-        margin-bottom: 20px;
+        display: flex; gap: 10px; align-items: center;
+        flex-wrap: wrap; margin-bottom: 20px;
     }
     .search-bar input {
-        flex: 1;
-        min-width: 200px;
-        background: var(--bg-dark);
-        border: 2px solid var(--border);
-        border-radius: 10px;
-        padding: 12px 16px;
-        color: var(--text-primary);
-        font-size: 14px;
+        flex: 1; min-width: 200px; background: var(--bg-dark);
+        border: 2px solid var(--border); border-radius: 10px;
+        padding: 12px 16px; color: var(--text-primary); font-size: 14px;
     }
     .search-bar input:focus {
-        outline: none;
-        border-color: var(--primary);
+        outline: none; border-color: var(--primary);
         box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
     }
     .search-bar select {
-        background: var(--bg-dark);
-        border: 2px solid var(--border);
-        border-radius: 10px;
-        padding: 12px 16px;
-        color: var(--text-primary);
-        cursor: pointer;
+        background: var(--bg-dark); border: 2px solid var(--border);
+        border-radius: 10px; padding: 12px 16px;
+        color: var(--text-primary); cursor: pointer;
     }
     .tabs { display: flex; gap: 6px; }
     .tab {
-        padding: 8px 14px;
-        border-radius: 8px;
-        border: 1px solid var(--border);
-        background: transparent;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all 0.2s;
-        font-size: 13px;
+        padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+        background: transparent; color: var(--text-secondary);
+        cursor: pointer; transition: all 0.2s; font-size: 13px;
     }
     .tab.active {
-        background: var(--gradient);
-        color: #0b0f1a;
-        border-color: transparent;
-        font-weight: 600;
+        background: var(--gradient); color: #0b0f1a;
+        border-color: transparent; font-weight: 600;
     }
     .channel-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
         gap: 10px;
     }
     .channel-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 12px;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        background: var(--bg-dark);
-        cursor: pointer;
-        transition: all 0.2s;
-        text-decoration: none;
-        color: var(--text-primary);
+        display: flex; align-items: center; gap: 10px; padding: 12px;
+        border: 1px solid var(--border); border-radius: 10px;
+        background: var(--bg-dark); cursor: pointer; transition: all 0.2s;
+        text-decoration: none; color: var(--text-primary);
     }
     .channel-item:hover {
-        border-color: var(--primary);
-        transform: translateY(-2px);
+        border-color: var(--primary); transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
     }
     .channel-item .name {
-        flex: 1;
-        font-size: 13px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        flex: 1; font-size: 13px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .channel-item .id {
-        color: var(--text-secondary);
-        font-size: 11px;
+        color: var(--text-secondary); font-size: 11px;
         font-family: ui-monospace, monospace;
     }
     .access-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: 14px;
     }
     .access-card {
-        background: var(--bg-dark);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 16px;
+        background: var(--bg-dark); border: 1px solid var(--border);
+        border-radius: 12px; padding: 16px;
     }
     .access-card .label {
-        font-size: 12px;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 8px;
-        font-weight: 600;
+        font-size: 12px; color: var(--text-secondary);
+        text-transform: uppercase; letter-spacing: 0.05em;
+        margin-bottom: 8px; font-weight: 600;
     }
     .access-card a {
-        color: var(--primary);
-        text-decoration: none;
-        word-break: break-all;
-        font-size: 13px;
+        color: var(--primary); text-decoration: none;
+        word-break: break-all; font-size: 13px;
     }
     .access-card a:hover { color: var(--secondary); }
     .copy-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 8px;
-        padding: 6px 12px;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: transparent;
-        color: var(--text-secondary);
-        font-size: 12px;
-        cursor: pointer;
-        transition: all 0.2s;
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-top: 8px; padding: 6px 12px; border: 1px solid var(--border);
+        border-radius: 8px; background: transparent; color: var(--text-secondary);
+        font-size: 12px; cursor: pointer; transition: all 0.2s;
     }
-    .copy-btn:hover {
-        color: var(--text-primary);
-        border-color: var(--primary);
-    }
+    .copy-btn:hover { color: var(--text-primary); border-color: var(--primary); }
     .player-modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.95);
-        z-index: 1000;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.95); z-index: 1000;
+        display: none; align-items: center; justify-content: center; padding: 20px;
     }
     .player-modal.active { display: flex; }
     .player-container {
-        width: 100%;
-        max-width: 1200px;
-        background: var(--bg-card);
-        border-radius: 16px;
-        overflow: hidden;
+        width: 100%; max-width: 1200px; background: var(--bg-card);
+        border-radius: 16px; overflow: hidden;
         box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     }
     .player-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--border);
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 16px 20px; border-bottom: 1px solid var(--border);
     }
     .player-header h3 { margin: 0; font-size: 16px; }
     .player-close {
-        background: none;
-        border: none;
-        color: var(--text-secondary);
-        font-size: 24px;
-        cursor: pointer;
-        width: 32px;
-        height: 32px;
-        display: grid;
-        place-items: center;
-        border-radius: 6px;
-        transition: all 0.2s;
+        background: none; border: none; color: var(--text-secondary);
+        font-size: 24px; cursor: pointer; width: 32px; height: 32px;
+        display: grid; place-items: center; border-radius: 6px; transition: all 0.2s;
     }
-    .player-close:hover {
-        background: var(--bg-hover);
-        color: var(--text-primary);
-    }
+    .player-close:hover { background: var(--bg-hover); color: var(--text-primary); }
     .player-body { padding: 20px; }
     .player-frame {
-        width: 100%;
-        aspect-ratio: 16/9;
-        background: #000;
-        border-radius: 8px;
-        border: none;
+        width: 100%; aspect-ratio: 16/9; background: #000;
+        border-radius: 8px; border: none;
     }
     .alert {
-        padding: 10px 14px;
-        border-radius: 8px;
-        margin-top: 8px;
-        font-size: 12px;
+        padding: 10px 14px; border-radius: 8px; margin-top: 8px; font-size: 12px;
     }
     .alert-success {
-        background: rgba(16, 185, 129, 0.15);
-        border: 1px solid var(--success);
+        background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success);
         color: var(--success);
     }
     .alert-error {
-        background: rgba(239, 68, 68, 0.15);
-        border: 1px solid var(--error);
+        background: rgba(239, 68, 68, 0.15); border: 1px solid var(--error);
         color: var(--error);
     }
     .toast {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 16px 20px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        z-index: 2000;
+        position: fixed; bottom: 20px; right: 20px;
+        background: var(--bg-card); border: 1px solid var(--border);
+        border-radius: 12px; padding: 16px 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 2000;
         animation: slideInRight 0.3s ease-out;
-        display: flex;
-        align-items: center;
-        gap: 12px;
+        display: flex; align-items: center; gap: 12px;
     }
     .toast.success { border-color: var(--success); }
     .toast.error { border-color: var(--error); }
+    .status-indicator {
+        display: flex; align-items: center; gap: 8px;
+        padding: 6px 12px; border-radius: 20px;
+        background: rgba(16, 185, 129, 0.1); border: 1px solid var(--success);
+        color: var(--success); font-size: 12px; font-weight: 500;
+    }
+    .status-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--success); animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
     @keyframes slideUp {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
@@ -1189,7 +1023,7 @@ DASHBOARD_HTML = r"""<!doctype html>
             <div class="nav-section-title">Navigation</div>
             <a href="/dashboard" class="nav-item active"><span class="icon">📊</span> Dashboard</a>
             <a href="/configure" class="nav-item"><span class="icon">🎨</span> Page Configure</a>
-            <a href="/manifest.json" class="nav-item" target="_blank"><span class="icon">📦</span> Manifest Stremio</a>
+            <a href="/manifest.json" class="nav-item" target="_blank"><span class="icon"></span> Manifest Stremio</a>
         </div>
         <div class="nav-section">
             <div class="nav-section-title">API</div>
@@ -1202,6 +1036,9 @@ DASHBOARD_HTML = r"""<!doctype html>
             <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
             <div class="add-source-result" id="add-source-result"></div>
         </div>
+        <button class="logout-btn" onclick="logout()">
+            <span class="icon">🚪</span> Déconnexion
+        </button>
     </aside>
 
     <main class="main-content">
@@ -1209,6 +1046,15 @@ DASHBOARD_HTML = r"""<!doctype html>
             <div class="page-title">
                 <h1>Dashboard</h1>
                 <p>Chaînes live DaddyLive + Vavoo — gestion et lecture</p>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>En ligne</span>
+                </div>
+                <button class="refresh-btn" onclick="refreshAll()">
+                    <span>↻</span> Actualiser
+                </button>
             </div>
         </div>
 
@@ -1242,7 +1088,7 @@ DASHBOARD_HTML = r"""<!doctype html>
                     <div class="label">Stremio — installer l'addon</div>
                     <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Addons → « Install via URL »</div>
                     <a id="manifest" href="#">—</a>
-                    <button class="copy-btn" data-copy="manifest"> copier l'URL</button>
+                    <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
                 </div>
                 <div class="access-card">
                     <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
@@ -1269,12 +1115,12 @@ DASHBOARD_HTML = r"""<!doctype html>
                 <select id="lang-filter">
                     <option value="all">🌍 Toutes langues</option>
                     <option value="fr" selected>🇫🇷 Français</option>
-                    <option value="en">🇬 English</option>
+                    <option value="en">🇬🇧 English</option>
                     <option value="es">🇪🇸 Español</option>
-                    <option value="de">🇩 Deutsch</option>
+                    <option value="de">🇩🇪 Deutsch</option>
                     <option value="it">🇮🇹 Italiano</option>
-                    <option value="ar">🇸 Arabe</option>
-                    <option value="pt">🇵🇹 Português</option>
+                    <option value="ar">🇸🇦 Arabe</option>
+                    <option value="pt">🇵 Português</option>
                     <option value="other">📺 Autres</option>
                 </select>
                 <div class="tabs">
@@ -1338,6 +1184,13 @@ function handleLogin(e) {
         });
 }
 
+function logout() {
+    $('#dashboard').classList.remove('active');
+    $('#loginScreen').style.display = 'flex';
+    $('#passwordInput').value = '';
+    showToast('👋 Déconnecté');
+}
+
 async function refreshStats(){
     try{
         const r = await fetch("/api/stats");
@@ -1351,6 +1204,14 @@ async function refreshStats(){
     }catch(e){
         console.error("Stats error:", e);
     }
+}
+
+async function refreshAll() {
+    await fetch("/api/refresh-cache");
+    await refreshStats();
+    await loadCatalog(CURRENT);
+    render();
+    showToast('✅ Cache rafraîchi');
 }
 
 let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
@@ -1534,15 +1395,15 @@ CONFIGURE_HTML = r"""<!doctype html>
       <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
       <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
       <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
-      <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
+      <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇵🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
     </div>
   </div>
-  <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
+  <div class="card"><h2> Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
     <div class="manifest-box" id="manifest-url">—</div>
-    <button class="copy" id="copy-btn"> Copier l'URL</button>
+    <button class="copy" id="copy-btn">📋 Copier l'URL</button>
     <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
   </div>
-  <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
+  <div class="card"><h2> Liens rapides</h2><div style="display:grid;gap:8px">
     <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
     <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
     <div><a href="/">→ Retour accueil</a></div>
