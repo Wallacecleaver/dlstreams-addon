@@ -10,11 +10,10 @@ Ce script :
 2. sert un PROXY local qui injecte les headers sur les playlists et rebalise les
 segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue, SANS MediaFlow ;
 3. expose un ADDON STREMIO minimal (manifest + catalog + stream) par-dessus ;
-4. expose un DASHBOARD web moderne avec filtrage par langue et recherche live ;
-5. permet de configurer la langue via /configure pour filtrer dans Stremio.
+4. permet de filtrer par langue via /configure pour Stremio.
 Lancer :    python3 dlstreams_addon.py            (port 8781 par defaut, override: PORT=... )
 VLC/ffmpeg: http://127.0.0.1:8781/hls/121/index.m3u8
-Stremio :   installer via  http://<ton-ip-LAN>:8781/manifest.json
+Stremio :   installer via  http://<ton-ip-LAN>:8781/manifest.json?lang=fr
 Dashboard:  http://127.0.0.1:8781/dashboard
 Configure:  http://127.0.0.1:8781/configure
 Rien d'autre a installer : Python 3.8+ suffit. Aucune cle, aucun compte.
@@ -79,70 +78,9 @@ _POPULAR_CHANNELS = [
     {"id": "422", "name": "RMC Story", "lang": "fr"},
     {"id": "423", "name": "RMC Découverte", "lang": "fr"},
     {"id": "424", "name": "Chérie 25", "lang": "fr"},
-    {"id": "501", "name": "Paris Première", "lang": "fr"},
-    {"id": "502", "name": "Planète+", "lang": "fr"},
-    {"id": "503", "name": "Série Club", "lang": "fr"},
-    {"id": "504", "name": "Téva", "lang": "fr"},
-    {"id": "505", "name": "M6 Music", "lang": "fr"},
-    {"id": "506", "name": "M6 Boutique", "lang": "fr"},
-    {"id": "601", "name": "RTL9", "lang": "fr"},
-    {"id": "602", "name": "AB1", "lang": "fr"},
-    {"id": "603", "name": "AB3", "lang": "fr"},
-    {"id": "604", "name": "AB Moteurs", "lang": "fr"},
-    {"id": "605", "name": "Action", "lang": "fr"},
-    {"id": "606", "name": "Ciné+ Classic", "lang": "fr"},
-    {"id": "607", "name": "Ciné+ Club", "lang": "fr"},
-    {"id": "608", "name": "Ciné+ Émotion", "lang": "fr"},
-    {"id": "609", "name": "Ciné+ Famiz", "lang": "fr"},
-    {"id": "610", "name": "Ciné+ Frisson", "lang": "fr"},
-    {"id": "611", "name": "Ciné+ Premier", "lang": "fr"},
-    {"id": "612", "name": "Comédie+", "lang": "fr"},
-    {"id": "613", "name": "Crime District", "lang": "fr"},
-    {"id": "614", "name": "Elle Girl", "lang": "fr"},
-    {"id": "615", "name": "Encyclo", "lang": "fr"},
-    {"id": "616", "name": "Equidia", "lang": "fr"},
-    {"id": "617", "name": "Escales", "lang": "fr"},
-    {"id": "618", "name": "Golf Channel", "lang": "fr"},
-    {"id": "619", "name": "Historia", "lang": "fr"},
-    {"id": "620", "name": "Hustler", "lang": "fr"},
-    {"id": "621", "name": "Infosport+", "lang": "fr"},
-    {"id": "622", "name": "JimJam", "lang": "fr"},
-    {"id": "623", "name": "KTO", "lang": "fr"},
-    {"id": "624", "name": "LCI", "lang": "fr"},
-    {"id": "625", "name": "Mangas", "lang": "fr"},
-    {"id": "626", "name": "Mezzo", "lang": "fr"},
-    {"id": "627", "name": "MTV", "lang": "fr"},
-    {"id": "628", "name": "National Geographic", "lang": "fr"},
-    {"id": "629", "name": "Nickelodeon Junior", "lang": "fr"},
-    {"id": "630", "name": "NT1", "lang": "fr"},
-    {"id": "631", "name": "OCS Choc", "lang": "fr"},
-    {"id": "632", "name": "OCS City", "lang": "fr"},
-    {"id": "633", "name": "OCS Géants", "lang": "fr"},
-    {"id": "634", "name": "OCS Max", "lang": "fr"},
-    {"id": "635", "name": "Penthouse", "lang": "fr"},
-    {"id": "636", "name": "Piwi+", "lang": "fr"},
-    {"id": "637", "name": "Planète+ A&E", "lang": "fr"},
-    {"id": "638", "name": "Planète+ CI", "lang": "fr"},
-    {"id": "639", "name": "Polar+", "lang": "fr"},
-    {"id": "640", "name": "RTL Living", "lang": "fr"},
-    {"id": "641", "name": "Science & Vie TV", "lang": "fr"},
-    {"id": "642", "name": "Seasons", "lang": "fr"},
-    {"id": "643", "name": "Sport+", "lang": "fr"},
-    {"id": "644", "name": "Stingray Brava", "lang": "fr"},
-    {"id": "645", "name": "Stingray DJazz", "lang": "fr"},
-    {"id": "646", "name": "Stingray iConcerts", "lang": "fr"},
-    {"id": "647", "name": "Télétoon+", "lang": "fr"},
-    {"id": "648", "name": "Toonami", "lang": "fr"},
-    {"id": "649", "name": "Trace Tropical", "lang": "fr"},
-    {"id": "650", "name": "TV Breizh", "lang": "fr"},
-    {"id": "651", "name": "TV5 Monde", "lang": "fr"},
-    {"id": "652", "name": "Ushuaïa TV", "lang": "fr"},
-    {"id": "653", "name": "Vivolta", "lang": "fr"},
-    {"id": "654", "name": "XXL", "lang": "fr"},
 ]
 
 def _detect_lang(name: str) -> str:
-    """Détecte la langue probable d'une chaîne à partir de son nom."""
     n = name.lower()
     if any(x in n for x in ["france", "français", "french", " fr ", " fr.", "-fr", "_fr", "tf1", "france 2", "france 3", "france 4", "france 5", "m6", "canal+", "rmc", "l'équipe", "arte", "bein sports 1", "bein sports 2", "bein sports 3"]):
         return "fr"
@@ -161,7 +99,6 @@ def _detect_lang(name: str) -> str:
     return "other"
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
-    """GET brut avec User-Agent + Referer (et Origin si fourni). Renvoie le corps (bytes)."""
     headers = {"User-Agent": UA, "Referer": referer}
     if extra:
         headers.update(extra)
@@ -171,7 +108,6 @@ def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout
 
 # ---------------------------------------------------------------- annuaire (id -> nom)
 class _LinkParser(HTMLParser):
-    """Extrait les <a href=...watch.php?id=N ...>Nom</a> de la home dlstreams."""
     def __init__(self):
         super().__init__()
         self.items: list[tuple[str, str]] = []
@@ -201,8 +137,6 @@ class _LinkParser(HTMLParser):
 _ch_cache: dict = {"at": 0.0, "list": []}
 
 def channels(lang_filter: str | None = None) -> list[dict]:
-    """Annuaire dlstreams -> [{id, name, lang}]. Fusionne chaînes populaires + scraping. Cache 30 min.
-    Si lang_filter est défini, ne retourne QUE les chaînes de cette langue."""
     now = time.time()
     if _ch_cache["list"] and now - _ch_cache["at"] < _CH_TTL and lang_filter is None:
         return _ch_cache["list"]
@@ -233,14 +167,13 @@ def search(query: str, limit: int = 40, lang_filter: str | None = None) -> list[
     hits = [c for c in channels(lang_filter=lang_filter) if q in c["name"].lower()]
     return hits[:limit]
 
-# ---------------------------------------------------------------- resolution du flux (MULTI-PLAYER)
+# ---------------------------------------------------------------- resolution du flux
 _PLAYER_PATHS = ("stream", "watch", "player", "plus", "hub", "cast", "casting")
 
 def _txt(url: str, referer: str = SITE + "/") -> str:
     return _get(url, referer=referer).decode("utf-8", "replace")
 
 def players(cid: str) -> list[tuple[str, str]]:
-    """[(label, url_page_player)] dans l'ordre de watch.php (repli = chemins connus)."""
     try:
         w = _txt(f"{SITE}/watch.php?id={cid}")
     except Exception:
@@ -255,7 +188,6 @@ def _first_iframe(html: str) -> str | None:
     return next((m for m in re.findall(r'<iframe[^>]+src="([^"]+)"', html) if m.startswith("http")), None)
 
 def _find_m3u8(html: str) -> str | None:
-    """m3u8 d'une page embed : `atob('<b64>')` (daddy2) OU en clair/echappe \\/ (wideiptv...)."""
     seg = html
     while "atob('" in seg:
         seg = seg.split("atob('", 1)[1]
@@ -270,7 +202,6 @@ def _find_m3u8(html: str) -> str | None:
     return m.group(0) if m else None
 
 def resolve_player(stream_url: str) -> tuple[str, str]:
-    """Page-player -> (m3u8, host_embed pour Referer/Origin). Suit l'iframe (+1 hop si CDN imbrique)."""
     emb = _first_iframe(_txt(stream_url, referer=SITE + "/watch.php"))
     if not emb:
         raise ValueError("pas d'iframe")
@@ -287,7 +218,6 @@ def resolve_player(stream_url: str) -> tuple[str, str]:
     return mu, host
 
 def resolve(cid: str) -> tuple[str, str]:
-    """FAILOVER : (m3u8, host) du 1er player qui livre un flux. Leve si aucun."""
     for _label, url in players(cid):
         try:
             return resolve_player(url)
@@ -296,7 +226,6 @@ def resolve(cid: str) -> tuple[str, str]:
     raise ValueError("aucun player ne resout")
 
 def working_players(cid: str) -> list[tuple[int, str]]:
-    """[(index, label)] des players qui resolvent REELLEMENT un flux (verifies en parallele)."""
     pls = players(cid)
     def _chk(item: tuple[int, tuple[str, str]]) -> tuple[int, str] | None:
         i, (label, url) = item
@@ -308,7 +237,7 @@ def working_players(cid: str) -> list[tuple[int, str]]:
     with ThreadPoolExecutor(max_workers=8) as ex:
         return [x for x in ex.map(_chk, enumerate(pls)) if x]
 
-# ---------------------------------------------------------------- Vavoo (protocole mediahubmx)
+# ---------------------------------------------------------------- Vavoo
 _VAVOO_MIRRORS = (("https://oha.cx", "mediaurl", False),
                   ("http://178.239.115.119", "mediaurl", False),
                   ("https://vavoo.net", "mediahubmx", True),
@@ -357,7 +286,6 @@ def _vavoo_signature(force: bool = False) -> str:
     return ""
 
 def _vavoo_post(action: str, body: dict):
-    """POST {base}/{prefixe}-{action}.json sur le 1er mirror qui repond. -> JSON ou None."""
     order = sorted(_VAVOO_MIRRORS, key=lambda m: m[0] != _vavoo_base["url"])
     for base, prefix, need in order:
         for attempt in (0, 1):
@@ -378,7 +306,6 @@ def _vavoo_post(action: str, body: dict):
     return None
 
 def vavoo_channels(country: str = "France") -> list[dict]:
-    """Catalogue Vavoo d'un pays -> [{id, name, logo, lang}]. Cache 6 h, pagine."""
     if _vavoo_cache["list"] and time.time() - _vavoo_cache["at"] < 6 * 3600:
         return _vavoo_cache["list"]
     items, cursor, pages = [], 0, 0
@@ -399,7 +326,6 @@ def vavoo_channels(country: str = "France") -> list[dict]:
     return _vavoo_cache["list"]
 
 def vavoo_resolve(vurl: str) -> str:
-    """URL de flux reelle pour une chaine Vavoo (resolution PARESSEUSE, URLs ephemeres)."""
     if not vurl:
         return ""
     d = _vavoo_post("resolve", {"language": "fr", "region": "FR", "url": str(vurl), "clientVersion": "3.0.2"})
@@ -407,7 +333,7 @@ def vavoo_resolve(vurl: str) -> str:
         return d[0].get("url") or d[0].get("streamUrl") or ""
     return ""
 
-# ---------------------------------------------------------------- proxy HLS (headers par source)
+# ---------------------------------------------------------------- proxy HLS
 def _b64u(s: str) -> str:
     return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
 
@@ -415,7 +341,6 @@ def _unb64u(s: str) -> str:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4)).decode()
 
 def _proxy_get(url: str, hdr: dict, timeout: int = 25) -> bytes:
-    """GET une URL avec un jeu de headers arbitraire."""
     headers = {"User-Agent": UA}
     headers.update(hdr or {})
     req = urllib.request.Request(url, headers=headers)
@@ -423,7 +348,6 @@ def _proxy_get(url: str, hdr: dict, timeout: int = 25) -> bytes:
         return r.read()
 
 def _rewrite_playlist(text: str, playlist_url: str, hdr_enc: str, self_base: str) -> str:
-    """Reecrit une playlist HLS : chaque URL passe par NOTRE proxy."""
     base = playlist_url.rsplit("/", 1)[0] + "/"
     out = []
     for line in text.splitlines():
@@ -436,7 +360,7 @@ def _rewrite_playlist(text: str, playlist_url: str, hdr_enc: str, self_base: str
         out.append(f"{self_base}/{route}?u={_b64u(absu)}&h={hdr_enc}")
     return "\n".join(out)
 
-# ---------------------------------------------------------------- helpers dashboard
+# ---------------------------------------------------------------- helpers
 def _stats() -> dict:
     return {
         "status": "ok",
@@ -491,6 +415,7 @@ class Handler(BaseHTTPRequestHandler):
         path = u.path
         qs = urllib.parse.parse_qs(u.query)
         try:
+            # ---- dashboard & API ----
             if path == "/dashboard" or path == "/dashboard.html":
                 return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
@@ -507,11 +432,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vavoo-channels":
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
 
+            # ---- addon Stremio ----
             if path in ("/", "/manifest.json"):
-                return self._send(200, json.dumps(self._manifest()).encode(), "application/json", True)
-
-            if path.startswith("/manifest-") and path.endswith(".json"):
-                lang = path.replace("/manifest-", "").replace(".json", "")
+                lang = qs.get("lang", [None])[0]
                 return self._send(200, json.dumps(self._manifest(lang_filter=lang)).encode(), "application/json", True)
 
             if path.startswith("/catalog/tv/"):
@@ -551,7 +474,7 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
-                    streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
+                    streams = [{"name": "Vavoo", "title": " Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 ok = working_players(cid)
                 streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
@@ -560,6 +483,7 @@ class Handler(BaseHTTPRequestHandler):
                              "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
 
+            # ---- proxy HLS ----
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
                 cid = parts[2]
@@ -641,7 +565,7 @@ def main():
     print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     print(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     print(f"  Configure: http://127.0.0.1:{PORT}/configure")
-    print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json")
+    print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json?lang=fr")
     print(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
     try:
         n = len(channels())
@@ -650,7 +574,7 @@ def main():
         print(f"  annuaire : erreur de chargement ({e})")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
-# ---------------------------------------------------------------- DASHBOARD HTML (inline, zero dependance)
+# ---------------------------------------------------------------- DASHBOARD HTML
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="fr">
 <head>
@@ -658,248 +582,81 @@ DASHBOARD_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dlstreams — dashboard</title>
 <style>
-  :root{
-    --bg:#0b0f1a; --bg2:#111827; --card:#151b2b; --border:#1f2937;
-    --text:#e5e7eb; --muted:#94a3b8; --accent:#60a5fa; --accent2:#a78bfa;
-    --ok:#34d399; --warn:#fbbf24; --err:#f87171;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:
-    radial-gradient(1200px 600px at 10% -10%, #1e293b 0%, transparent 60%),
-    radial-gradient(900px 500px at 110% 10%, #312e81 0%, transparent 60%),
-    var(--bg);
-    color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+  :root{--bg:#0b0f1a;--bg2:#111827;--card:#151b2b;--border:#1f2937;--text:#e5e7eb;--muted:#94a3b8;--accent:#60a5fa;--accent2:#a78bfa;--ok:#34d399;--warn:#fbbf24;--err:#f87171}
+  *{box-sizing:border-box}html,body{margin:0;padding:0;background:radial-gradient(1200px 600px at 10% -10%,#1e293b 0%,transparent 60%),radial-gradient(900px 500px at 110% 10%,#312e81 0%,transparent 60%),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
   header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  header .logo{width:40px;height:40px;border-radius:10px;
-    background:linear-gradient(135deg,var(--accent),var(--accent2));
-    display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
-  header h1{margin:0;font-size:20px;letter-spacing:.3px}
-  header .sub{color:var(--muted);font-size:12px}
-  .status{margin-left:auto;display:flex;align-items:center;gap:8px;
-    padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02)}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 0 rgba(52,211,153,.6)}
-  .dot.ok{background:var(--ok);animation:pulse 2s infinite}
-  .dot.err{background:var(--err)}
+  header .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
+  header h1{margin:0;font-size:20px;letter-spacing:.3px}header .sub{color:var(--muted);font-size:12px}
+  .status{margin-left:auto;display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 0 rgba(52,211,153,.6)}.dot.ok{background:var(--ok);animation:pulse 2s infinite}.dot.err{background:var(--err)}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 10px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
-  main{padding:16px 24px 60px;max-width:1200px;margin:0 auto}
-  .grid{display:grid;gap:14px}
-  .cards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-  .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));
-    border:1px solid var(--border);border-radius:14px;padding:16px 18px;backdrop-filter:blur(8px)}
-  .card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
-  .card .val{font-size:26px;font-weight:700;margin-top:6px;letter-spacing:.3px}
-  .card .hint{color:var(--muted);font-size:12px;margin-top:4px}
-  section{margin-top:22px}
-  section h2{font-size:15px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
-  .access{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
-  .access .card a{color:var(--accent);text-decoration:none;word-break:break-all}
-  .access .card a:hover{color:var(--accent2)}
-  .copy{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:6px 10px;
-    border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);
-    color:var(--muted);font-size:12px;cursor:pointer;transition:.15s}
-  .copy:hover{color:var(--text);border-color:var(--accent)}
-  .search{position:sticky;top:0;z-index:5;background:rgba(11,15,26,.85);backdrop-filter:blur(10px);
-    padding:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .search input{flex:1;min-width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);
-    padding:10px 14px;border-radius:10px;font-size:14px;outline:none;transition:.15s}
-  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
-  .search select{background:var(--card);border:1px solid var(--border);color:var(--text);
-    padding:10px 14px;border-radius:10px;font-size:14px;outline:none;cursor:pointer;transition:.15s}
-  .search select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
-  .tabs{display:flex;gap:6px}
-  .tab{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;
-    color:var(--muted);cursor:pointer;font-size:13px;transition:.15s}
-  .tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0f1a;border-color:transparent;font-weight:600}
+  main{padding:16px 24px 60px;max-width:1200px;margin:0 auto}.grid{display:grid;gap:14px}.cards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;padding:16px 18px;backdrop-filter:blur(8px)}
+  .card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.card .val{font-size:26px;font-weight:700;margin-top:6px;letter-spacing:.3px}.card .hint{color:var(--muted);font-size:12px;margin-top:4px}
+  section{margin-top:22px}section h2{font-size:15px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  .access{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.access .card a{color:var(--accent);text-decoration:none;word-break:break-all}.access .card a:hover{color:var(--accent2)}
+  .copy{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:12px;cursor:pointer;transition:.15s}.copy:hover{color:var(--text);border-color:var(--accent)}
+  .search{position:sticky;top:0;z-index:5;background:rgba(11,15,26,.85);backdrop-filter:blur(10px);padding:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .search input{flex:1;min-width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:10px;font-size:14px;outline:none;transition:.15s}.search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
+  .search select{background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:10px;font-size:14px;outline:none;cursor:pointer;transition:.15s}.search select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
+  .tabs{display:flex;gap:6px}.tab{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;transition:.15s}.tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0f1a;border-color:transparent;font-weight:600}
   .list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:10px}
-  .item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);
-    border-radius:10px;background:var(--card);cursor:pointer;transition:.15s;text-decoration:none;color:var(--text)}
-  .item:hover{border-color:var(--accent);transform:translateY(-1px)}
-  .item .name{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .item .id{color:var(--muted);font-size:11px;font-family:ui-monospace,monospace}
-  .empty{color:var(--muted);text-align:center;padding:30px}
-  footer{margin-top:40px;color:var(--muted);font-size:12px;text-align:center}
-  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;
-    background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
+  .item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;transition:.15s;text-decoration:none;color:var(--text)}.item:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .item .name{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.item .id{color:var(--muted);font-size:11px;font-family:ui-monospace,monospace}
+  .empty{color:var(--muted);text-align:center;padding:30px}footer{margin-top:40px;color:var(--muted);font-size:12px;text-align:center}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
   @media (max-width:600px){header{padding:18px 14px}main{padding:10px 14px 40px}.card .val{font-size:22px}}
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">▶</div>
-  <div>
-    <h1>dlstreams <span class="badge">addon + proxy</span></h1>
-    <div class="sub">Chaînes live DaddyLive + Vavoo — servi sur le port 8781</div>
-  </div>
-  <div class="status"><span id="dot" class="dot"></span><span id="stxt">vérification…</span></div>
-</header>
-
+<header><div class="logo">▶</div><div><h1>dlstreams <span class="badge">addon + proxy</span></h1><div class="sub">Chaînes live DaddyLive + Vavoo — servi sur le port 8781</div></div><div class="status"><span id="dot" class="dot"></span><span id="stxt">vérification…</span></div></header>
 <main>
-  <section>
-    <div class="grid cards" id="cards">
-      <div class="card"><div class="label">Chaînes dlstreams</div><div class="val" id="c-dl">—</div><div class="hint" id="c-dl-h">cache</div></div>
-      <div class="card"><div class="label">Chaînes Vavoo</div><div class="val" id="c-vv">—</div><div class="hint" id="c-vv-h">catalogue FR</div></div>
-      <div class="card"><div class="label">Uptime</div><div class="val" id="c-up">—</div><div class="hint">depuis démarrage</div></div>
-      <div class="card"><div class="label">Version</div><div class="val" id="c-v">—</div><div class="hint">addon Stremio</div></div>
-    </div>
-  </section>
-
-  <section>
-    <h2>Accès rapide</h2>
-    <div class="grid access">
-      <div class="card">
-        <div class="label">Stremio — installer l'addon</div>
-        <div style="margin-top:6px">Addons → « Install via URL »</div>
-        <a id="manifest" href="#">—</a>
-        <div><button class="copy" data-copy="manifest">📋 copier l'URL</button></div>
-      </div>
-      <div class="card">
-        <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
-        <div style="margin-top:6px">Ouvre un flux par son id :</div>
-        <code id="vlc" style="color:var(--accent);word-break:break-all;font-size:12px">—</code>
-        <div><button class="copy" data-copy="vlc">📋 copier</button></div>
-      </div>
-      <div class="card">
-        <div class="label">API</div>
-        <div style="margin-top:6px;font-size:12px;color:var(--muted)">
-          <div><a href="/manifest.json" style="color:var(--accent)">/manifest.json</a> — Stremio</div>
-          <div><a href="/api/stats" style="color:var(--accent)">/api/stats</a> — statut serveur</div>
-          <div><a href="/api/channels" style="color:var(--accent)">/api/channels</a> — annuaire dlstreams</div>
-          <div><a href="/api/vavoo-channels" style="color:var(--accent)">/api/vavoo-channels</a> — catalogue Vavoo FR</div>
-          <div><a href="/configure" style="color:var(--accent)">/configure</a> — configurer la langue</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>Catalogue</h2>
-    <div class="search">
-      <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
-      <select id="lang-filter">
-        <option value="all">🌍 Toutes langues</option>
-        <option value="fr" selected>🇫🇷 Français</option>
-        <option value="en">🇬🇧 English</option>
-        <option value="es">🇪🇸 Español</option>
-        <option value="de">🇩 Deutsch</option>
-        <option value="it">🇮🇹 Italiano</option>
-        <option value="ar">🇦 Arabe</option>
-        <option value="pt">🇵🇹 Português</option>
-        <option value="other">📺 Autres</option>
-      </select>
-      <div class="tabs">
-        <button class="tab active" data-src="dlstreams">dlstreams</button>
-        <button class="tab" data-src="vavoo">Vavoo</button>
-      </div>
-    </div>
-    <div class="list" id="list"><div class="empty">chargement…</div></div>
-  </section>
-
-  <footer>
-    dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span>
-  </footer>
+  <section><div class="grid cards" id="cards">
+    <div class="card"><div class="label">Chaînes dlstreams</div><div class="val" id="c-dl">—</div><div class="hint" id="c-dl-h">cache</div></div>
+    <div class="card"><div class="label">Chaînes Vavoo</div><div class="val" id="c-vv">—</div><div class="hint" id="c-vv-h">catalogue FR</div></div>
+    <div class="card"><div class="label">Uptime</div><div class="val" id="c-up">—</div><div class="hint">depuis démarrage</div></div>
+    <div class="card"><div class="label">Version</div><div class="val" id="c-v">—</div><div class="hint">addon Stremio</div></div>
+  </div></section>
+  <section><h2>Accès rapide</h2><div class="grid access">
+    <div class="card"><div class="label">Stremio — installer l'addon</div><div style="margin-top:6px">Addons → « Install via URL »</div><a id="manifest" href="#">—</a><div><button class="copy" data-copy="manifest">📋 copier l'URL</button></div></div>
+    <div class="card"><div class="label">VLC / mpv / ffmpeg — lecture directe</div><div style="margin-top:6px">Ouvre un flux par son id :</div><code id="vlc" style="color:var(--accent);word-break:break-all;font-size:12px">—</code><div><button class="copy" data-copy="vlc">📋 copier</button></div></div>
+    <div class="card"><div class="label">API</div><div style="margin-top:6px;font-size:12px;color:var(--muted)">
+      <div><a href="/manifest.json" style="color:var(--accent)">/manifest.json</a> — Stremio</div>
+      <div><a href="/api/stats" style="color:var(--accent)">/api/stats</a> — statut serveur</div>
+      <div><a href="/api/channels" style="color:var(--accent)">/api/channels</a> — annuaire dlstreams</div>
+      <div><a href="/api/vavoo-channels" style="color:var(--accent)">/api/vavoo-channels</a> — catalogue Vavoo FR</div>
+      <div><a href="/configure" style="color:var(--accent)">/configure</a> — configurer la langue</div>
+    </div></div>
+  </div></section>
+  <section><h2>Catalogue</h2><div class="search">
+    <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
+    <select id="lang-filter"><option value="all">🌍 Toutes langues</option><option value="fr" selected>🇫🇷 Français</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="de">🇩🇪 Deutsch</option><option value="it">🇮🇹 Italiano</option><option value="ar">🇸🇦 Arabe</option><option value="pt">🇹 Português</option><option value="other">📺 Autres</option></select>
+    <div class="tabs"><button class="tab active" data-src="dlstreams">dlstreams</button><button class="tab" data-src="vavoo">Vavoo</button></div>
+  </div><div class="list" id="list"><div class="empty">chargement…</div></div></section>
+  <footer>dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span></footer>
 </main>
-
 <script>
-const BASE = location.origin;
-const $ = s => document.querySelector(s);
-const fmtDur = s => {
-  if (s==null) return "—";
-  const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
-  return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");
-};
+const BASE = location.origin;const $ = s => document.querySelector(s);
+const fmtDur = s => {if (s==null) return "—";const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");};
 const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
-
-async function refreshStats(){
-  try{
-    const r = await fetch("/api/stats"); const d = await r.json();
-    $("#c-dl").textContent = d.dlstreams.count;
-    $("#c-dl-h").textContent = "cache : " + fmtAge(d.dlstreams.age_seconds);
-    $("#c-vv").textContent = d.vavoo.count;
-    $("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);
-    $("#c-up").textContent = fmtDur(d.uptime);
-    $("#c-v").textContent = "v" + d.version;
-    $("#dot").className = "dot ok"; $("#stxt").textContent = "en ligne";
-  }catch(e){
-    $("#dot").className = "dot err"; $("#stxt").textContent = "hors ligne";
-  }
-}
-
-let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
-let LANG_FILTER = "fr";
-
-async function loadCatalog(src){
-  const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;
-  try{ const r = await fetch(url); ALL[src] = await r.json(); }catch(e){ ALL[src]=[]; }
-}
-
-function render(){
-  const q = $("#q").value.toLowerCase().trim();
-  const words = q ? q.split(/\s+/) : [];
-  const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
-  
-  const items = (ALL[CURRENT]||[]).filter(c => {
-    if (lang && c.lang !== lang) return false;
-    return words.every(w => (c.name||"").toLowerCase().includes(w));
-  }).slice(0, 300);
-  
-  const list = $("#list");
-  if(!items.length){ list.innerHTML = '<div class="empty">aucun résultat</div>'; return; }
-  list.innerHTML = items.map(c => {
-    const encodedId = CURRENT==="vavoo" ? b64u(c.id) : c.id;
-    const href = CURRENT==="vavoo"
-      ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}`
-      : `${BASE}/hls/${c.id}/index.m3u8`;
-    const logo = c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
-    return `<a class="item" href="${href}" target="_blank" title="${escapeHtml(c.name)}">
-      ${logo}
-      <div class="name">${escapeHtml(c.name)}</div>
-      <div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div>
-    </a>`;
-  }).join("");
-}
-
+async function refreshStats(){try{const r = await fetch("/api/stats"); const d = await r.json();$("#c-dl").textContent = d.dlstreams.count;$("#c-dl-h").textContent = "cache : " + fmtAge(d.dlstreams.age_seconds);$("#c-vv").textContent = d.vavoo.count;$("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);$("#c-up").textContent = fmtDur(d.uptime);$("#c-v").textContent = "v" + d.version;$("#dot").className = "dot ok"; $("#stxt").textContent = "en ligne";}catch(e){$("#dot").className = "dot err"; $("#stxt").textContent = "hors ligne";}}
+let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};let LANG_FILTER = "fr";
+async function loadCatalog(src){const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;try{ const r = await fetch(url); ALL[src] = await r.json(); }catch(e){ ALL[src]=[]; }}
+function render(){const q = $("#q").value.toLowerCase().trim();const words = q ? q.split(/\s+/) : [];const lang = LANG_FILTER === "all" ? null : LANG_FILTER;const items = (ALL[CURRENT]||[]).filter(c => {if (lang && c.lang !== lang) return false;return words.every(w => (c.name||"").toLowerCase().includes(w));}).slice(0, 300);const list = $("#list");if(!items.length){ list.innerHTML = '<div class="empty">aucun résultat</div>'; return; }list.innerHTML = items.map(c => {const encodedId = CURRENT==="vavoo" ? b64u(c.id) : c.id;const href = CURRENT==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}` : `${BASE}/hls/${c.id}/index.m3u8`;const logo = c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";return `<a class="item" href="${href}" target="_blank" title="${escapeHtml(c.name)}">${logo}<div class="name">${escapeHtml(c.name)}</div><div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div></a>`;}).join("");}
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-
 $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,120);}})());
-$("#lang-filter").addEventListener("change", (e) => {
-  LANG_FILTER = e.target.value;
-  loadCatalog(CURRENT);
-  render();
-});
-
-document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{
-  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-  b.classList.add("active"); CURRENT = b.dataset.src;
-  if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
-  render();
-}));
-
-document.querySelectorAll(".copy").forEach(b=>b.addEventListener("click",()=>{
-  const el = $("#"+b.dataset.copy); const txt = el.href || el.textContent;
-  navigator.clipboard.writeText(txt).then(()=>{
-    const old = b.textContent; b.textContent = "✓ copié"; setTimeout(()=>b.textContent=old,1200);
-  });
-}));
-
-(function initLinks(){
-  const m = `${BASE}/manifest.json`;
-  $("#manifest").href = m; $("#manifest").textContent = m;
-  $("#vlc").textContent = `${BASE}/hls/121/index.m3u8`;
-  $("#host").textContent = BASE;
-})();
-
-(async function boot(){
-  await Promise.all([refreshStats(), loadCatalog("dlstreams")]);
-  render();
-  setInterval(refreshStats, 30000);
-})();
+$("#lang-filter").addEventListener("change", (e) => {LANG_FILTER = e.target.value;loadCatalog(CURRENT);render();});
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active"); CURRENT = b.dataset.src;if(!ALL[CURRENT].length) await loadCatalog(CURRENT);render();}));
+document.querySelectorAll(".copy").forEach(b=>b.addEventListener("click",()=>{const el = $("#"+b.dataset.copy); const txt = el.href || el.textContent;navigator.clipboard.writeText(txt).then(()=>{const old = b.textContent; b.textContent = "✓ copié"; setTimeout(()=>b.textContent=old,1200);});}));
+(function initLinks(){const m = `${BASE}/manifest.json`;$("#manifest").href = m; $("#manifest").textContent = m;$("#vlc").textContent = `${BASE}/hls/121/index.m3u8`;$("#host").textContent = BASE;})();
+(async function boot(){await Promise.all([refreshStats(), loadCatalog("dlstreams")]);render();setInterval(refreshStats, 30000);})();
 </script>
 </body>
 </html>
 """
 
-# ---------------------------------------------------------------- CONFIGURE HTML (page de configuration langue)
+# ---------------------------------------------------------------- CONFIGURE HTML
 CONFIGURE_HTML = r"""<!doctype html>
 <html lang="fr">
 <head>
@@ -907,126 +664,57 @@ CONFIGURE_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dlstreams — configuration</title>
 <style>
-  :root{
-    --bg:#0b0f1a; --bg2:#111827; --card:#151b2b; --border:#1f2937;
-    --text:#e5e7eb; --muted:#94a3b8; --accent:#60a5fa; --accent2:#a78bfa;
-    --ok:#34d399;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:
-    radial-gradient(1200px 600px at 10% -10%, #1e293b 0%, transparent 60%),
-    radial-gradient(900px 500px at 110% 10%, #312e81 0%, transparent 60%),
-    var(--bg);
-    color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+  :root{--bg:#0b0f1a;--bg2:#111827;--card:#151b2b;--border:#1f2937;--text:#e5e7eb;--muted:#94a3b8;--accent:#60a5fa;--accent2:#a78bfa;--ok:#34d399}
+  *{box-sizing:border-box}html,body{margin:0;padding:0;background:radial-gradient(1200px 600px at 10% -10%,#1e293b 0%,transparent 60%),radial-gradient(900px 500px at 110% 10%,#312e81 0%,transparent 60%),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
   header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px}
-  header .logo{width:40px;height:40px;border-radius:10px;
-    background:linear-gradient(135deg,var(--accent),var(--accent2));
-    display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
+  header .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(96,165,250,.3)}
   header h1{margin:0;font-size:20px;letter-spacing:.3px}
   main{padding:24px;max-width:800px;margin:0 auto}
-  .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));
-    border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
   .card h2{margin:0 0 16px;color:var(--muted);font-size:15px;text-transform:uppercase;letter-spacing:.1em}
   .lang-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
-  .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--card);
-    color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
+  .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
   .lang-btn:hover{border-color:var(--accent);transform:translateY(-2px)}
   .lang-btn.selected{border-color:var(--ok);background:rgba(52,211,153,.1)}
-  .lang-flag{font-size:24px}
-  .lang-name{font-weight:600}
-  .lang-count{color:var(--muted);font-size:12px;margin-top:2px}
-  .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
-    padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
-  .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;
-    border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);
-    color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
+  .lang-flag{font-size:24px}.lang-name{font-weight:600}.lang-count{color:var(--muted);font-size:12px;margin-top:2px}
+  .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
+  .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
   .copy:hover{color:var(--text);border-color:var(--accent)}
   .info{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}
-  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;
-    background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
-  a{color:var(--accent);text-decoration:none}
-  a:hover{color:var(--accent2)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(96,165,250,.15);color:var(--accent);margin-left:6px}
+  a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent2)}
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">▶</div>
-  <div>
-    <h1>Configuration <span class="badge">langue</span></h1>
-  </div>
-</header>
-
+<header><div class="logo">▶</div><div><h1>Configuration <span class="badge">langue</span></h1></div></header>
 <main>
-  <div class="card">
-    <h2>🌍 Choisir votre langue</h2>
-    <p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
+  <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
     <div class="lang-grid" id="lang-grid">
-      <button class="lang-btn" data-lang="all">
-        <span class="lang-flag"></span>
-        <div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div>
-      </button>
-      <button class="lang-btn selected" data-lang="fr">
-        <span class="lang-flag">🇫🇷</span>
-        <div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div>
-      </button>
-      <button class="lang-btn" data-lang="en">
-        <span class="lang-flag">🇬🇧</span>
-        <div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div>
-      </button>
-      <button class="lang-btn" data-lang="es">
-        <span class="lang-flag">🇪🇸</span>
-        <div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div>
-      </button>
-      <button class="lang-btn" data-lang="de">
-        <span class="lang-flag">🇪</span>
-        <div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div>
-      </button>
-      <button class="lang-btn" data-lang="it">
-        <span class="lang-flag">🇹</span>
-        <div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div>
-      </button>
-      <button class="lang-btn" data-lang="ar">
-        <span class="lang-flag">🇦</span>
-        <div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div>
-      </button>
-      <button class="lang-btn" data-lang="pt">
-        <span class="lang-flag">🇹</span>
-        <div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div>
-      </button>
+      <button class="lang-btn" data-lang="all"><span class="lang-flag"></span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
+      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
+      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
+      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
+      <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
+      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
+      <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
+      <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇵🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
     </div>
   </div>
-
-  <div class="card">
-    <h2>📥 Installer dans Stremio</h2>
-    <p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
+  <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
     <div class="manifest-box" id="manifest-url">—</div>
     <button class="copy" id="copy-btn">📋 Copier l'URL</button>
-    <div class="info">
-      <strong>Comment faire :</strong><br>
-      1. Choisissez votre langue ci-dessus<br>
-      2. Copiez l'URL du manifest<br>
-      3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>
-      4. Collez l'URL et validez<br><br>
-      <em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em>
-    </div>
+    <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
   </div>
-
-  <div class="card">
-    <h2>🔗 Liens rapides</h2>
-    <div style="display:grid;gap:8px">
-      <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
-      <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
-      <div><a href="/">→ Retour accueil</a></div>
-    </div>
-  </div>
+  <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
+    <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
+    <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
+    <div><a href="/">→ Retour accueil</a></div>
+  </div></div>
 </main>
-
 <script>
 const BASE = location.origin;
 const $ = s => document.querySelector(s);
 let CURRENT_LANG = "fr";
-
-// Gestion des boutons de langue
 document.querySelectorAll(".lang-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("selected"));
@@ -1035,15 +723,12 @@ document.querySelectorAll(".lang-btn").forEach(btn => {
     updateManifest();
   });
 });
-
 function updateManifest() {
   const url = CURRENT_LANG === "all" 
     ? `${BASE}/manifest.json`
-    : `${BASE}/manifest-${CURRENT_LANG}.json`;
+    : `${BASE}/manifest.json?lang=${CURRENT_LANG}`;
   $("#manifest-url").textContent = url;
 }
-
-// Copie dans le presse-papier
 $("#copy-btn").addEventListener("click", () => {
   const url = $("#manifest-url").textContent;
   navigator.clipboard.writeText(url).then(() => {
@@ -1052,8 +737,6 @@ $("#copy-btn").addEventListener("click", () => {
     setTimeout(() => $("#copy-btn").textContent = old, 2000);
   });
 });
-
-// Init
 updateManifest();
 </script>
 </body>
