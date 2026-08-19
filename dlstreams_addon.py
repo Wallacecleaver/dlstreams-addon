@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
 """dlstreams -> Stremio : mini-addon + proxy autonome (stdlib pure, ZERO dependance).
-
 dlstreams.st enveloppe le reseau DaddyLive. Chaque chaine = un id (watch.php?id=N).
 Le flux reel est un m3u8 tokenise, MAIS deux pieges :
-  - la PLAYLIST exige les headers Referer/Origin de l'embed (sinon 403) ;
-  - les SEGMENTS sont du MPEG-TS servi avec un Content-Type mensonger `application/zstd`
-    (ffmpeg/hls.js s'y cassent les dents si on ne le corrige pas ; les octets, eux, sont du TS).
-
+- la PLAYLIST exige les headers Referer/Origin de l'embed (sinon 403) ;
+- les SEGMENTS sont du MPEG-TS servi avec un Content-Type mensonger `application/zstd`
+(ffmpeg/hls.js s'y cassent les dents si on ne le corrige pas ; les octets, eux, sont du TS).
 Ce script :
-  1. resout la chaine (dlstreams -> iframe DaddyLive -> m3u8 en base64) ;
-  2. sert un PROXY local qui injecte les headers sur les playlists et rebalise les
-     segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue, SANS MediaFlow ;
-  3. expose un ADDON STREMIO minimal (manifest + catalog + stream) par-dessus.
-
+1. resout la chaine (dlstreams -> iframe DaddyLive -> m3u8 en base64) ;
+2. sert un PROXY local qui injecte les headers sur les playlists et rebalise les
+segments en `video/mp2t` -> n'importe quel player ouvre l'URL locale et ca joue, SANS MediaFlow ;
+3. expose un ADDON STREMIO minimal (manifest + catalog + stream) par-dessus.
 Lancer :    python3 dlstreams_addon.py            (port 8781 par defaut, override: PORT=... )
 VLC/ffmpeg: http://127.0.0.1:8781/hls/121/index.m3u8
 Stremio :   installer via  http://<ton-ip-LAN>:8781/manifest.json
-
 Rien d'autre a installer : Python 3.8+ suffit. Aucune cle, aucun compte.
 """
 from __future__ import annotations
-
 import base64
 import json
 import os
@@ -36,6 +31,33 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 SITE = "https://dlstreams.st"                 # wrapper : sa home = l'annuaire, ses pages = le pointeur DaddyLive
 _CH_TTL = 1800                                # cache annuaire 30 min
 
+# ============================================================================
+# FILTRE CHAINES FRANCAISES - IDs DaddyLive
+# ============================================================================
+FRENCH_CHANNEL_IDS = {
+    "772",   # Eurosport 1 France
+    "773",   # Eurosport 2 France
+    "960",   # DAZN Ligue 1 France
+    "119",   # RMC Sport 1 France
+    "120",   # RMC Sport 2 France
+    "954",   # RMC Story France
+    "121",   # Canal+ France
+    "122",   # Canal+ Sport France
+    "463",   # Canal+ Foot France
+    "464",   # Canal+ Sport360
+    "271",   # Canal+ MotoGP France
+    "273",   # Canal+ Formula 1
+    "116",   # beIN SPORTS 1 France
+    "117",   # beIN SPORTS 2 France
+    "118",   # beIN SPORTS 3 France
+    "494",   # beIN Sports MAX 4 France
+    "495",   # beIN Sports MAX 5 France
+    "496",   # beIN Sports MAX 6 France
+    "497",   # beIN Sports MAX 7 France
+    "498",   # beIN Sports MAX 8 France
+    "499",   # beIN Sports MAX 9 France
+    "500",   # beIN Sports MAX 10 France
+}
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
     """GET brut avec User-Agent + Referer (et Origin si fourni). Renvoie le corps (bytes)."""
@@ -46,11 +68,9 @@ def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout
     with urllib.request.urlopen(req, timeout=timeout) as r:      # noqa: S310 (URL de conf, pas d'entree user)
         return r.read()
 
-
 # ---------------------------------------------------------------- annuaire (id -> nom)
 class _LinkParser(HTMLParser):
     """Extrait les <a href=...watch.php?id=N ...>Nom</a> de la home dlstreams."""
-
     def __init__(self):
         super().__init__()
         self.items: list[tuple[str, str]] = []
@@ -77,12 +97,10 @@ class _LinkParser(HTMLParser):
                 self.items.append((self._cur_id, name))
             self._cur_id = None
 
-
 _ch_cache: dict = {"at": 0.0, "list": []}
 
-
 def channels() -> list[dict]:
-    """Annuaire dlstreams -> [{id, name}]. Cache 30 min. Dedoublonne par id (garde le 1er nom)."""
+    """Annuaire dlstreams -> [{id, name}]. Cache 30 min. Filtre chaines francaises uniquement."""
     now = time.time()
     if _ch_cache["list"] and now - _ch_cache["at"] < _CH_TTL:
         return _ch_cache["list"]
@@ -95,26 +113,26 @@ def channels() -> list[dict]:
     seen: dict[str, str] = {}
     for idv, name in p.items:
         seen.setdefault(idv, name)
-    out = [{"id": i, "name": n} for i, n in seen.items()]
-    _ch_cache.update(at=now, list=out)
-    return out
-
+    
+    # Filtre pour garder uniquement les chaines francaises
+    all_channels = [{"id": i, "name": n} for i, n in seen.items()]
+    french_channels = [c for c in all_channels if c["id"] in FRENCH_CHANNEL_IDS]
+    
+    _ch_cache.update(at=now, list=french_channels)
+    return french_channels
 
 def search(query: str, limit: int = 40) -> list[dict]:
     q = query.lower().strip()
     hits = [c for c in channels() if q in c["name"].lower()]
     return hits[:limit]
 
-
 # ---------------------------------------------------------------- resolution du flux (MULTI-PLAYER)
 # dlstreams sert la MEME chaine sous plusieurs chemins de player, chacun pointant un embed/CDN DIFFERENT
 # (daddy2/romponalis, wideiptv/bluetier, brigittetv, livelive24...). On les propose TOUS + failover.
 _PLAYER_PATHS = ("stream", "watch", "player", "plus", "hub", "cast", "casting")
 
-
 def _txt(url: str, referer: str = SITE + "/") -> str:
     return _get(url, referer=referer).decode("utf-8", "replace")
-
 
 def players(cid: str) -> list[tuple[str, str]]:
     """[(label, url_page_player)] dans l'ordre de watch.php (repli = chemins connus). Chaque player est
@@ -129,10 +147,8 @@ def players(cid: str) -> list[tuple[str, str]]:
     return out or [(f"Player {i + 1}", f"{SITE}/{p}/stream-{cid}.php")
                    for i, p in enumerate(_PLAYER_PATHS)]
 
-
 def _first_iframe(html: str) -> str | None:
     return next((m for m in re.findall(r'<iframe[^>]+src="([^"]+)"', html) if m.startswith("http")), None)
-
 
 def _find_m3u8(html: str) -> str | None:
     """m3u8 d'une page embed : `atob('<b64>')` (daddy2) OU en clair/echappe \\/ (wideiptv...)."""
@@ -149,7 +165,6 @@ def _find_m3u8(html: str) -> str | None:
     m = re.search(r'https?://\S+?\.m3u8[^"\'\s\\]*', html.replace("\\/", "/"))
     return m.group(0) if m else None
 
-
 def resolve_player(stream_url: str) -> tuple[str, str]:
     """Page-player -> (m3u8, host_embed pour Referer/Origin). Suit l'iframe (+1 hop si CDN imbrique)."""
     emb = _first_iframe(_txt(stream_url, referer=SITE + "/watch.php"))
@@ -163,10 +178,9 @@ def resolve_player(stream_url: str) -> tuple[str, str]:
         if emb2:
             host = urllib.parse.urlsplit(emb2).scheme + "://" + urllib.parse.urlsplit(emb2).netloc
             mu = _find_m3u8(_txt(emb2, referer=emb))
-    if not mu:
-        raise ValueError("m3u8 introuvable (hors-antenne ?)")
+        if not mu:
+            raise ValueError("m3u8 introuvable (hors-antenne ?)")
     return mu, host
-
 
 def resolve(cid: str) -> tuple[str, str]:
     """FAILOVER : (m3u8, host) du 1er player qui livre un flux. Leve si aucun."""
@@ -177,15 +191,12 @@ def resolve(cid: str) -> tuple[str, str]:
             continue
     raise ValueError("aucun player ne resout")
 
-
 # ---------------------------------------------------------------- proxy HLS (headers + fix content-type)
 def _b64u(s: str) -> str:
     return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
 
-
 def _unb64u(s: str) -> str:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4)).decode()
-
 
 def _rewrite_playlist(text: str, playlist_url: str, host: str, self_base: str) -> str:
     """Reecrit une playlist HLS : chaque URL (sous-playlist .m3u8 ou segment) passe par NOTRE proxy.
@@ -203,7 +214,6 @@ def _rewrite_playlist(text: str, playlist_url: str, host: str, self_base: str) -
         else:
             out.append(f"{self_base}/sx?u={_b64u(absu)}")
     return "\n".join(out)
-
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -268,6 +278,7 @@ class Handler(BaseHTTPRequestHandler):
                     streams.append({"name": "dlstreams", "title": label,
                                     "url": f"{b}/hls/{cid}/p{i}/index.m3u8"})
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
+
             # ---- proxy HLS ---- (/hls/<id>/index.m3u8 = failover ; /hls/<id>/p<N>/index.m3u8 = player N)
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
@@ -283,17 +294,21 @@ class Handler(BaseHTTPRequestHandler):
                 text = _get(m3u8, referer=host + "/", extra={"Origin": host}).decode("utf-8", "replace")
                 body = _rewrite_playlist(text, m3u8, host, self._self_base()).encode()
                 return self._send(200, body, "application/vnd.apple.mpegurl")
+
             if path == "/px":                                    # sous-playlist -> fetch avec headers + reecrit
                 url = _unb64u(qs["u"][0])
                 host = _unb64u(qs["h"][0])
                 text = _get(url, referer=host + "/", extra={"Origin": host}).decode("utf-8", "replace")
                 body = _rewrite_playlist(text, url, host, self._self_base()).encode()
                 return self._send(200, body, "application/vnd.apple.mpegurl")
+
             if path == "/sx":                                    # segment -> fetch SANS header + rebalise en TS
                 url = _unb64u(qs["u"][0])
                 data = _get(url, timeout=25)
                 return self._send(200, data, "video/mp2t")
+
             return self._send(404, b"not found", "text/plain")
+
         except Exception as e:                                   # noqa: BLE001 -- un flux mort ne tue pas le serveur
             return self._send(502, f"resolve/proxy error: {type(e).__name__}: {e}".encode(), "text/plain")
 
@@ -314,7 +329,6 @@ class Handler(BaseHTTPRequestHandler):
         return {"id": f"dlstreams:{c['id']}", "type": "tv", "name": c["name"],
                 "poster": "", "posterShape": "landscape"}
 
-
 def main():
     print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json")
@@ -325,7 +339,6 @@ def main():
     except Exception as e:
         print(f"  annuaire : erreur de chargement ({e})")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
-
 
 if __name__ == "__main__":
     main()
