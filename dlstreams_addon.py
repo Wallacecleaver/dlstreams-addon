@@ -223,8 +223,22 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def _self_base(self) -> str:
+        # Derriere un proxy TLS (Render, Railway, Cloudflare...) le scheme public est https :
+        # on suit X-Forwarded-Proto, sinon http en local. Sans ca, les URLs de flux sortent en
+        # http:// sur un host https -> Stremio les bloque.
         host = self.headers.get("Host") or f"127.0.0.1:{PORT}"
-        return f"http://{host}"
+        proto = self.headers.get("X-Forwarded-Proto", "http").split(",")[0].strip()
+        return f"{proto}://{host}"
+
+    def do_OPTIONS(self):
+        # Preflight CORS de Stremio Web (app.strem.io) : sans reponse valide, l'install du manifest
+        # echoue. On repond 204 + en-tetes CORS complets.
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_HEAD(self):
         self.do_GET()
