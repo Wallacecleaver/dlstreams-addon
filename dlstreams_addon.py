@@ -447,7 +447,8 @@ class Handler(BaseHTTPRequestHandler):
                             k, v = kv.split("=", 1)
                             params[k] = urllib.parse.unquote_plus(v)
                 
-                lang_filter = params.get("lang")
+                # CORRECTION ICI : lire le filtre de langue depuis les query params
+                lang_filter = qs.get("lang", [None])[0]
                 
                 chans = vavoo_channels() if catid == "vavoo" else channels(lang_filter=lang_filter)
                 q = params.get("search", "").lower().strip()
@@ -474,7 +475,7 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
-                    streams = [{"name": "Vavoo", "title": " Direct", "url": f"{b}/vhls?v={cid}"}]
+                    streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 ok = working_players(cid)
                 streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
@@ -630,7 +631,7 @@ DASHBOARD_HTML = r"""<!doctype html>
   </div></section>
   <section><h2>Catalogue</h2><div class="search">
     <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
-    <select id="lang-filter"><option value="all">🌍 Toutes langues</option><option value="fr" selected>🇫🇷 Français</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="de">🇩🇪 Deutsch</option><option value="it">🇮🇹 Italiano</option><option value="ar">🇸🇦 Arabe</option><option value="pt">🇹 Português</option><option value="other">📺 Autres</option></select>
+    <select id="lang-filter"><option value="all">🌍 Toutes langues</option><option value="fr" selected>🇷 Français</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="de">🇩 Deutsch</option><option value="it">🇹 Italiano</option><option value="ar">🇸🇦 Arabe</option><option value="pt">🇵🇹 Português</option><option value="other">📺 Autres</option></select>
     <div class="tabs"><button class="tab active" data-src="dlstreams">dlstreams</button><button class="tab" data-src="vavoo">Vavoo</button></div>
   </div><div class="list" id="list"><div class="empty">chargement…</div></div></section>
   <footer>dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span></footer>
@@ -688,12 +689,12 @@ CONFIGURE_HTML = r"""<!doctype html>
 <body>
 <header><div class="logo">▶</div><div><h1>Configuration <span class="badge">langue</span></h1></div></header>
 <main>
-  <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
+  <div class="card"><h2> Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
     <div class="lang-grid" id="lang-grid">
       <button class="lang-btn" data-lang="all"><span class="lang-flag"></span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
       <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
       <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
-      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
+      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇪🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
       <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
       <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
       <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
