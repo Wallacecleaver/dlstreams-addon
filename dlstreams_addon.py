@@ -1351,11 +1351,18 @@ DASHBOARD_HTML = r"""<!doctype html>
 
   footer { margin-top:40px; color:var(--muted); font-size:12px; text-align:center; }
 
-  /* Raccourcis langues sidebar */
-  .nav-shortcut { display:flex; align-items:center; gap:9px; padding:7px 12px; border-radius:8px;
+  /* Raccourcis & Liens sidebar */
+  .nav-shortcut { display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:8px;
     font-size:12px; font-weight:600; color:var(--text2); cursor:pointer; margin-bottom:2px;
     border:none; background:none; width:100%; text-align:left; font-family:var(--font-body); transition:all .15s; }
+  a.nav-shortcut { text-decoration:none; }
   .nav-shortcut:hover { background:var(--surface2); color:var(--text); }
+  .nav-shortcut.active { background:var(--surface2); color:var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+  .nav-shortcut .sc-ico { width:20px; text-align:center; flex-shrink:0; font-size:13px; }
+  .nav-shortcut .sc-txt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nav-shortcut .sc-count { font-size:10px; font-weight:800; color:var(--muted); background:var(--surface2);
+    border:1px solid var(--border); border-radius:20px; padding:1px 7px; font-family:var(--font-mono); flex-shrink:0; }
+  .nav-shortcut.active .sc-count { color:var(--accent); border-color:rgba(229,62,62,.35); background:rgba(229,62,62,.08); }
 
   /* Sélecteur de plage du graphique trafic */
   .chart-range { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; }
@@ -1445,13 +1452,17 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
           <button class="nav-item" data-page="system" onclick="navigateTo('system')">🖥️ Système</button>
           <div class="nav-section-label">Raccourcis</div>
-          <button class="nav-shortcut" onclick="goLang('all')">🌍 Toutes les langues</button>
-          <button class="nav-shortcut" onclick="goLang('fr')">🇫🇷 Français</button>
-          <button class="nav-shortcut" onclick="goLang('en')">🇬🇧 English</button>
-          <button class="nav-shortcut" onclick="goLang('es')">🇪🇸 Español</button>
-          <button class="nav-shortcut" onclick="goLang('pt')">🇵🇹 Português</button>
+          <button class="nav-shortcut" onclick="sidebarAction('scan')" title="Teste la disponibilité de toutes vos chaînes favorites"><span class="sc-ico">🩺</span><span class="sc-txt">Tester mes favoris</span></button>
+          <button class="nav-shortcut" onclick="sidebarAction('m3u-favs')" title="Télécharge une playlist de vos favoris"><span class="sc-ico">⬇️</span><span class="sc-txt">Export favoris M3U</span></button>
+          <button class="nav-shortcut" onclick="sidebarAction('m3u-catalog')" title="Télécharge une playlist du catalogue filtré"><span class="sc-ico">⬇️</span><span class="sc-txt">Export catalogue M3U</span></button>
+          <button class="nav-shortcut" onclick="sidebarAction('logs-clear')" title="Efface le journal des requêtes"><span class="sc-ico">🧹</span><span class="sc-txt">Vider les logs</span></button>
+          <button class="nav-shortcut" onclick="sidebarAction('restart')" title="Redémarre le processus serveur"><span class="sc-ico">🔁</span><span class="sc-txt">Redémarrer</span></button>
+          <div class="nav-section-label">Langues</div>
+          <div id="lang-list"><button class="nav-shortcut" disabled style="opacity:.5;cursor:default"><span class="sc-txt">chargement…</span></button></div>
           <div class="nav-section-label">Liens</div>
-          <a href="/configure" class="nav-item">🎨 Configuration</a>
+          <button class="nav-shortcut" onclick="copyText(BASE+'/manifest.json')" title="Copie l'URL d'installation pour Stremio"><span class="sc-ico">📋</span><span class="sc-txt">URL Stremio</span></button>
+          <button class="nav-shortcut" onclick="copyText(BASE+'/hls/121/index.m3u8')" title="Copie l'URL de lecture directe (VLC / mpv)"><span class="sc-ico">🎬</span><span class="sc-txt">URL VLC / mpv</span></button>
+          <a class="nav-shortcut" href="/configure" title="Choisir la langue par défaut de l'addon"><span class="sc-ico">🎨</span><span class="sc-txt">Configuration</span></a>
         </div>
         <div class="sidebar-bottom">
           <button class="btn-logout" onclick="logout()">Déconnexion</button>
@@ -1891,6 +1902,8 @@ async function refreshStats(){
         renderAreaChart(d.history || []);
         renderLangSplit(d.lang_counts || {});
         renderTopChannels(d.top_channels || []);
+        LAST_LANG_COUNTS = d.lang_counts || {};
+        renderLangShortcuts();
         const ut = $("#update-time");
         ut.classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
@@ -2279,7 +2292,8 @@ function exportFavsM3U(){
     downloadText('dlstreams-favoris.m3u', buildM3U(favs));
     toast(`✅ ${favs.length} favori(s) exporté(s)`, 'success');
 }
-function exportCatalogM3U(){
+async function exportCatalogM3U(){
+    if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
     const q = ($("#q").value||"").toLowerCase().trim();
     const words = q ? q.split(/\s+/) : [];
     const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
@@ -2292,14 +2306,56 @@ function exportCatalogM3U(){
     toast(`✅ ${chans.length} chaînes exportées`, 'success');
 }
 
-// Raccourcis langues dans la sidebar
-async function goLang(lang){
+// Raccourcis sidebar : actions rapides
+function sidebarAction(action){
+    if(action === 'scan'){ navigateTo('dashboard'); setTimeout(()=>scanFavs(), 200); }
+    else if(action === 'm3u-favs'){ exportFavsM3U(); }
+    else if(action === 'm3u-catalog'){ navigateTo('catalog'); setTimeout(()=>exportCatalogM3U(), 200); }
+    else if(action === 'logs-clear'){ navigateTo('logs'); setTimeout(()=>clearLogs(), 200); }
+    else if(action === 'restart'){ restartServer(); }
+}
+
+// Langues sidebar : boutons dynamiques avec compteurs
+const LANG_META = {
+    all:   ['🌍', 'Toutes'],
+    fr:    ['🇫🇷', 'Français'],
+    en:    ['🇬🇧', 'English'],
+    es:    ['🇪🇸', 'Español'],
+    pt:    ['🇵🇹', 'Português'],
+    it:    ['🇮🇹', 'Italiano'],
+    de:    ['🇩🇪', 'Deutsch'],
+    ar:    ['🇸🇦', 'Arabe'],
+    other: ['📺', 'Autres']
+};
+let LAST_LANG_COUNTS = {};
+function renderLangShortcuts(){
+    const wrap = $("#lang-list");
+    if(!wrap) return;
+    const lc = LAST_LANG_COUNTS || {};
+    const total = Object.values(lc).reduce((a,b)=>a+b,0);
+    const withOther = lc.other ? lc.other : 0;
+    const entries = [['all', total]].concat(
+        Object.entries(lc).filter(([k])=>k!=='other').sort((a,b)=>b[1]-a[1])
+    );
+    if(withOther) entries.push(['other', withOther]);
+    wrap.innerHTML = entries.map(([k,count]) => {
+        const [emoji, label] = LANG_META[k] || ['🌐', k];
+        const active = LANG_FILTER === k ? ' active' : '';
+        return `<button class="nav-shortcut nav-lang${active}" data-lang="${k}" onclick="goLang('${k}')" title="Filtrer le catalogue : ${label} (${count})">
+            <span class="sc-ico">${emoji}</span><span class="sc-txt">${label}</span><span class="sc-count">${count}</span>
+        </button>`;
+    }).join('');
+}
+function goLang(lang){
     LANG_FILTER = lang;
     const sel = $("#lang-filter");
     if(sel) sel.value = lang;
+    renderLangShortcuts();
     navigateTo('catalog');
-    if (CURRENT !== "vavoo") await loadCatalog(CURRENT);
-    render();
+    if (CURRENT !== "vavoo") loadCatalog(CURRENT).then(render);
+}
+function copyText(text){
+    navigator.clipboard.writeText(text).then(()=>toast('✅ Copié dans le presse-papier', 'success')).catch(()=>toast('❌ Copie impossible', 'error'));
 }
 
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
@@ -2381,6 +2437,7 @@ $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTi
 $("#fav-q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(renderFavs,120);}})());
 $("#lang-filter").addEventListener("change", (e) => {
     LANG_FILTER = e.target.value;
+    renderLangShortcuts();
     loadCatalog(CURRENT);
     render();
 });
