@@ -19,6 +19,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
+_VERSION = "1.7.0"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -37,6 +38,9 @@ _error_count = 0
 _stats_lock = threading.Lock()
 _hist: list[list[int]] = []      # [minute_unix, nb_requetes] -> sparkline (1h)
 _request_log: list[dict] = []    # journal des requetes (buffer 300)
+_chan_plays: dict[str, int] = {}  # cle "src:id" -> nb de lectures de flux
+_HIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_hist.json")
+_HIST_KEEP_MIN = 7 * 24 * 60      # minutes conservees dans l'historique (7 jours)
 
 # --- sessions dashboard : jeton opaque valide cote serveur, stocke en memoire
 # (pas de JWT/dependance -- juste un dict token -> heure d'emission). Remplace
@@ -154,6 +158,92 @@ def _log_activity(action: str, details: str = ""):
     })
     if len(_activity_log) > 100:
         _activity_log.pop(0)
+
+def _hist_load():
+    """Charge l'historique de trafic persiste (7 jours) au demarrage."""
+    global _hist
+    try:
+        if os.path.exists(_HIST_FILE):
+            with open(_HIST_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            keep_from = time.time() // 60 - _HIST_KEEP_MIN
+            _hist = [[int(m), int(c)] for m, c in data
+                     if isinstance(m, (int, float)) and isinstance(c, (int, float))
+                     and m >= keep_from]
+    except Exception:
+        pass
+
+def _hist_save():
+    """Persiste l'historique sur disque (appele une fois par minute)."""
+    try:
+        with open(_HIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(_hist, f)
+    except Exception:
+        pass
+
+def _track_play(src: str, cid: str):
+    key = f"{src}:{cid}"
+    with _stats_lock:
+        _chan_plays[key] = _chan_plays.get(key, 0) + 1
+
+def _top_channels(n: int = 10) -> list[dict]:
+    with _stats_lock:
+        items = sorted(_chan_plays.items(), key=lambda kv: -kv[1])[:n]
+    out = []
+    for key, plays in items:
+        src, _, cid = key.partition(":")
+        name = cid
+        if src == "vavoo":
+            ch = next((x for x in _vavoo_cache.get("list", []) if x.get("id") == cid), None)
+        else:
+            ch = next((x for x in _ch_cache.get("list", []) if str(x.get("id")) == str(cid)), None)
+        if ch:
+            name = ch.get("name") or cid
+        out.append({"key": key, "src": src, "id": cid, "name": name, "plays": plays})
+    return out
+
+def _system_info() -> dict:
+    import shutil
+    import sys
+    usage = None
+    try:
+        u = shutil.disk_usage(os.getcwd())
+        usage = {"total": u.total, "used": u.used, "free": u.free}
+    except Exception:
+        pass
+    mem: dict = {}
+    try:
+        import psutil
+        vm = psutil.virtual_memory()
+        proc = psutil.Process(os.getpid())
+        mem = {"total": vm.total, "used": vm.used, "percent": vm.percent,
+               "rss": proc.memory_info().rss, "cpu": proc.cpu_percent(interval=0.2)}
+    except Exception:
+        try:
+            import resource
+            mem = {"rss": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024}
+        except Exception:
+            pass
+    def _age(cache) -> int | None:
+        at = cache.get("at") or 0
+        return int(time.time() - at) if at else None
+    return {
+        "version": _VERSION,
+        "python": sys.version.split()[0],
+        "port": PORT,
+        "pid": os.getpid(),
+        "platform": sys.platform,
+        "cpus": os.cpu_count() or 0,
+        "uptime": int(time.time() - _START_TIME),
+        "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(_START_TIME)),
+        "disk": usage,
+        "memory": mem,
+        "cache": {
+            "dlstreams": {"count": len(_ch_cache.get("list") or []), "age_seconds": _age(_ch_cache)},
+            "vavoo": {"count": len(_vavoo_cache.get("list") or []), "age_seconds": _age(_vavoo_cache)},
+        },
+        "channels_total": len(channels()),
+    }
 
 def channels(lang_filter: str | None = None) -> list[dict]:
     # BUG corrige : avant, le cache n'etait reutilise que si lang_filter is None.
@@ -425,7 +515,7 @@ def _stats() -> dict:
     return {
         "status": "ok",
         "uptime": int(time.time() - _START_TIME),
-        "version": "1.6.0",
+        "version": _VERSION,
         "port": PORT,
         "requests": _request_count,
         "errors": _error_count,
@@ -439,8 +529,21 @@ def _stats() -> dict:
             "age_seconds": int(time.time() - _vavoo_cache.get("at", 0)) if _vavoo_cache.get("at") else None,
         },
         "lang_counts": lang_counts,
-        "history": [c for _, c in _hist],
+        "history": [list(pair) for pair in _hist],
+        "daily_totals": _daily_totals(),
+        "top_channels": _top_channels(),
     }
+
+def _daily_totals() -> list[dict]:
+    days: dict[str, int] = {}
+    now = time.time()
+    with _stats_lock:
+        for minute, count in _hist:
+            if now - minute > 7 * 86400:
+                continue
+            day = time.strftime("%d/%m", time.localtime(minute))
+            days[day] = days.get(day, 0) + count
+    return [{"date": d, "total": days[d]} for d in sorted(days)]
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -459,8 +562,9 @@ class Handler(BaseHTTPRequestHandler):
                 _hist[-1][1] += 1
             else:
                 _hist.append([now_min, 1])
-                while len(_hist) > 1 and _hist[0][0] < now_min - 3600:
+                while len(_hist) > 1 and _hist[0][0] < now_min - _HIST_KEEP_MIN:
                     _hist.pop(0)
+                _hist_save()
             if not self.path.startswith(("/api/stats", "/api/logs", "/api/activity")):
                 _request_log.append({
                     "t": time.strftime("%H:%M:%S"),
@@ -597,6 +701,63 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"success": False, "message": str(e)}).encode(), "application/json")
 
+        if path == "/api/check-batch":
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+                items = data.get("items") or []
+                if not isinstance(items, list):
+                    return self._send(400, json.dumps({"ok": False, "error": "items requis"}).encode(), "application/json")
+                items = [{"src": str(x.get("src", "dlstreams")), "id": str(x.get("id", ""))} for x in items[:200]]
+            except Exception:
+                return self._send(400, json.dumps({"ok": False, "error": "body invalide"}).encode(), "application/json")
+            if not items:
+                return self._send(400, json.dumps({"ok": False, "error": "liste vide"}).encode(), "application/json")
+
+            def _one(it: dict) -> dict:
+                src = it["src"]
+                cid = it["id"]
+                key = f"{src}:{cid}"
+                t0 = time.time()
+                try:
+                    if src == "vavoo":
+                        real = vavoo_resolve(_unb64u(cid))
+                        if not real:
+                            raise ValueError("flux introuvable")
+                        _proxy_get(real, {"User-Agent": _VAVOO_UA}, timeout=10)
+                    else:
+                        m3u8, host = resolve(cid)
+                        _proxy_get(m3u8, {"Referer": host + "/", "Origin": host}, timeout=10)
+                    return {"key": key, "ok": True, "ms": int((time.time() - t0) * 1000)}
+                except Exception as e:
+                    return {"key": key, "ok": False, "ms": int((time.time() - t0) * 1000), "error": str(e)}
+
+            with ThreadPoolExecutor(max_workers=10) as ex:
+                results = list(ex.map(_one, items))
+            n_ok = sum(1 for r in results if r["ok"])
+            _log_activity("Scan de flux", f"{n_ok}/{len(results)} OK")
+            return self._send(200, json.dumps({"ok": True, "results": results}).encode(), "application/json")
+
+        if path == "/api/restart":
+            if not self._require_auth():
+                return
+            _log_activity("Redémarrage", "demandé depuis le dashboard")
+            try:
+                import subprocess
+                import sys as _sys
+                if not os.environ.get("RENDER"):
+                    flags = 0
+                    if os.name == "nt":
+                        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                    subprocess.Popen([_sys.executable, os.path.abspath(__file__)],
+                                     cwd=os.path.dirname(os.path.abspath(__file__)),
+                                     close_fds=True, creationflags=flags)
+            except Exception:
+                pass
+            threading.Timer(0.5, lambda: os._exit(0)).start()
+            return self._send(200, json.dumps({"success": True, "message": "Redémarrage en cours..."}).encode(), "application/json")
+
         return self._send(404, b"not found", "text/plain")
 
     def do_GET(self):
@@ -703,6 +864,11 @@ class Handler(BaseHTTPRequestHandler):
                     _log_activity("Test flux", f"#{cid} échec ({type(e).__name__})")
                     return self._send(200, json.dumps({"ok": False, "ms": ms, "error": str(e)}).encode(), "application/json")
 
+            if path == "/api/system":
+                if not self._require_auth():
+                    return
+                return self._send(200, json.dumps(_system_info()).encode(), "application/json")
+
             if path in ("/", "/manifest.json"):
                 lang = qs.get("lang", [None])[0]
                 return self._send(200, json.dumps(self._manifest(lang_filter=lang)).encode(), "application/json", True)
@@ -764,6 +930,7 @@ class Handler(BaseHTTPRequestHandler):
                     m3u8, host = resolve_player(pls[idx][1])
                 else:
                     m3u8, host = resolve(cid)
+                _track_play("dlstreams", cid)
                 hdr = {"Referer": host + "/", "Origin": host}
                 henc = _b64u(json.dumps(hdr))
                 text = _proxy_get(m3u8, hdr).decode("utf-8", "replace")
@@ -771,9 +938,11 @@ class Handler(BaseHTTPRequestHandler):
                                   "application/vnd.apple.mpegurl")
 
             if path == "/vhls":
-                real = vavoo_resolve(_unb64u(qs["v"][0]))
+                vurl = _unb64u(qs["v"][0])
+                real = vavoo_resolve(vurl)
                 if not real:
                     return self._send(502, b"vavoo: flux introuvable (hors-antenne ?)", "text/plain")
+                _track_play("vavoo", vurl)
                 hdr = {"User-Agent": _VAVOO_UA}
                 henc = _b64u(json.dumps(hdr))
                 text = _proxy_get(real, hdr).decode("utf-8", "replace")
@@ -797,6 +966,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, b"not found", "text/plain")
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return self._send(502, f"resolve/proxy error: {type(e).__name__}: {e}".encode(), "text/plain")
 
     def do_DELETE(self):
@@ -826,7 +997,7 @@ class Handler(BaseHTTPRequestHandler):
         
         return {
             "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
-"version": "1.6.0",
+"version": _VERSION,
             "name": name,
             "description": desc,
             "resources": ["catalog", "meta", "stream"],
@@ -845,6 +1016,7 @@ class Handler(BaseHTTPRequestHandler):
                 "poster": logo, "logo": logo, "posterShape": "landscape"}
 
 def main():
+    _hist_load()
     print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     print(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     print(f"  Configure: http://127.0.0.1:{PORT}/configure")
@@ -863,7 +1035,16 @@ def main():
         print(f"  annuaire : {n} chaines chargees (dont {len(_POPULAR_CHANNELS)} populaires)")
     except Exception as e:
         print(f"  annuaire : erreur de chargement ({e})")
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    srv = None
+    for _ in range(10):
+        try:
+            srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+            break
+        except OSError:
+            time.sleep(0.5)
+    if srv is None:
+        raise SystemExit(f"impossible de lier le port {PORT}")
+    srv.serve_forever()
 
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="fr">
@@ -1170,6 +1351,53 @@ DASHBOARD_HTML = r"""<!doctype html>
 
   footer { margin-top:40px; color:var(--muted); font-size:12px; text-align:center; }
 
+  /* Raccourcis langues sidebar */
+  .nav-shortcut { display:flex; align-items:center; gap:9px; padding:7px 12px; border-radius:8px;
+    font-size:12px; font-weight:600; color:var(--text2); cursor:pointer; margin-bottom:2px;
+    border:none; background:none; width:100%; text-align:left; font-family:var(--font-body); transition:all .15s; }
+  .nav-shortcut:hover { background:var(--surface2); color:var(--text); }
+
+  /* Sélecteur de plage du graphique trafic */
+  .chart-range { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; }
+  .range-btn { border:none; background:transparent; color:var(--muted); font-size:11px; font-weight:800;
+    padding:5px 11px; border-radius:6px; cursor:pointer; font-family:var(--font-body); transition:all .15s; }
+  .range-btn:hover { color:var(--text); }
+  .range-btn.active { background:var(--accent); color:#fff; }
+
+  /* Top chaînes */
+  .top-row { display:grid; grid-template-columns:minmax(0,1fr) 1.2fr 44px; align-items:center; gap:12px;
+    padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+  .top-row:last-child { border-bottom:none; }
+  .top-row:hover { background:var(--card-hover); }
+  .top-name { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .top-bar { height:8px; background:var(--surface2); border-radius:6px; overflow:hidden; }
+  .top-bar-fill { height:100%; background:var(--accent); border-radius:6px; opacity:.85; transition:width .8s cubic-bezier(.22,1,.36,1); }
+  .top-plays { font-size:12px; color:var(--text2); text-align:right; font-family:var(--font-mono); font-weight:700; }
+
+  /* Favoris : actions + badge scan */
+  .fav-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .fav-chk { font-size:12px; font-weight:800; flex-shrink:0; }
+  .fav-chk.ok { color:var(--green); }
+  .fav-chk.ko { color:var(--error); }
+  .scan-status { padding:10px 20px; font-size:13px; color:var(--text2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+  .scan-status .scan-spin { width:13px; height:13px; border:2px solid var(--border); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .8s linear infinite; }
+  .scan-status b { color:var(--text); }
+  .scan-ok { color:var(--green); font-weight:800; }
+  .scan-ko { color:var(--error); font-weight:800; }
+
+  /* Page Système */
+  .sys-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+  .sys-row { display:flex; justify-content:space-between; gap:12px; padding:10px 14px;
+    background:var(--surface2); border:1px solid var(--border); border-radius:10px; }
+  .sys-key { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .sys-val { font-size:13px; color:var(--text); font-weight:700; font-family:var(--font-mono); text-align:right; word-break:break-all; }
+  .btn-danger { display:inline-flex; align-items:center; gap:6px; background:rgba(239,68,68,0.12);
+    border:1px solid var(--error); color:var(--error); border-radius:8px; padding:10px 18px;
+    font-size:13px; font-weight:700; cursor:pointer; font-family:var(--font-body); transition:all .2s; }
+  .btn-danger:hover { background:var(--error); color:#fff; }
+  .btn-danger:disabled { opacity:.6; cursor:not-allowed; }
+
   @media (max-width:900px) {
     .sidebar { display:none; }
     .main { margin-left:0; padding:20px 16px 60px; }
@@ -1215,6 +1443,13 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
+          <button class="nav-item" data-page="system" onclick="navigateTo('system')">🖥️ Système</button>
+          <div class="nav-section-label">Raccourcis</div>
+          <button class="nav-shortcut" onclick="goLang('all')">🌍 Toutes les langues</button>
+          <button class="nav-shortcut" onclick="goLang('fr')">🇫🇷 Français</button>
+          <button class="nav-shortcut" onclick="goLang('en')">🇬🇧 English</button>
+          <button class="nav-shortcut" onclick="goLang('es')">🇪🇸 Español</button>
+          <button class="nav-shortcut" onclick="goLang('pt')">🇵🇹 Português</button>
           <div class="nav-section-label">Liens</div>
           <a href="/configure" class="nav-item">🎨 Configuration</a>
         </div>
@@ -1280,7 +1515,14 @@ DASHBOARD_HTML = r"""<!doctype html>
 
           <div class="ov-grid-2">
             <div class="card">
-              <div class="card-head"><div class="card-title">Trafic — dernière heure</div></div>
+              <div class="card-head">
+                <div class="card-title">Trafic</div>
+                <div class="chart-range">
+                  <button class="range-btn active" data-range="60" onclick="setChartRange(60)">1h</button>
+                  <button class="range-btn" data-range="1440" onclick="setChartRange(1440)">24h</button>
+                  <button class="range-btn" data-range="10080" onclick="setChartRange(10080)">7j</button>
+                </div>
+              </div>
               <div class="card-body"><div class="ov-chart-wrap" id="traffic-chart"></div></div>
             </div>
             <div class="card">
@@ -1291,9 +1533,23 @@ DASHBOARD_HTML = r"""<!doctype html>
 
           <div class="card">
             <div class="card-head">
-              <div class="card-title">⭐ Favoris</div>
-              <div class="search-bar" style="min-width:220px"><input type="search" id="fav-q" placeholder="Filtrer mes favoris…"></div>
+              <div class="card-title">🔥 Top chaînes</div>
             </div>
+            <div class="card-body" id="top-channels">
+              <div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">⭐ Favoris</div>
+              <div class="fav-actions">
+                <button class="btn-outline-sm" id="scan-favs-btn" onclick="scanFavs()">🩺 Tester mes favoris</button>
+                <button class="btn-outline-sm" onclick="exportFavsM3U()">⬇️ M3U</button>
+                <div class="search-bar" style="min-width:220px"><input type="search" id="fav-q" placeholder="Filtrer mes favoris…"></div>
+              </div>
+            </div>
+            <div class="scan-status" id="scan-status" style="display:none"></div>
             <div class="card-body">
               <div class="mini-grid" id="fav-list">
                 <div class="fav-empty">Aucun favori — va dans le <a href="#" onclick="navigateTo('catalog');return false">Catalogue</a> et clique sur ★ pour épingler une chaîne</div>
@@ -1375,6 +1631,41 @@ DASHBOARD_HTML = r"""<!doctype html>
           </div>
         </div>
 
+        <!-- PAGE: SYSTEM -->
+        <div class="page" id="page-system">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Système</div>
+              <div class="page-sub">Infos serveur, cache et redémarrage</div>
+            </div>
+            <div class="header-actions">
+              <button class="btn-outline-sm" onclick="loadSystem()">↻ Actualiser</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🖥️ Serveur</div></div>
+            <div class="card-body">
+              <div class="sys-grid" id="sys-grid"><div class="fav-empty">chargement…</div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🗂️ Cache</div></div>
+            <div class="card-body">
+              <div class="sys-grid" id="sys-cache"><div class="fav-empty">chargement…</div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🔄 Redémarrage</div></div>
+            <div class="card-body">
+              <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Redémarre le processus serveur. Sur Render, la plateforme le relance automatiquement.</p>
+              <button class="btn-danger" id="restart-btn" onclick="restartServer()">🔁 Redémarrer le serveur</button>
+            </div>
+          </div>
+        </div>
+
         <!-- PAGE: SOURCES -->
         <div class="page" id="page-sources">
           <div class="page-header">
@@ -1441,6 +1732,7 @@ DASHBOARD_HTML = r"""<!doctype html>
                   <button class="tab active" data-src="dlstreams">dlstreams</button>
                   <button class="tab" data-src="vavoo">Vavoo</button>
                 </div>
+                <button class="btn-outline-sm" onclick="exportCatalogM3U()">⬇️ M3U</button>
               </div>
             </div>
             <div class="card-body">
@@ -1567,7 +1859,8 @@ function navigateTo(page) {
         dashboard: ['Vue d\'ensemble', 'Statistiques de votre proxy de chaînes'],
         sources: ['Sources', 'Gérer vos sources personnalisées'],
         catalog: ['Catalogue', 'Explorer toutes les chaînes disponibles'],
-        logs: ['Logs', 'Journal en direct des requêtes passées sur votre proxy']
+        logs: ['Logs', 'Journal en direct des requêtes passées sur votre proxy'],
+        system: ['Système', 'Infos serveur, cache et redémarrage']
     };
 
     $('#pageTitle') && (document.querySelector('.page.active .page-title').textContent = titles[page][0]);
@@ -1576,6 +1869,7 @@ function navigateTo(page) {
     if (page === 'dashboard') { renderFavs(); }
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'logs') { loadLogs(); }
+    if (page === 'system') { loadSystem(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams');
         render();
@@ -1596,6 +1890,7 @@ async function refreshStats(){
         animateNumber($("#c-err"), d.errors || 0);
         renderAreaChart(d.history || []);
         renderLangSplit(d.lang_counts || {});
+        renderTopChannels(d.top_channels || []);
         const ut = $("#update-time");
         ut.classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
@@ -1626,18 +1921,30 @@ function setCacheBadge(el, age){
     el.innerHTML = `<span class="cache-badge ${cls}"><span class="dot"></span>${label}</span>`;
 }
 
-// Graphique en aires (SVG) du trafic de la derniere heure
+// Graphique en aires (SVG) du trafic, range 1h / 24h / 7j
+let CHART_RANGE = 60;
+let LAST_HIST = [];
+function setChartRange(mins){
+    CHART_RANGE = mins;
+    document.querySelectorAll('.range-btn').forEach(b=>b.classList.toggle('active', Number(b.dataset.range)===mins));
+    renderAreaChart(LAST_HIST);
+}
 function renderAreaChart(history){
     const el = $("#traffic-chart");
     if(!el) return;
-    const arr = (history||[]).slice(-60);
-    if(!arr.length){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
+    LAST_HIST = history || [];
+    if(!LAST_HIST.length){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
+    const nowMin = Date.now() / 1000;
+    const windowMin = CHART_RANGE === 10080 ? 10080 : (CHART_RANGE === 1440 ? 1440 : 60);
+    const arr = LAST_HIST.filter(h => nowMin - h[0] <= windowMin + 1);
+    if(!arr.length){ el.innerHTML = '<div class="fav-empty">aucune donnée sur cette période</div>'; return; }
+    const counts = arr.map(h => h[1]);
     const W = 600, H = 170, PX = 12, PY = 24, PB = 28;
-    const maxV = Math.max(1, ...arr);
-    const n = arr.length;
+    const maxV = Math.max(1, ...counts);
+    const n = counts.length;
     const stepX = n > 1 ? (W - PX * 2) / (n - 1) : 0;
     const yOf = v => H - PB - (v / maxV) * (H - PY - PB);
-    const pts = arr.map((v, i) => ({ x: PX + i * stepX, y: yOf(v), v }));
+    const pts = counts.map((v, i) => ({ x: PX + i * stepX, y: yOf(v), v, t: arr[i][0] }));
     const baseY = H - PB;
     const line = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
     const area = line + ' L' + pts[pts.length-1].x.toFixed(1) + ' ' + baseY + ' L' + pts[0].x.toFixed(1) + ' ' + baseY + ' Z';
@@ -1649,12 +1956,14 @@ function renderAreaChart(history){
     const labelEvery = Math.max(1, Math.round(n / 6));
     const labels = pts.map((p, i) => {
         if (i !== n-1 && i % labelEvery !== 0) return '';
-        const ago = n - 1 - i;
-        const t = new Date(Date.now() - ago * 60000);
+        const t = new Date(p.t * 1000);
+        const fmt = windowMin >= 1440
+            ? t.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})
+            : t.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
         return '<text x="'+p.x.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" class="ov-chart-xlabel"'+(i===n-1?' style="fill:var(--accent);font-weight:800"':'')+'>'+
-            t.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'</text>';
+            fmt+'</text>';
     }).join('');
-    const dots = pts.map((p,i) => '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.5" style="fill:var(--surface);stroke:var(--accent);stroke-width:2"><title>'+p.v+' req</title></circle>').join('');
+    const dots = pts.filter((_,i)=>i%Math.max(1,Math.round(n/40))===0).map((p,i) => '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.5" style="fill:var(--surface);stroke:var(--accent);stroke-width:2"><title>'+p.v+' req</title></circle>').join('');
     el.innerHTML = '<svg class="ov-chart" viewBox="0 0 '+W+' '+H+'">' +
         '<defs><linearGradient id="ov-fill" x1="0" y1="0" x2="0" y2="1">' +
         '<stop offset="0%" style="stop-color:var(--accent);stop-opacity:0.32"/>' +
@@ -1665,6 +1974,23 @@ function renderAreaChart(history){
         '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="9" fill="var(--accent)" opacity="0.18"/>' +
         '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="4" fill="var(--accent)"/>' +
         dots + labels + '</svg>';
+}
+
+// Top chaînes les plus regardées
+function renderTopChannels(tops){
+    const el = $("#top-channels");
+    if(!el) return;
+    if(!tops || !tops.length){ el.innerHTML = '<div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>'; return; }
+    const max = Math.max(...tops.map(t=>t.plays));
+    el.innerHTML = tops.map(t => {
+        const href = t.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(t.id))}` : `${BASE}/hls/${t.id}/index.m3u8`;
+        const bar = Math.round((t.plays / max) * 100);
+        return `<div class="top-row" data-play="${href}" title="${escapeHtml(t.name)}">
+            <div class="top-name">${escapeHtml(t.name)}</div>
+            <div class="top-bar"><div class="top-bar-fill" style="width:${bar}%"></div></div>
+            <div class="top-plays">${t.plays}</div>
+        </div>`;
+    }).join('');
 }
 
 // Donut de repartition par langue
@@ -1833,7 +2159,8 @@ async function checkStream(key){
     const src = key.split(":")[0];
     const id = key.slice(key.indexOf(":")+1);
     try{
-        const r = await apiFetch(`/api/check?src=${src}&id=${encodeURIComponent(id)}`);
+        const enc = src==="vavoo" ? b64u(id) : id;
+        const r = await apiFetch(`/api/check?src=${src}&id=${encodeURIComponent(enc)}`);
         const d = await r.json();
         CHECKED[key] = {state: d.ok ? "ok" : "ko", ms: d.ms, url: d.url};
     }catch(e){
@@ -1873,10 +2200,13 @@ function renderFavs(){
     el.innerHTML = favs.map(f=>{
         const href = f.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(f.id))}` : `${BASE}/hls/${f.id}/index.m3u8`;
         const logo = f.logo ? `<img class="logo" src="${escapeHtml(f.logo)}" alt="" onerror="this.style.display='none'">` : "";
+        const st = CHECKED[f.key];
+        const badge = st ? `<span class="fav-chk ${st.state==="ok"?"ok":"ko"}">${st.state==="ok"?"✓":"✗"}</span>` : "";
         return `<a class="channel-item" href="${href}" data-play="${href}" title="${escapeHtml(f.name)}">
             ${logo}
             <div class="name">${escapeHtml(f.name)}</div>
             <div class="id">${f.src==="vavoo"?"vavoo":"#"+f.id}</div>
+            ${badge}
             <span class="fav-star active" onclick="event.preventDefault();event.stopPropagation();removeFav('${escapeHtml(f.key)}')">★</span>
         </a>`;
     }).join("");
@@ -1885,6 +2215,90 @@ function removeFav(key){
     saveFavs(getFavs().filter(f=>f.key!==key));
     toast("Retiré des favoris");
     renderFavs();
+    render();
+}
+
+// Scan de santé en masse des favoris
+async function scanFavs(){
+    const favs = getFavs();
+    if(!favs.length){ toast('⚠️ Aucun favori à tester', 'warn'); return; }
+    const btn = $("#scan-favs-btn");
+    const status = $("#scan-status");
+    btn.disabled = true;
+    btn.textContent = "⏳ Scan en cours...";
+    status.style.display = 'flex';
+    status.innerHTML = '<div class="scan-spin"></div><span>Test de <b>' + favs.length + '</b> chaîne(s)…</span>';
+    try{
+        const r = await apiFetch('/api/check-batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({items: favs.slice(0,200).map(f => ({src: f.src, id: f.src==="vavoo" ? b64u(f.id) : f.id}))})
+        });
+        const d = await r.json();
+        const results = d.results || [];
+        const ok = results.filter(x=>x.ok).length;
+        results.forEach(res => { CHECKED[res.key] = {state: res.ok ? "ok" : "ko", ms: res.ms}; });
+        status.innerHTML = '<span>Scan terminé : <b>' + ok + '</b> OK / <b>' + results.length + '</b> chaînes</span>' +
+            '<span class="scan-ok">✓</span><span class="scan-ko">✗</span>';
+        renderFavs();
+        render();
+        toast(`Scan terminé : ${ok}/${results.length} OK`, ok === results.length ? 'success' : 'warn');
+    }catch(e){
+        if (e.message !== 'unauthenticated') {
+            status.innerHTML = '<span class="scan-ko">✗ Scan impossible : ' + escapeHtml(e.message) + '</span>';
+            toast('❌ Scan impossible: ' + e.message, 'error');
+        }
+    }finally{
+        btn.disabled = false;
+        btn.textContent = "🩺 Tester mes favoris";
+    }
+}
+
+// Export M3U
+function downloadText(filename, text){
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+}
+function buildM3U(chans){
+    const lines = ['#EXTM3U'];
+    chans.forEach(ch => {
+        const href = ch.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(ch.id))}` : `${BASE}/hls/${ch.id}/index.m3u8`;
+        const grp = (ch.lang && ch.lang !== "other") ? ch.lang.toUpperCase() : "Autres";
+        lines.push(`#EXTINF:-1 tvg-id="${ch.src}:${ch.id}" group-title="${grp}",${escapeHtml(ch.name)}`);
+        lines.push(href);
+    });
+    return lines.join('\n');
+}
+function exportFavsM3U(){
+    const favs = getFavs();
+    if(!favs.length){ toast('⚠️ Aucun favori à exporter', 'warn'); return; }
+    downloadText('dlstreams-favoris.m3u', buildM3U(favs));
+    toast(`✅ ${favs.length} favori(s) exporté(s)`, 'success');
+}
+function exportCatalogM3U(){
+    const q = ($("#q").value||"").toLowerCase().trim();
+    const words = q ? q.split(/\s+/) : [];
+    const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
+    const chans = (ALL[CURRENT]||[]).filter(c => {
+        if (lang && c.lang !== lang) return false;
+        return words.every(w => (c.name||"").toLowerCase().includes(w));
+    });
+    if(!chans.length){ toast('⚠️ Aucune chaîne à exporter', 'warn'); return; }
+    downloadText('dlstreams-' + CURRENT + '.m3u', buildM3U(chans.map(c => Object.assign({}, c, {src: CURRENT}))));
+    toast(`✅ ${chans.length} chaînes exportées`, 'success');
+}
+
+// Raccourcis langues dans la sidebar
+async function goLang(lang){
+    LANG_FILTER = lang;
+    const sel = $("#lang-filter");
+    if(sel) sel.value = lang;
+    navigateTo('catalog');
+    if (CURRENT !== "vavoo") await loadCatalog(CURRENT);
     render();
 }
 
@@ -1920,6 +2334,13 @@ document.addEventListener("click", (e)=>{
         const item = e.target.closest(".channel-item");
         const name = item.querySelector(".name").textContent;
         openPlayer(item.dataset.play, name);
+    }
+});
+document.addEventListener("click", (e)=>{
+    const row = e.target.closest(".top-row");
+    if(row && row.dataset.play){
+        const name = row.querySelector(".top-name").textContent;
+        openPlayer(row.dataset.play, name);
     }
 });
 
@@ -2086,6 +2507,76 @@ async function clearLogs() {
         if (res.ok) { toast('✅ Logs vidés', 'success'); await loadLogs(); }
         else toast('❌ Erreur lors du reset', 'error');
     } catch (e) { toast('❌ ' + e.message, 'error'); }
+}
+
+// ---- PAGE SYSTEME ----
+function fmtBytes(b){
+    if(b==null) return "—";
+    if(b >= 1073741824) return (b/1073741824).toFixed(1) + " Go";
+    if(b >= 1048576) return (b/1048576).toFixed(1) + " Mo";
+    if(b >= 1024) return (b/1024).toFixed(1) + " Ko";
+    return b + " o";
+}
+function fmtDur(s){
+    if(s==null) return "—";
+    const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
+    return (d?d+"j ":"") + (h?h+"h ":"") + m + "min";
+}
+function fmtAge(s){
+    if(s==null) return "jamais";
+    if(s < 60) return Math.floor(s) + "s";
+    if(s < 3600) return Math.floor(s/60) + "min";
+    if(s < 86400) return Math.floor(s/3600) + "h";
+    return Math.floor(s/86400) + "j";
+}
+function sysRows(rows){
+    return rows.map(([k,v]) => `<div class="sys-row"><div class="sys-key">${escapeHtml(k)}</div><div class="sys-val">${escapeHtml(String(v))}</div></div>`).join('');
+}
+async function loadSystem(){
+    const grid = $("#sys-grid");
+    const cache = $("#sys-cache");
+    if(!grid) return;
+    grid.innerHTML = '<div class="fav-empty">chargement…</div>';
+    if(cache) cache.innerHTML = '<div class="fav-empty">chargement…</div>';
+    try{
+        const r = await apiFetch('/api/system');
+        const d = await r.json();
+        const mem = d.memory || {};
+        const cpu = mem.cpu != null ? ` · CPU ${mem.cpu}%` : "";
+        grid.innerHTML = sysRows([
+            ['Version', d.version],
+            ['Python', d.python],
+            ['Port', d.port],
+            ['PID', d.pid],
+            ['Plateforme', d.platform],
+            ['CPU', `${d.cpus} cœur(s)${cpu}`],
+            ['Mémoire (processus)', fmtBytes(mem.rss)],
+            ['Mémoire système', mem.total ? `${fmtBytes(mem.total - mem.available)} / ${fmtBytes(mem.total)} (${mem.percent}%)` : "n/d"],
+            ['Disque', d.disk ? `${fmtBytes(d.disk.used)} / ${fmtBytes(d.disk.total)} (libre ${fmtBytes(d.disk.free)})` : "n/d"],
+            ['Démarré le', d.started_at],
+            ['Uptime', fmtDur(d.uptime)],
+            ['Chaînes totales', d.channels_total],
+        ]);
+        if(cache){
+            cache.innerHTML = sysRows([
+                ['Chaînes dlstreams', `${d.cache.dlstreams.count} (maj ${d.cache.dlstreams.age_seconds!=null ? "il y a " + fmtAge(d.cache.dlstreams.age_seconds) : "jamais"})`],
+                ['Chaînes Vavoo', `${d.cache.vavoo.count} (maj ${d.cache.vavoo.age_seconds!=null ? "il y a " + fmtAge(d.cache.vavoo.age_seconds) : "jamais"})`],
+            ]);
+        }
+    }catch(e){
+        if (e.message !== 'unauthenticated') grid.innerHTML = '<div class="fav-empty">erreur de chargement</div>';
+    }
+}
+function restartServer(){
+    if(!confirm('Redémarrer le serveur maintenant ?')) return;
+    const btn = $("#restart-btn");
+    if(btn) btn.disabled = true;
+    fetch('/api/restart', {method: 'POST'}).then(r=>r.json()).then(d=>{
+        toast('🔄 ' + (d.message || 'Redémarrage en cours...'), 'warn');
+    }).catch(()=>{
+        toast('❌ Erreur au redémarrage', 'error');
+        if(btn) btn.disabled = false;
+    });
 }
 
 async function boot(){
