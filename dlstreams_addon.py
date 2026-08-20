@@ -22,7 +22,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.8.0"
+_VERSION = "1.9.0"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -99,6 +99,43 @@ _POPULAR_CHANNELS = [
     {"id": "423", "name": "RMC Découverte", "lang": "fr"},
     {"id": "424", "name": "Chérie 25", "lang": "fr"},
 ]
+
+# Logos reels des chaines populaires FR (ids dlstreams -> URL logo).
+# Sources : static.epg.best (EPG/logo iptv-org) + Wikimedia. Servees via le
+# proxy /logo/... avec fallback poster genere si indisponible.
+_CH_LOGO = {
+    "121": "https://static.epg.best/fr/CanalPlus.fr.png",
+    "122": "https://static.epg.best/fr/CanalPlusSport.fr.png",
+    "123": "https://upload.wikimedia.org/wikipedia/fr/thumb/e/eb/C%2B_Cin%C3%A9ma%28s%29.png/500px-C%2B_Cin%C3%A9ma%28s%29.png",
+    "124": "https://upload.wikimedia.org/wikipedia/fr/thumb/e/e3/C%2B_S%C3%A9ries.png/500px-C%2B_S%C3%A9ries.png",
+    "125": "https://static.epg.best/fr/CanalPlusFamily.fr.png",
+    "211": "https://static.epg.best/fr/RMCSport1.fr.png",
+    "212": "https://static.epg.best/fr/RMCSport2.fr.png",
+    "213": "https://static.epg.best/fr/RMCSport3.fr.png",
+    "214": "https://static.epg.best/fr/RMCSport4.fr.png",
+    "301": "https://static.epg.best/fr/Eurosport1.fr.png",
+    "302": "https://static.epg.best/fr/Eurosport2.fr.png",
+    "401": "https://static.epg.best/fr/TF1.fr.png",
+    "402": "https://static.epg.best/fr/France2.fr.png",
+    "403": "https://static.epg.best/fr/France3.fr.png",
+    "404": "https://static.epg.best/fr/France4.fr.png",
+    "405": "https://static.epg.best/fr/France5.fr.png",
+    "406": "https://static.epg.best/fr/M6.fr.png",
+    "407": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Arte_Logo_2017.svg/500px-Arte_Logo_2017.svg.png",
+    "408": "https://static.epg.best/fr/C8.fr.png",
+    "409": "https://static.epg.best/fr/W9.fr.png",
+    "410": "https://static.epg.best/fr/TMC.fr.png",
+    "411": "https://static.epg.best/fr/TFX.fr.png",
+    "412": "https://static.epg.best/fr/NRJ12.fr.png",
+    "413": "https://static.epg.best/fr/LCP.fr.png",
+    "415": "https://static.epg.best/fr/BFMTV.fr.png",
+    "416": "https://static.epg.best/fr/CNews.fr.png",
+    "417": "https://static.epg.best/fr/CStar.fr.png",
+    "418": "https://static.epg.best/fr/Gulli.fr.png",
+    "419": "https://static.epg.best/fr/TF1SeriesFilms.fr.png",
+    "421": "https://static.epg.best/fr/6ter.fr.png",
+    "422": "https://static.epg.best/fr/RMCStory.fr.png",
+}
 
 def _detect_lang(name: str) -> str:
     n = name.lower()
@@ -326,6 +363,10 @@ def channels(lang_filter: str | None = None) -> list[dict]:
             pass
 
         _ch_cache.update(at=now, list=list(seen.values()))
+        for ch in _ch_cache["list"]:
+            lg = _CH_LOGO.get(str(ch.get("id")))
+            if lg:
+                ch["logo"] = lg
 
     out = _ch_cache["list"]
     if lang_filter and lang_filter != "all":
@@ -774,6 +815,45 @@ def _poster_get(name: str) -> bytes:
         _posters_cache[key] = png
     return png
 
+_logo_cache: dict[str, bytes] = {}
+_logo_bad: set[str] = set()
+
+def _logo_bytes(src: str, c: dict) -> bytes:
+    """Logo reel (proxye) si dispo, sinon poster genere. Jamais de tile cassee."""
+    url = _CH_LOGO.get(str(c.get("id")), "") if src == "dlstreams" else (c.get("logo") or "").strip()
+    if url:
+        png = _logo_cache.get(url)
+        if png is None and url not in _logo_bad:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    png = r.read()
+                if png[:3] not in (b"\xff\xd8\xff", b"\x89PN"):
+                    raise ValueError("pas une image")
+            except Exception:
+                png = None
+                _logo_bad.add(url)
+            if png is not None:
+                if len(_logo_cache) > 500:
+                    _logo_cache.clear()
+                _logo_cache[url] = png
+        if png:
+            return png
+    return _poster_get(c.get("name") or "TV")
+
+def _warm_logos():
+    for url in _CH_LOGO.values():
+        # prefetch des logos populaires pour que les posters soient instantanes
+        try:
+            if url not in _logo_cache and url not in _logo_bad:
+                req = urllib.request.Request(url, headers={"User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    b = r.read()
+                if b[:3] in (b"\xff\xd8\xff", b"\x89PN") and len(_logo_cache) < 400:
+                    _logo_cache[url] = b
+        except Exception:
+            _logo_bad.add(url)
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -996,6 +1076,18 @@ class Handler(BaseHTTPRequestHandler):
         path = u.path
         qs = urllib.parse.parse_qs(u.query)
         try:
+            if path.startswith("/logo/") and path.endswith(".png"):
+                seg = urllib.parse.unquote(path[len("/logo/"):-4])
+                src, _, cid = seg.partition("/")
+                if src == "vavoo":
+                    url = _unb64u(cid)
+                    c = next((x for x in vavoo_channels() if x["id"] == url),
+                             {"id": url, "name": "Vavoo", "logo": ""})
+                else:
+                    c = next((x for x in channels() if str(x.get("id")) == str(cid)),
+                             {"id": cid, "name": f"dlstreams {cid}", "logo": ""})
+                return self._send(200, _logo_bytes(src, c), "image/png", True)
+
             if path.startswith("/poster/") and path.endswith(".png"):
                 pname = urllib.parse.unquote(path[len("/poster/"):-4])
                 return self._send(200, _poster_get(pname), "image/png", True)
@@ -1266,10 +1358,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _meta(self, c: dict, source: str) -> dict:
         cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
-        logo = c.get("logo") or ""
         base = self._self_base()
-        slug = urllib.parse.quote(c["name"], safe="")
-        poster = logo or f"{base}/poster/{slug}.png"
+        poster = f"{base}/logo/{source}/{urllib.parse.quote(cid, safe='')}.png"
         lang = c.get("lang", "fr")
         lang_label = {"fr": "française", "en": "anglaise", "es": "espagnole",
                       "de": "allemande", "it": "italienne", "ar": "arabe",
@@ -1278,7 +1368,7 @@ class Handler(BaseHTTPRequestHandler):
         desc = (f"Chaîne {c['name']} diffusée en direct, chaîne {lang_label} "
                 f"disponible via {source}. Lecture directe dans Stremio grâce au proxy intégré.")
         return {"id": f"{source}:{cid}", "type": "tv", "name": c["name"],
-                "poster": poster, "logo": logo or poster, "posterShape": "landscape",
+                "poster": poster, "logo": poster, "posterShape": "landscape",
                 "background": poster,
                 "description": desc,
                 "releaseInfo": "En direct",
@@ -1310,6 +1400,7 @@ def main():
     if srv is None:
         raise SystemExit(f"impossible de lier le port {PORT}")
     threading.Thread(target=_warm_channels, daemon=True).start()
+    threading.Thread(target=_warm_logos, daemon=True).start()
     srv.serve_forever()
 
 def _warm_channels():
