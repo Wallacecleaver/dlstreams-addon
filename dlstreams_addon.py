@@ -2114,7 +2114,6 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div class="nav-section-label">Raccourcis</div>
           <button class="nav-shortcut" onclick="sidebarAction('scan')" title="Teste la disponibilité de toutes vos chaînes favorites"><span class="sc-ico">🩺</span><span class="sc-txt">Tester mes favoris</span></button>
           <button class="nav-shortcut" onclick="sidebarAction('m3u-favs')" title="Télécharge une playlist de vos favoris"><span class="sc-ico">⬇️</span><span class="sc-txt">Export favoris M3U</span></button>
-          <button class="nav-shortcut" onclick="sidebarAction('restart')" title="Redémarre le processus serveur"><span class="sc-ico">🔁</span><span class="sc-txt">Redémarrer</span></button>
         </div>
         <div class="sidebar-bottom">
           <button class="btn-logout" onclick="logout()">Déconnexion</button>
@@ -3051,7 +3050,6 @@ function sidebarAction(action){
     else if(action === 'm3u-favs'){ exportFavsM3U(); }
     else if(action === 'm3u-catalog'){ navigateTo('catalog'); setTimeout(()=>exportCatalogM3U(), 200); }
     else if(action === 'logs-clear'){ navigateTo('logs'); setTimeout(()=>clearLogs(), 200); }
-    else if(action === 'restart'){ restartServer(); }
 }
 
 // ===== REGLAGES =====
@@ -3329,18 +3327,6 @@ function fmtBytes(b){
 function sysRows(rows){
     return rows.map(([k,v]) => `<div class="sys-row"><div class="sys-key">${escapeHtml(k)}</div><div class="sys-val">${escapeHtml(String(v))}</div></div>`).join('');
 }
-function restartServer(){
-    if(!confirm('Redémarrer le serveur maintenant ?')) return;
-    const btn = $("#restart-btn");
-    if(btn) btn.disabled = true;
-    fetch('/api/restart', {method: 'POST'}).then(r=>r.json()).then(d=>{
-        toast('🔄 ' + (d.message || 'Redémarrage en cours...'), 'warn');
-    }).catch(()=>{
-        toast('❌ Erreur au redémarrage', 'error');
-        if(btn) btn.disabled = false;
-    });
-}
-
 async function boot(){
     await Promise.all([refreshStats(), loadCatalog("dlstreams"), loadPlays()]);
     render();
