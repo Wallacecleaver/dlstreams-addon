@@ -7,6 +7,8 @@ import base64
 import json
 import os
 import re
+import secrets
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -17,13 +19,32 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "admin123")
+
+# Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
+# d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
+# un defaut fixe ("admin123") -- un mot de passe connu de tous rend la
+# protection inutile. Il change a chaque redemarrage ; definis DASHBOARD_PASSWORD
+# sur Render si tu veux un mot de passe stable entre deploiements.
+_PASSWORD_GENERATED = "DASHBOARD_PASSWORD" not in os.environ
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD") or secrets.token_urlsafe(9)
+
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 SITE = "https://dlstreams.st"
 _CH_TTL = 1800
 _START_TIME = time.time()
 _request_count = 0
 _error_count = 0
+_stats_lock = threading.Lock()
+
+# --- sessions dashboard : jeton opaque valide cote serveur, stocke en memoire
+# (pas de JWT/dependance -- juste un dict token -> heure d'emission). Remplace
+# l'ancien systeme qui ne verifiait le mot de passe qu'une fois sans jamais
+# proteger les endpoints /api/* ensuite. ---
+_sessions: dict[str, float] = {}
+_SESSION_TTL = 24 * 3600
+_login_attempts: dict[str, list[float]] = {}   # ip -> heures des echecs recents
+_LOGIN_MAX_ATTEMPTS = 6
+_LOGIN_WINDOW = 300  # 5 minutes
 
 _POPULAR_CHANNELS = [
     {"id": "121", "name": "Canal+ France", "lang": "fr"},
@@ -133,30 +154,31 @@ def _log_activity(action: str, details: str = ""):
         _activity_log.pop(0)
 
 def channels(lang_filter: str | None = None) -> list[dict]:
+    # BUG corrige : avant, le cache n'etait reutilise que si lang_filter is None.
+    # Le dashboard appelle toujours /api/channels?lang=fr, donc CHAQUE appel
+    # re-scrapait dlstreams.st en direct (le TTL de 30 min etait ignore en
+    # permanence). Desormais on ne re-scrape que si le cache est vide/perime,
+    # et le filtre langue s'applique en memoire sur la liste deja en cache.
     now = time.time()
-    if _ch_cache["list"] and now - _ch_cache["at"] < _CH_TTL and lang_filter is None:
-        return _ch_cache["list"]
-    
-    seen: dict[str, dict] = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
-    seen.update(_manual_channels)
-    
-    try:
-        html = _get(SITE + "/").decode("utf-8", "replace")
-        p = _LinkParser()
-        p.feed(html)
-        for idv, name in p.items:
-            if idv not in seen:
-                seen[idv] = {"id": idv, "name": name, "lang": _detect_lang(name)}
-    except Exception:
-        pass
-    
-    out = list(seen.values())
-    
+    if not _ch_cache["list"] or now - _ch_cache["at"] >= _CH_TTL:
+        seen: dict[str, dict] = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
+        seen.update(_manual_channels)
+
+        try:
+            html = _get(SITE + "/").decode("utf-8", "replace")
+            p = _LinkParser()
+            p.feed(html)
+            for idv, name in p.items:
+                if idv not in seen:
+                    seen[idv] = {"id": idv, "name": name, "lang": _detect_lang(name)}
+        except Exception:
+            pass
+
+        _ch_cache.update(at=now, list=list(seen.values()))
+
+    out = _ch_cache["list"]
     if lang_filter and lang_filter != "all":
         out = [c for c in out if c.get("lang") == lang_filter]
-    
-    if lang_filter is None:
-        _ch_cache.update(at=now, list=out)
     return out
 
 def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
@@ -425,9 +447,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send(self, code: int, body: bytes, ctype: str, cache: bool = False):
         global _request_count, _error_count
-        _request_count += 1
-        if code >= 400:
-            _error_count += 1
+        with _stats_lock:
+            _request_count += 1
+            if code >= 400:
+                _error_count += 1
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -443,6 +466,34 @@ class Handler(BaseHTTPRequestHandler):
         proto = self.headers.get("X-Forwarded-Proto", "http").split(",")[0].strip()
         return f"{proto}://{host}"
 
+    def _client_ip(self) -> str:
+        fwd = self.headers.get("X-Forwarded-For", "")
+        return fwd.split(",")[0].strip() if fwd else self.client_address[0]
+
+    def _cookie(self, name: str) -> str:
+        raw = self.headers.get("Cookie", "")
+        for part in raw.split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == name:
+                return v
+        return ""
+
+    def _authed(self) -> bool:
+        tok = self._cookie("dl_session")
+        if not tok:
+            return False
+        with _stats_lock:
+            issued = _sessions.get(tok)
+        return bool(issued) and (time.time() - issued) < _SESSION_TTL
+
+    def _require_auth(self) -> bool:
+        """Renvoie True si authentifie ; sinon envoie 401 JSON et renvoie False."""
+        if self._authed():
+            return True
+        self._send(401, json.dumps({"success": False, "message": "authentification requise"}).encode(),
+                   "application/json")
+        return False
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -457,24 +508,75 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length) if content_length > 0 else b''
-        
+
         u = urllib.parse.urlsplit(self.path)
         path = u.path
-        
+
+        if path == "/api/auth":
+            ip = self._client_ip()
+            now = time.time()
+            with _stats_lock:
+                attempts = [t for t in _login_attempts.get(ip, []) if now - t < _LOGIN_WINDOW]
+                _login_attempts[ip] = attempts
+            if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+                return self._send(429, json.dumps({"success": False,
+                                  "message": "trop de tentatives, reessaie dans quelques minutes"}).encode(),
+                                  "application/json")
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            password = str(data.get("password", ""))
+            if secrets.compare_digest(password, DASHBOARD_PASSWORD):
+                token = secrets.token_urlsafe(24)
+                with _stats_lock:
+                    _sessions[token] = time.time()
+                _log_activity("Connexion réussie")
+                resp = json.dumps({"success": True}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                secure = "; Secure" if self.headers.get("X-Forwarded-Proto", "http").startswith("https") else ""
+                self.send_header("Set-Cookie",
+                                  f"dl_session={token}; HttpOnly; Path=/; Max-Age={_SESSION_TTL}; SameSite=Lax{secure}")
+                self.end_headers()
+                self.wfile.write(resp)
+                return
+            with _stats_lock:
+                _login_attempts.setdefault(ip, []).append(now)
+            _log_activity("Tentative de connexion échouée")
+            return self._send(401, json.dumps({"success": False, "message": "mot de passe incorrect"}).encode(),
+                              "application/json")
+
+        if path == "/api/logout":
+            tok = self._cookie("dl_session")
+            with _stats_lock:
+                _sessions.pop(tok, None)
+            resp = json.dumps({"success": True}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp)))
+            self.send_header("Set-Cookie", "dl_session=; HttpOnly; Path=/; Max-Age=0")
+            self.end_headers()
+            self.wfile.write(resp)
+            return
+
         if path == "/api/remove-channel":
+            if not self._require_auth():
+                return
             try:
                 data = json.loads(body) if body else {}
                 channel_id = data.get("id")
                 if not channel_id:
                     return self._send(400, json.dumps({"success": False, "message": "ID manquant"}).encode(), "application/json")
-                
+
                 if remove_manual_channel(channel_id):
                     return self._send(200, json.dumps({"success": True, "message": "Chaîne supprimée"}).encode(), "application/json")
                 else:
                     return self._send(404, json.dumps({"success": False, "message": "Chaîne non trouvée"}).encode(), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"success": False, "message": str(e)}).encode(), "application/json")
-        
+
         return self._send(404, b"not found", "text/plain")
 
     def do_GET(self):
@@ -489,28 +591,44 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, CONFIGURE_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
             if path == "/api/stats":
+                if not self._require_auth():
+                    return
                 return self._send(200, json.dumps(_stats()).encode(), "application/json")
 
             if path == "/api/channels":
+                if not self._require_auth():
+                    return
                 lang = qs.get("lang", [None])[0]
                 return self._send(200, json.dumps(channels(lang_filter=lang)).encode(), "application/json", True)
 
             if path == "/api/vavoo-channels":
+                if not self._require_auth():
+                    return
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
 
             if path == "/api/manual-channels":
+                if not self._require_auth():
+                    return
                 return self._send(200, json.dumps(list(_manual_channels.values())).encode(), "application/json")
 
             if path == "/api/activity":
-                return self._send(200, json.dumps(_activity_log).encode(), "application/json")
+                if not self._require_auth():
+                    return
+                return self._send(200, json.dumps(list(reversed(_activity_log))).encode(), "application/json")
 
             if path == "/api/add-source":
+                if not self._require_auth():
+                    return
                 url = qs.get("url", [None])[0]
                 if not url:
                     return self._send(400, json.dumps({"success": False, "message": "URL manquante"}).encode(), "application/json")
-                
+                parsed = urllib.parse.urlsplit(url)
+                if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                    return self._send(400, json.dumps({"success": False,
+                                      "message": "URL invalide (http/https uniquement)"}).encode(), "application/json")
+
                 added_channels, message = scrape_channels_from_url(url)
-                
+
                 return self._send(200, json.dumps({
                     "success": True,
                     "message": message,
@@ -519,21 +637,17 @@ class Handler(BaseHTTPRequestHandler):
                 }).encode(), "application/json")
 
             if path == "/api/refresh-cache":
-                _ch_cache["list"] = []
-                _ch_cache["at"] = 0
-                _vavoo_cache["list"] = []
-                _vavoo_cache["at"] = 0
-                _log_activity("Cache rafraîchi")
-                return self._send(200, json.dumps({"success": True, "message": "Cache rafraîchi"}).encode(), "application/json")
-
-            if path == "/api/auth":
-                password = qs.get("password", [None])[0]
-                if password == DASHBOARD_PASSWORD:
-                    _log_activity("Connexion réussie")
-                    return self._send(200, json.dumps({"success": True}).encode(), "application/json")
-                else:
-                    _log_activity("Tentative de connexion échouée")
-                    return self._send(401, json.dumps({"success": False, "message": "Mot de passe incorrect"}).encode(), "application/json")
+                if not self._require_auth():
+                    return
+                t0 = time.time()
+                _ch_cache["at"] = 0.0
+                n_dl = len(channels())
+                _vavoo_cache["at"] = 0.0
+                n_vv = len(vavoo_channels())
+                dur_ms = int((time.time() - t0) * 1000)
+                _log_activity("Cache rafraîchi", f"{n_dl} dlstreams / {n_vv} vavoo en {dur_ms}ms")
+                return self._send(200, json.dumps({"success": True, "dlstreams": n_dl, "vavoo": n_vv,
+                                                    "ms": dur_ms}).encode(), "application/json")
 
             if path in ("/", "/manifest.json"):
                 lang = qs.get("lang", [None])[0]
@@ -579,7 +693,7 @@ class Handler(BaseHTTPRequestHandler):
                     streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 ok = working_players(cid)
-                streams = [{"name": "dlstreams", "title": " Auto (1er dispo)",
+                streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
                             "url": f"{b}/hls/{cid}/index.m3u8"}] if ok else []
                 streams += [{"name": "dlstreams", "title": label,
                              "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
@@ -668,7 +782,14 @@ def main():
     print(f"  Configure: http://127.0.0.1:{PORT}/configure")
     print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json?lang=fr")
     print(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
-    print(f"  Mot de passe dashboard: {DASHBOARD_PASSWORD}")
+    if _PASSWORD_GENERATED:
+        print("  " + "=" * 62)
+        print(f"  Mot de passe dashboard (genere automatiquement) : {DASHBOARD_PASSWORD}")
+        print("  Il changera au prochain redemarrage. Definis la variable")
+        print("  d'environnement DASHBOARD_PASSWORD sur Render pour en garder un stable.")
+        print("  " + "=" * 62)
+    else:
+        print("  Mot de passe dashboard : defini via DASHBOARD_PASSWORD")
     try:
         n = len(channels())
         print(f"  annuaire : {n} chaines chargees (dont {len(_POPULAR_CHANNELS)} populaires)")
@@ -682,6 +803,7 @@ DASHBOARD_HTML = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dlstreams — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
@@ -1101,13 +1223,13 @@ DASHBOARD_HTML = r"""<!doctype html>
         <div class="nav-section">
             <div class="nav-section-title">Navigation</div>
             <a class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')"><span class="icon">📊</span> Dashboard</a>
-            <a class="nav-item" data-page="sources" onclick="navigateTo('sources')"><span class="icon"></span> Sources</a>
+            <a class="nav-item" data-page="sources" onclick="navigateTo('sources')"><span class="icon">📡</span> Sources</a>
             <a class="nav-item" data-page="catalog" onclick="navigateTo('catalog')"><span class="icon">📺</span> Catalogue</a>
         </div>
         <div class="nav-section">
             <div class="nav-section-title">Configuration</div>
             <a href="/configure" class="nav-item"><span class="icon">🎨</span> Page Configure</a>
-            <a href="/manifest.json" class="nav-item" target="_blank"><span class="icon"></span> Manifest Stremio</a>
+            <a href="/manifest.json" class="nav-item" target="_blank"><span class="icon">📦</span> Manifest Stremio</a>
         </div>
         <div class="nav-section">
             <div class="nav-section-title">API</div>
@@ -1206,6 +1328,11 @@ DASHBOARD_HTML = r"""<!doctype html>
                     <div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
                 </div>
             </section>
+
+            <section class="card">
+                <h2>🕒 Activité récente</h2>
+                <div id="activity-list" style="font-size:13px;color:var(--text-secondary)">chargement…</div>
+            </section>
         </div>
 
         <!-- Page Catalogue -->
@@ -1216,13 +1343,13 @@ DASHBOARD_HTML = r"""<!doctype html>
                     <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
                     <select id="lang-filter">
                         <option value="all">🌍 Toutes langues</option>
-                        <option value="fr" selected>🇫 Français</option>
+                        <option value="fr" selected>🇫🇷 Français</option>
                         <option value="en">🇬🇧 English</option>
-                        <option value="es">🇪 Español</option>
+                        <option value="es">🇪🇸 Español</option>
                         <option value="de">🇩🇪 Deutsch</option>
-                        <option value="it">🇮 Italiano</option>
+                        <option value="it">🇮🇹 Italiano</option>
                         <option value="ar">🇸🇦 Arabe</option>
-                        <option value="pt">🇹 Português</option>
+                        <option value="pt">🇵🇹 Português</option>
                         <option value="other">📺 Autres</option>
                     </select>
                     <div class="tabs">
@@ -1230,6 +1357,7 @@ DASHBOARD_HTML = r"""<!doctype html>
                         <button class="tab" data-src="vavoo">Vavoo</button>
                     </div>
                 </div>
+                <div id="lang-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px"></div>
                 <div class="channel-list" id="list"><div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
             </section>
         </div>
@@ -1262,14 +1390,31 @@ const fmtDur = s => {
 };
 const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
 
-// Session persistante avec localStorage
-function checkSession() {
-    const isLoggedIn = localStorage.getItem('dlstreams_logged_in');
-    if (isLoggedIn === 'true') {
-        $('#loginScreen').style.display = 'none';
-        $('#dashboard').classList.add('active');
-        boot();
+// Session reelle : verifiee cote serveur via le cookie httponly (plus de
+// localStorage -- n'importe qui pouvait s'auto-connecter depuis la console
+// sans jamais connaitre le mot de passe).
+async function checkSession() {
+    try {
+        const r = await fetch("/api/stats");
+        if (r.ok) {
+            $('#loginScreen').style.display = 'none';
+            $('#dashboard').classList.add('active');
+            await boot();
+        }
+    } catch (e) { /* pas connecte : ecran de login reste affiche */ }
+}
+
+// Wrapper fetch : si la session a expire en cours d'usage, renvoie a l'ecran
+// de login au lieu d'afficher des erreurs silencieuses.
+async function apiFetch(url, opts) {
+    const r = await fetch(url, opts);
+    if (r.status === 401) {
+        $('#dashboard').classList.remove('active');
+        $('#loginScreen').style.display = 'flex';
+        showToast('Session expirée, reconnecte-toi', 'error');
+        throw new Error('unauthenticated');
     }
+    return r;
 }
 
 function showToast(message, type = 'success') {
@@ -1283,27 +1428,33 @@ function showToast(message, type = 'success') {
 function handleLogin(e) {
     e.preventDefault();
     const password = $('#passwordInput').value;
-    fetch(`/api/auth?password=${encodeURIComponent(password)}`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                localStorage.setItem('dlstreams_logged_in', 'true');
+    fetch('/api/auth', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password})
+    })
+        .then(r => r.json().then(data => ({ok: r.ok, data})))
+        .then(({ok, data}) => {
+            if (ok && data.success) {
+                $('#loginError').innerHTML = '';
                 $('#loginScreen').style.display = 'none';
                 $('#dashboard').classList.add('active');
                 showToast('✅ Connecté avec succès');
                 boot();
             } else {
-                $('#loginError').innerHTML = '<div class="error-message">Mot de passe incorrect</div>';
+                $('#loginError').innerHTML = `<div class="error-message">${data.message || 'Mot de passe incorrect'}</div>`;
             }
-        });
+        })
+        .catch(() => { $('#loginError').innerHTML = '<div class="error-message">Erreur réseau</div>'; });
 }
 
 function logout() {
-    localStorage.removeItem('dlstreams_logged_in');
-    $('#dashboard').classList.remove('active');
-    $('#loginScreen').style.display = 'flex';
-    $('#passwordInput').value = '';
-    showToast('👋 Déconnecté');
+    fetch('/api/logout').finally(() => {
+        $('#dashboard').classList.remove('active');
+        $('#loginScreen').style.display = 'flex';
+        $('#passwordInput').value = '';
+        showToast('👋 Déconnecté');
+    });
 }
 
 function navigateTo(page) {
@@ -1322,7 +1473,7 @@ function navigateTo(page) {
     $('#pageTitle').textContent = titles[page][0];
     $('#pageSubtitle').textContent = titles[page][1];
     
-    if (page === 'sources') loadManualChannels();
+    if (page === 'sources') { loadManualChannels(); loadActivity(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams');
         render();
@@ -1331,7 +1482,7 @@ function navigateTo(page) {
 
 async function refreshStats(){
     try{
-        const r = await fetch("/api/stats");
+        const r = await apiFetch("/api/stats");
         const d = await r.json();
         $("#c-dl").textContent = d.dlstreams.count;
         $("#c-dl-h").textContent = "cache : " + fmtAge(d.dlstreams.age_seconds);
@@ -1339,14 +1490,40 @@ async function refreshStats(){
         $("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);
         $("#c-up").textContent = fmtDur(d.uptime);
         $("#c-manual").textContent = d.manual_channels || 0;
+        const chipsEl = $("#lang-chips");
+        if (chipsEl && d.lang_counts) {
+            const flags = {fr:"🇫🇷",en:"🇬🇧",es:"🇪🇸",de:"🇩🇪",it:"🇮🇹",ar:"🇸🇦",pt:"🇵🇹",other:"📺"};
+            chipsEl.innerHTML = Object.entries(d.lang_counts)
+                .sort((a,b)=>b[1]-a[1])
+                .map(([lang,n]) => `<span class="tab" style="cursor:default">${flags[lang]||"🌍"} ${n}</span>`)
+                .join("");
+        }
     }catch(e){
-        console.error("Stats error:", e);
+        if (e.message !== 'unauthenticated') console.error("Stats error:", e);
+    }
+}
+
+async function loadActivity() {
+    try {
+        const r = await apiFetch("/api/activity");
+        const log = await r.json();
+        const el = $("#activity-list");
+        if (!log.length) { el.innerHTML = "aucune activité pour le moment"; return; }
+        el.innerHTML = log.slice(0, 20).map(e =>
+            `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-primary)">${escapeHtml(e.action)}</span>
+                ${e.details ? ' — ' + escapeHtml(e.details) : ''}
+                <span style="float:right;color:var(--text-secondary)">${e.time}</span>
+            </div>`
+        ).join("");
+    } catch(e) {
+        if (e.message !== 'unauthenticated') console.error("Activity error:", e);
     }
 }
 
 async function loadManualChannels() {
     try {
-        const r = await fetch("/api/manual-channels");
+        const r = await apiFetch("/api/manual-channels");
         const channels = await r.json();
         const list = $("#manual-channels-list");
         
@@ -1359,13 +1536,13 @@ async function loadManualChannels() {
             <div class="manual-channel-item">
                 <div class="manual-channel-info">
                     <div class="manual-channel-name">${escapeHtml(ch.name)}</div>
-                    <div class="manual-channel-meta">ID: ${ch.id} · Ajoutée le ${ch.added_at || 'N/A'}</div>
+                    <div class="manual-channel-meta">ID: ${escapeHtml(ch.id)} · Ajoutée le ${escapeHtml(ch.added_at || 'N/A')}</div>
                 </div>
-                <button class="remove-btn" onclick="removeChannel('${ch.id}')">🗑️ Supprimer</button>
+                <button class="remove-btn" onclick="removeChannel('${escapeHtml(ch.id)}')">🗑️ Supprimer</button>
             </div>
         `).join('');
     } catch(e) {
-        console.error("Load manual channels error:", e);
+        if (e.message !== 'unauthenticated') console.error("Load manual channels error:", e);
     }
 }
 
@@ -1373,7 +1550,7 @@ async function removeChannel(id) {
     if (!confirm('Supprimer cette chaîne ?')) return;
     
     try {
-        const r = await fetch('/api/remove-channel', {
+        const r = await apiFetch('/api/remove-channel', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({id})
@@ -1388,14 +1565,19 @@ async function removeChannel(id) {
             showToast('❌ Erreur: ' + d.message, 'error');
         }
     } catch(e) {
-        showToast('❌ Erreur: ' + e.message, 'error');
+        if (e.message !== 'unauthenticated') showToast('❌ Erreur: ' + e.message, 'error');
     }
 }
 
 async function refreshAll() {
-    await fetch("/api/refresh-cache");
-    await refreshStats();
-    showToast('✅ Cache rafraîchi');
+    try {
+        const r = await apiFetch("/api/refresh-cache");
+        const d = await r.json();
+        await refreshStats();
+        showToast(`✅ Cache rafraîchi : ${d.dlstreams} dlstreams / ${d.vavoo} vavoo`);
+    } catch(e) {
+        if (e.message !== 'unauthenticated') showToast('❌ Erreur de rafraîchissement', 'error');
+    }
 }
 
 let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
@@ -1404,7 +1586,7 @@ let LANG_FILTER = "fr";
 async function loadCatalog(src){
     const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;
     try{
-        const r = await fetch(url);
+        const r = await apiFetch(url);
         ALL[src] = await r.json();
     }catch(e){
         ALL[src]=[];
@@ -1431,7 +1613,7 @@ function render(){
         const href = CURRENT==="vavoo"
             ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}`
             : `${BASE}/hls/${c.id}/index.m3u8`;
-        const logo = c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
+        const logo = c.logo ? `<img src="${escapeHtml(c.logo)}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
         return `<a class="channel-item" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
             ${logo}
             <div class="name">${escapeHtml(c.name)}</div>
@@ -1443,17 +1625,27 @@ function render(){
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
+let _hls = null;
 function openPlayer(url, title){
     $("#player-title").textContent = title;
     const video = $("#player-frame");
-    video.src = url;
-    video.play();
+    if (_hls) { _hls.destroy(); _hls = null; }
+    if (window.Hls && Hls.isSupported()) {
+        _hls = new Hls();
+        _hls.loadSource(url);
+        _hls.attachMedia(video);
+        _hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+    } else {
+        video.src = url;
+        video.play().catch(()=>{});
+    }
     $("#player-modal").classList.add("active");
 }
 $("#player-close").addEventListener("click", ()=>{
     const video = $("#player-frame");
     video.pause();
     video.src = "";
+    if (_hls) { _hls.destroy(); _hls = null; }
     $("#player-modal").classList.remove("active");
 });
 document.addEventListener("click", (e)=>{
@@ -1474,7 +1666,7 @@ $("#add-source-btn").addEventListener("click", async ()=>{
     $("#add-source-btn").disabled = true;
     $("#add-source-btn").textContent = "⏳ Scraping...";
     try{
-        const r = await fetch(`/api/add-source?url=${encodeURIComponent(url)}`);
+        const r = await apiFetch(`/api/add-source?url=${encodeURIComponent(url)}`);
         const d = await r.json();
         if(d.success){
             $("#add-source-result").innerHTML = `<div class="alert alert-success">${d.message}</div>`;
@@ -1487,11 +1679,13 @@ $("#add-source-btn").addEventListener("click", async ()=>{
             showToast(d.message, 'error');
         }
     }catch(e){
-        $("#add-source-result").innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
-        showToast('Erreur: ' + e.message, 'error');
+        if (e.message !== 'unauthenticated') {
+            $("#add-source-result").innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
+            showToast('Erreur: ' + e.message, 'error');
+        }
     }finally{
         $("#add-source-btn").disabled = false;
-        $("#add-source-btn").textContent = " Scraper & Ajouter";
+        $("#add-source-btn").textContent = "🔍 Scraper & Ajouter";
     }
 });
 
@@ -1572,11 +1766,11 @@ CONFIGURE_HTML = r"""<!doctype html>
 <body>
 <header><div class="logo">▶</div><div><h1>Configuration <span class="badge">langue</span></h1></div></header>
 <main>
-  <div class="card"><h2> Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
+  <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
     <div class="lang-grid" id="lang-grid">
       <button class="lang-btn" data-lang="all"><span class="lang-flag">🌍</span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
-      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
-      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
+      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
+      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
       <button class="lang-btn" data-lang="es"><span class="lang-flag">🇪🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
       <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
       <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
