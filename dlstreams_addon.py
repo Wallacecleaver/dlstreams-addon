@@ -45,9 +45,12 @@ _HIST_KEEP_MIN = 7 * 24 * 60      # minutes conservees dans l'historique (7 jour
 # --- sessions dashboard : jeton opaque valide cote serveur, stocke en memoire
 # (pas de JWT/dependance -- juste un dict token -> heure d'emission). Remplace
 # l'ancien systeme qui ne verifiait le mot de passe qu'une fois sans jamais
-# proteger les endpoints /api/* ensuite. ---
+# proteger les endpoints /api/* ensuite. Persistees sur disque pour survivre
+# aux redemarrages (Render recycle souvent l'instance, ce qui invalidait la
+# session et forçait a se reconnecter). ---
 _sessions: dict[str, float] = {}
 _SESSION_TTL = 24 * 3600
+_SESSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_sessions.json")
 _login_attempts: dict[str, list[float]] = {}   # ip -> heures des echecs recents
 _LOGIN_MAX_ATTEMPTS = 6
 _LOGIN_WINDOW = 300  # 5 minutes
@@ -158,6 +161,27 @@ def _log_activity(action: str, details: str = ""):
     })
     if len(_activity_log) > 100:
         _activity_log.pop(0)
+
+def _sessions_load():
+    """Recharge les sessions depuis le disque, en purgeant celles expirees."""
+    global _sessions
+    try:
+        if os.path.exists(_SESSION_FILE):
+            with open(_SESSION_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            now = time.time()
+            _sessions = {k: float(v) for k, v in data.items()
+                         if isinstance(v, (int, float)) and (now - float(v)) < _SESSION_TTL}
+    except Exception:
+        pass
+
+def _sessions_save():
+    """Persiste les sessions sur disque (appelee a la connexion/deconnexion)."""
+    try:
+        with open(_SESSION_FILE, "w", encoding="utf-8") as f:
+            json.dump(_sessions, f)
+    except Exception:
+        pass
 
 def _hist_load():
     """Charge l'historique de trafic persiste (7 jours) au demarrage."""
@@ -655,6 +679,7 @@ class Handler(BaseHTTPRequestHandler):
                 token = secrets.token_urlsafe(24)
                 with _stats_lock:
                     _sessions[token] = time.time()
+                _sessions_save()
                 _log_activity("Connexion réussie")
                 resp = json.dumps({"success": True}).encode()
                 self.send_response(200)
@@ -676,6 +701,7 @@ class Handler(BaseHTTPRequestHandler):
             tok = self._cookie("dl_session")
             with _stats_lock:
                 _sessions.pop(tok, None)
+            _sessions_save()
             resp = json.dumps({"success": True}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -770,6 +796,20 @@ class Handler(BaseHTTPRequestHandler):
 
             if path == "/configure" or path == "/configure.html":
                 return self._send(200, CONFIGURE_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
+
+            if path == "/api/logout":
+                tok = self._cookie("dl_session")
+                with _stats_lock:
+                    _sessions.pop(tok, None)
+                _sessions_save()
+                resp = json.dumps({"success": True}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                self.send_header("Set-Cookie", "dl_session=; HttpOnly; Path=/; Max-Age=0")
+                self.end_headers()
+                self.wfile.write(resp)
+                return
 
             if path == "/api/stats":
                 if not self._require_auth():
@@ -1017,6 +1057,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     _hist_load()
+    _sessions_load()
     print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     print(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     print(f"  Configure: http://127.0.0.1:{PORT}/configure")
