@@ -1030,11 +1030,6 @@ def main():
         print("  " + "=" * 62)
     else:
         print("  Mot de passe dashboard : defini via DASHBOARD_PASSWORD")
-    try:
-        n = len(channels())
-        print(f"  annuaire : {n} chaines chargees (dont {len(_POPULAR_CHANNELS)} populaires)")
-    except Exception as e:
-        print(f"  annuaire : erreur de chargement ({e})")
     srv = None
     for _ in range(10):
         try:
@@ -1044,7 +1039,17 @@ def main():
             time.sleep(0.5)
     if srv is None:
         raise SystemExit(f"impossible de lier le port {PORT}")
+    threading.Thread(target=_warm_channels, daemon=True).start()
     srv.serve_forever()
+
+def _warm_channels():
+    """Précharge l'annuaire en arrière-plan : le serveur écoute tout de suite
+    (health check Render immédiat), le cache se remplit sans bloquer le boot."""
+    try:
+        n = len(channels())
+        print(f"  annuaire : {n} chaines chargees (dont {len(_POPULAR_CHANNELS)} populaires)")
+    except Exception as e:
+        print(f"  annuaire : erreur de chargement ({e})")
 
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="fr">
