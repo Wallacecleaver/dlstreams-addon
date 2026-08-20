@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.11.0"
+_VERSION = "1.11.1"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -2259,6 +2259,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div class="nav-section-label">Menu</div>
           <button class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">📊 Vue d'ensemble</button>
           <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
+          <button class="nav-item" data-page="programs" onclick="navigateTo('programs')">📺 Programmes</button>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
           <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages</button>
@@ -2387,31 +2388,23 @@ DASHBOARD_HTML = r"""<!doctype html>
               <button class="btn-outline-sm" id="top-more" onclick="toggleTopLimit()" style="width:100%">Voir plus</button>
             </div>
           </div>
+        </div>
 
+        <!-- PAGE: PROGRAMMES -->
+        <div class="page" id="page-programs">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Programmes</div>
+              <div class="page-sub">Programme en cours des chaînes populaires</div>
+            </div>
+          </div>
           <div class="card">
             <div class="card-head">
-              <div class="card-title">📺 Programmes en cours</div>
+              <div class="card-title">📺 En ce moment</div>
               <span class="card-desc" id="now-total"></span>
             </div>
             <div class="card-body" id="now-list" style="padding-top:8px">
               <div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div class="card-title">⭐ Favoris</div>
-              <div class="fav-actions">
-                <button class="btn-outline-sm" id="scan-favs-btn" onclick="scanFavs()">🩺 Tester mes favoris</button>
-                <button class="btn-outline-sm" onclick="exportFavsM3U()">⬇️ M3U</button>
-                <div class="search-bar" style="min-width:220px"><input type="search" id="fav-q" placeholder="Filtrer mes favoris…"></div>
-              </div>
-            </div>
-            <div class="scan-status" id="scan-status" style="display:none"></div>
-            <div class="card-body">
-              <div class="mini-grid" id="fav-list">
-                <div class="fav-empty">Aucun favori — va dans le <a href="#" onclick="navigateTo('catalog');return false">Catalogue</a> et clique sur ★ pour épingler une chaîne</div>
-              </div>
             </div>
           </div>
         </div>
@@ -2717,14 +2710,15 @@ function navigateTo(page) {
         sources: 'Gérer vos sources personnalisées',
         catalog: 'Explorer toutes les chaînes disponibles',
         logs: 'Journal en direct des requêtes passées sur votre proxy',
-        settings: 'Logos, EPG et catégories personnalisables'
+        settings: 'Logos, EPG et catégories personnalisables',
+        programs: 'Programme en cours des chaînes populaires'
     };
     document.querySelector('.page.active .page-sub').textContent = subtitles[page] || '';
 
-    if (page === 'dashboard') { renderFavs(); }
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'logs') { loadLogs(); }
     if (page === 'settings') { loadSettings(); }
+    if (page === 'programs') { loadNow(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
     }
@@ -3239,10 +3233,11 @@ async function scanFavs(){
     const tested = favs.slice(0,200);
     const btn = $("#scan-favs-btn");
     const status = $("#scan-status");
-    btn.disabled = true;
-    btn.textContent = "⏳ Scan en cours...";
-    status.style.display = 'flex';
-    status.innerHTML = '<div class="scan-spin"></div><span>Test de <b>' + tested.length + '</b> chaîne(s)' + (favs.length > 200 ? ' (sur ' + favs.length + ', max 200)' : '') + '…</span>';
+    if(btn){ btn.disabled = true; btn.textContent = "⏳ Scan en cours..."; }
+    if(status){
+        status.style.display = 'flex';
+        status.innerHTML = '<div class="scan-spin"></div><span>Test de <b>' + tested.length + '</b> chaîne(s)' + (favs.length > 200 ? ' (sur ' + favs.length + ', max 200)' : '') + '…</span>';
+    }
     try{
         const r = await apiFetch('/api/check-batch', {
             method: 'POST',
@@ -3254,19 +3249,18 @@ async function scanFavs(){
         const ok = results.filter(x=>x.ok).length;
         results.forEach(res => { CHECKED[res.key] = {state: res.ok ? "ok" : "ko", ms: res.ms}; });
         saveChecked();
-        status.innerHTML = '<span>Scan terminé : <b>' + ok + '</b> OK / <b>' + results.length + '</b> chaînes</span>' +
+        if(status) status.innerHTML = '<span>Scan terminé : <b>' + ok + '</b> OK / <b>' + results.length + '</b> chaînes</span>' +
             '<span class="scan-ok">✓</span><span class="scan-ko">✗</span>';
         renderFavs();
         render();
         toast(`Scan terminé : ${ok}/${results.length} OK`, ok === results.length ? 'success' : 'warn');
     }catch(e){
         if (e.message !== 'unauthenticated') {
-            status.innerHTML = '<span class="scan-ko">✗ Scan impossible : ' + escapeHtml(e.message) + '</span>';
+            if(status) status.innerHTML = '<span class="scan-ko">✗ Scan impossible : ' + escapeHtml(e.message) + '</span>';
             toast('❌ Scan impossible: ' + e.message, 'error');
         }
     }finally{
-        btn.disabled = false;
-        btn.textContent = "🩺 Tester mes favoris";
+        if(btn){ btn.disabled = false; btn.textContent = "🩺 Tester mes favoris"; }
     }
 }
 
@@ -3462,7 +3456,6 @@ $("#add-source-btn").addEventListener("click", async ()=>{
 });
 
 $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,120);}})());
-$("#fav-q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(renderFavs,120);}})());
 $("#lang-filter").addEventListener("change", (e) => {
     LANG_FILTER = e.target.value;
     localStorage.setItem("dl_lang", e.target.value);
@@ -3595,7 +3588,6 @@ function sysRows(rows){
 async function boot(){
     await Promise.all([refreshStats(), loadCatalog("dlstreams"), loadPlays()]);
     render();
-    renderFavs();
     loadLogs();
     loadLive();
     restartLogPolling();
