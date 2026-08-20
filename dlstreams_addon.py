@@ -8,18 +8,21 @@ import json
 import os
 import re
 import secrets
+import struct
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.7.2"
+_VERSION = "1.8.0"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -114,6 +117,20 @@ def _detect_lang(name: str) -> str:
     if any(x in n for x in ["portugal", "portuguese", " pt ", "sport tv"]):
         return "pt"
     return "other"
+
+def _genre_for(name: str) -> list[str]:
+    n = name.lower()
+    if any(k in n for k in ["sport", "foot", "tennis", "racing", "formula", "f1 ", "golf", "cycl", "beinsport", "eurosport", "rmc", "canal+ sport", "ufc", "boxe", "mma"]):
+        return ["Sports"]
+    if any(k in n for k in ["news", "info", "bfm", "cnews", "france info", "cnn", "bbc", "sky news", "al jazeera", "rt "]):
+        return ["Actualités"]
+    if any(k in n for k in ["cinema", "cinéma", "film", "séries", "series", "family", "kids", "gulli", "cartoon", "plus"]):
+        return ["Films & Séries"]
+    if any(k in n for k in ["musique", "music", "mtv", "radio", "clip"]):
+        return ["Musique"]
+    if any(k in n for k in ["découverte", "decouverte", "documentaire", "voyage", "histoire", "geo"]):
+        return ["Documentaire"]
+    return ["Télévision"]
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
     headers = {"User-Agent": UA, "Referer": referer}
@@ -588,6 +605,175 @@ def _daily_totals() -> list[dict]:
             days[day] = days.get(day, 0) + count
     return [{"date": d, "total": days[d]} for d in sorted(days)]
 
+# --- Posters generes (sans dependance, pur Python) ---
+# Tuile paysage 320x180 dans l'univers graphique de l'addon (fond sombre
+# + diagonale indigo/rose) avec le nom de la chaine. Utilise comme poster
+# de secours quand une chaine n'a pas de logo reel (dlstreams n'en fournit
+# aucun). Encodage PNG minimal (RGB, filtre 0) + police bitmap 5x7.
+_FONT5X7 = [
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x04,0x04,0x04,0x04,0x04,0x00,0x04,
+    0x0A,0x0A,0x0A,0x00,0x00,0x00,0x00, 0x0A,0x0A,0x1F,0x0A,0x1F,0x0A,0x0A,
+    0x04,0x1E,0x05,0x0E,0x14,0x0F,0x04, 0x19,0x19,0x02,0x04,0x08,0x13,0x13,
+    0x0C,0x12,0x12,0x0C,0x12,0x12,0x0C, 0x06,0x06,0x02,0x04,0x00,0x00,0x00,
+    0x02,0x04,0x08,0x08,0x08,0x04,0x02, 0x08,0x04,0x02,0x02,0x02,0x04,0x08,
+    0x00,0x04,0x15,0x0E,0x15,0x04,0x00, 0x00,0x04,0x04,0x1F,0x04,0x04,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x06,0x06, 0x00,0x00,0x00,0x1F,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x06,0x00, 0x01,0x02,0x02,0x04,0x08,0x08,0x10,
+    0x0E,0x11,0x13,0x15,0x19,0x11,0x0E, 0x04,0x0C,0x04,0x04,0x04,0x04,0x0E,
+    0x0E,0x11,0x10,0x08,0x04,0x02,0x1F, 0x1F,0x08,0x04,0x08,0x10,0x11,0x0E,
+    0x08,0x0C,0x0A,0x09,0x1F,0x08,0x08, 0x1F,0x01,0x0F,0x10,0x10,0x11,0x0E,
+    0x0E,0x01,0x01,0x0F,0x11,0x11,0x0E, 0x1F,0x10,0x08,0x04,0x04,0x04,0x04,
+    0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E, 0x0E,0x11,0x11,0x1E,0x10,0x10,0x0E,
+    0x00,0x06,0x06,0x00,0x06,0x06,0x00, 0x00,0x06,0x06,0x00,0x06,0x06,0x02,
+    0x02,0x04,0x08,0x10,0x08,0x04,0x02, 0x00,0x00,0x1F,0x00,0x1F,0x00,0x00,
+    0x08,0x04,0x02,0x01,0x02,0x04,0x08, 0x0E,0x11,0x10,0x08,0x04,0x00,0x04,
+    0x0E,0x11,0x10,0x16,0x15,0x15,0x0E, 0x0E,0x11,0x11,0x1F,0x11,0x11,0x11,
+    0x0F,0x11,0x11,0x0F,0x11,0x11,0x0F, 0x0E,0x11,0x01,0x01,0x01,0x11,0x0E,
+    0x0F,0x11,0x11,0x11,0x11,0x11,0x0F, 0x1F,0x01,0x01,0x0F,0x01,0x01,0x1F,
+    0x1F,0x01,0x01,0x0F,0x01,0x01,0x01, 0x0E,0x11,0x01,0x1D,0x11,0x11,0x0E,
+    0x11,0x11,0x11,0x1F,0x11,0x11,0x11, 0x0E,0x04,0x04,0x04,0x04,0x04,0x0E,
+    0x18,0x08,0x08,0x08,0x08,0x09,0x06, 0x11,0x09,0x05,0x03,0x05,0x09,0x11,
+    0x01,0x01,0x01,0x01,0x01,0x01,0x1F, 0x11,0x1B,0x15,0x11,0x11,0x11,0x11,
+    0x11,0x13,0x15,0x19,0x11,0x11,0x11, 0x0E,0x11,0x11,0x11,0x11,0x11,0x0E,
+    0x0F,0x11,0x11,0x0F,0x01,0x01,0x01, 0x0E,0x11,0x11,0x11,0x15,0x09,0x16,
+    0x0F,0x11,0x11,0x0F,0x05,0x09,0x11, 0x0E,0x11,0x01,0x0E,0x10,0x11,0x0E,
+    0x1F,0x04,0x04,0x04,0x04,0x04,0x04, 0x11,0x11,0x11,0x11,0x11,0x11,0x0E,
+    0x11,0x11,0x11,0x11,0x11,0x0A,0x04, 0x11,0x11,0x11,0x15,0x15,0x1B,0x11,
+    0x11,0x11,0x0A,0x04,0x0A,0x11,0x11, 0x11,0x11,0x0A,0x04,0x04,0x04,0x04,
+    0x1F,0x10,0x08,0x04,0x02,0x01,0x1F, 0x0E,0x02,0x02,0x02,0x02,0x02,0x0E,
+    0x10,0x08,0x08,0x04,0x02,0x02,0x01, 0x0E,0x08,0x08,0x08,0x08,0x08,0x0E,
+    0x04,0x0A,0x11,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x1F,
+    0x04,0x02,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x0E,0x10,0x1E,0x11,0x1E,
+    0x01,0x01,0x0D,0x13,0x11,0x11,0x0F, 0x00,0x00,0x0E,0x01,0x01,0x11,0x0E,
+    0x10,0x10,0x1C,0x12,0x11,0x11,0x1E, 0x00,0x00,0x0E,0x11,0x1F,0x01,0x0E,
+    0x0C,0x12,0x02,0x0F,0x02,0x02,0x02, 0x00,0x1E,0x11,0x11,0x1E,0x10,0x0E,
+    0x01,0x01,0x0D,0x13,0x11,0x11,0x11, 0x04,0x00,0x0C,0x04,0x04,0x04,0x0E,
+    0x08,0x00,0x18,0x08,0x08,0x08,0x06, 0x01,0x01,0x09,0x05,0x03,0x05,0x09,
+    0x0C,0x04,0x04,0x04,0x04,0x04,0x0E, 0x00,0x00,0x0B,0x15,0x15,0x11,0x11,
+    0x00,0x00,0x0D,0x13,0x11,0x11,0x11, 0x00,0x00,0x0E,0x11,0x11,0x11,0x0E,
+    0x00,0x00,0x0F,0x11,0x11,0x0F,0x01, 0x00,0x00,0x1E,0x11,0x11,0x1E,0x10,
+    0x00,0x00,0x0D,0x13,0x01,0x01,0x01, 0x00,0x00,0x0E,0x01,0x0E,0x10,0x0E,
+    0x02,0x02,0x0F,0x02,0x02,0x12,0x0C, 0x00,0x00,0x11,0x11,0x11,0x13,0x0D,
+    0x00,0x00,0x11,0x11,0x11,0x0A,0x04, 0x00,0x00,0x11,0x11,0x15,0x15,0x0A,
+    0x00,0x00,0x11,0x0A,0x04,0x0A,0x11, 0x00,0x00,0x11,0x11,0x1E,0x10,0x0E,
+    0x00,0x00,0x1F,0x08,0x04,0x02,0x1F, 0x02,0x04,0x04,0x08,0x04,0x04,0x02,
+    0x04,0x04,0x04,0x00,0x04,0x04,0x04, 0x08,0x04,0x04,0x02,0x04,0x04,0x08,
+    0x00,0x00,0x06,0x09,0x06,0x00,0x00,
+]
+
+def _png_chunk(tag: bytes, data: bytes) -> bytes:
+    c = tag + data
+    return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xffffffff)
+
+def _png_encode(w: int, h: int, rgb: bytes) -> bytes:
+    raw = bytearray()
+    stride = w * 3
+    for y in range(h):
+        raw.append(0)
+        raw += rgb[y * stride:(y + 1) * stride]
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n"
+            + _png_chunk(b"IHDR", ihdr)
+            + _png_chunk(b"IDAT", zlib.compress(bytes(raw), 6))
+            + _png_chunk(b"IEND", b""))
+
+def _text_width(text: str, scale: int) -> int:
+    return len(text) * 6 * scale
+
+def _draw_text(buf: bytearray, w: int, text: str, x: int, y: int, scale: int, color: tuple[int, int, int]):
+    for ch in text:
+        idx = ord(ch) - 32
+        if idx < 0 or idx >= len(_FONT5X7) // 7:
+            idx = 0
+        glyph = _FONT5X7[idx * 7:(idx + 1) * 7]
+        for row in range(7):
+            bits = glyph[row]
+            for col in range(5):
+                if bits & (1 << (4 - col)):
+                    for dy in range(scale):
+                        for dx in range(scale):
+                            px, py = x + col * scale + dx, y + row * scale + dy
+                            if 0 <= px < w and 0 <= py < len(buf) // (w * 3):
+                                o = (py * w + px) * 3
+                                buf[o:o + 3] = bytes(color)
+        x += 6 * scale
+
+def _fill_rect(buf: bytearray, w: int, x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]):
+    for yy in range(max(0, y0), min(y1, len(buf) // (w * 3))):
+        for xx in range(max(0, x0), min(x1, w)):
+            o = (yy * w + xx) * 3
+            buf[o:o + 3] = bytes(color)
+
+def _poster_png(name: str) -> bytes:
+    W, H = 320, 180
+    buf = bytearray(W * H * 3)
+    c1, c2 = (15, 23, 42), (30, 27, 75)   # #0f172a -> #1e1b4b
+    accent = (99, 102, 241)               # indigo #6366f1
+    pink = (236, 72, 153)                 # rose #ec4899
+    for y in range(H):
+        t = y / (H - 1)
+        for x in range(W):
+            o = (y * W + x) * 3
+            buf[o:o + 3] = bytes((int(c1[0] + (c2[0] - c1[0]) * t),
+                                  int(c1[1] + (c2[1] - c1[1]) * t),
+                                  int(c1[2] + (c2[2] - c1[2]) * t)))
+    _fill_rect(buf, W, -80, 0, W, 40, (40, 44, 90))
+    _fill_rect(buf, W, 0, H - 46, W, H - 26, (30, 33, 78))
+    for x in range(W):
+        prog = (x + (H - 26)) % (W + 260) / (W + 260)
+        if 0 <= prog <= 1:
+            col = (int(accent[0] + (pink[0] - accent[0]) * prog),
+                   int(accent[1] + (pink[1] - accent[1]) * prog),
+                   int(accent[2] + (pink[2] - accent[2]) * prog))
+            _fill_rect(buf, W, x, H - 26, x + 1, H - 20, col)
+    title = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().upper() or "TV"
+    scale = 4
+    max_w = W - 32
+    # decoupage en lignes qui tiennent
+    lines, cur = [], ""
+    for word in title.split():
+        trial = (cur + " " + word).strip()
+        if _text_width(trial, scale) <= max_w:
+            cur = trial
+        else:
+            if cur: lines.append(cur)
+            cur = word
+    if cur: lines.append(cur)
+    if len(lines) > 2:
+        lines = lines[:2]
+    # echelle reduite si ca ne rentre toujours pas
+    while any(_text_width(l, scale) > max_w for l in lines) and scale > 2:
+        scale -= 1
+    total_h = len(lines) * 7 * scale + (len(lines) - 1) * scale
+    ty = (H - total_h) // 2 - 2
+    for line in lines:
+        tw = _text_width(line, scale)
+        _draw_text(buf, W, line, (W - tw) // 2, ty, scale, (241, 245, 249))
+        ty += 8 * scale
+    # pastille LIVE
+    pill_w, pill_h, pill_x, pill_y = 56, 20, 14, 12
+    for y in range(pill_y, pill_y + pill_h):
+        t = (y - pill_y) / pill_h
+        for x in range(pill_x, pill_x + pill_w):
+            o = (y * W + x) * 3
+            buf[o:o + 3] = bytes((int(accent[0] + (pink[0] - accent[0]) * t),
+                                  int(accent[1] + (pink[1] - accent[1]) * t),
+                                  int(accent[2] + (pink[2] - accent[2]) * t)))
+    _draw_text(buf, W, "LIVE", pill_x + 11, pill_y + 7, 1, (255, 255, 255))
+    return _png_encode(W, H, bytes(buf))
+
+_posters_cache: dict[str, bytes] = {}
+
+def _poster_get(name: str) -> bytes:
+    key = name.lower()
+    png = _posters_cache.get(key)
+    if png is None:
+        png = _poster_png(name)
+        if len(_posters_cache) > 300:
+            _posters_cache.clear()
+        _posters_cache[key] = png
+    return png
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -810,6 +996,10 @@ class Handler(BaseHTTPRequestHandler):
         path = u.path
         qs = urllib.parse.parse_qs(u.query)
         try:
+            if path.startswith("/poster/") and path.endswith(".png"):
+                pname = urllib.parse.unquote(path[len("/poster/"):-4])
+                return self._send(200, _poster_get(pname), "image/png", True)
+
             if path == "/dashboard" or path == "/dashboard.html":
                 return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
@@ -1050,14 +1240,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _manifest(self, lang_filter: str | None = None) -> dict:
         _extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]
-        name = "dlstreams + Vavoo"
-        desc = "Chaines live dlstreams (DaddyLive) + Vavoo, proxifiees (headers + content-type corriges). Dashboard web integre avec filtre langue. Sans MediaFlow."
+        name = "Chaînes live (dlstreams + Vavoo)"
+        desc = ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
+                "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
         
         if lang_filter and lang_filter != "all":
             lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
             lang_name = lang_names.get(lang_filter, lang_filter)
-            name = f"dlstreams {lang_name}"
-            desc = f"Chaines {lang_name} uniquement. Filtre actif: {lang_name}."
+            name = f"Chaînes live {lang_name}"
+            desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
         
         return {
             "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
@@ -1076,8 +1267,22 @@ class Handler(BaseHTTPRequestHandler):
     def _meta(self, c: dict, source: str) -> dict:
         cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
         logo = c.get("logo") or ""
+        base = self._self_base()
+        slug = urllib.parse.quote(c["name"], safe="")
+        poster = logo or f"{base}/poster/{slug}.png"
+        lang = c.get("lang", "fr")
+        lang_label = {"fr": "française", "en": "anglaise", "es": "espagnole",
+                      "de": "allemande", "it": "italienne", "ar": "arabe",
+                      "pt": "portugaise"}.get(lang, lang)
+        genres = _genre_for(c["name"])
+        desc = (f"Chaîne {c['name']} diffusée en direct, chaîne {lang_label} "
+                f"disponible via {source}. Lecture directe dans Stremio grâce au proxy intégré.")
         return {"id": f"{source}:{cid}", "type": "tv", "name": c["name"],
-                "poster": logo, "logo": logo, "posterShape": "landscape"}
+                "poster": poster, "logo": logo or poster, "posterShape": "landscape",
+                "background": poster,
+                "description": desc,
+                "releaseInfo": "En direct",
+                "genres": genres}
 
 def main():
     _hist_load()
