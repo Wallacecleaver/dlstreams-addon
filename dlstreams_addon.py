@@ -35,6 +35,8 @@ _START_TIME = time.time()
 _request_count = 0
 _error_count = 0
 _stats_lock = threading.Lock()
+_hist: list[list[int]] = []      # [minute_unix, nb_requetes] -> sparkline (1h)
+_request_log: list[dict] = []    # journal des requetes (buffer 300)
 
 # --- sessions dashboard : jeton opaque valide cote serveur, stocke en memoire
 # (pas de JWT/dependance -- juste un dict token -> heure d'emission). Remplace
@@ -423,7 +425,7 @@ def _stats() -> dict:
     return {
         "status": "ok",
         "uptime": int(time.time() - _START_TIME),
-        "version": "1.5.0",
+        "version": "1.6.0",
         "port": PORT,
         "requests": _request_count,
         "errors": _error_count,
@@ -437,6 +439,7 @@ def _stats() -> dict:
             "age_seconds": int(time.time() - _vavoo_cache.get("at", 0)) if _vavoo_cache.get("at") else None,
         },
         "lang_counts": lang_counts,
+        "history": [c for _, c in _hist],
     }
 
 class Handler(BaseHTTPRequestHandler):
@@ -447,10 +450,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send(self, code: int, body: bytes, ctype: str, cache: bool = False):
         global _request_count, _error_count
+        now_min = int(time.time() // 60) * 60
         with _stats_lock:
             _request_count += 1
             if code >= 400:
                 _error_count += 1
+            if _hist and _hist[-1][0] == now_min:
+                _hist[-1][1] += 1
+            else:
+                _hist.append([now_min, 1])
+                while len(_hist) > 1 and _hist[0][0] < now_min - 3600:
+                    _hist.pop(0)
+            if not self.path.startswith(("/api/stats", "/api/logs", "/api/activity")):
+                _request_log.append({
+                    "t": time.strftime("%H:%M:%S"),
+                    "method": self.command,
+                    "path": self.path.split("?", 1)[0],
+                    "code": code,
+                    "ip": self._client_ip(),
+                })
+                if len(_request_log) > 300:
+                    del _request_log[:len(_request_log) - 300]
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -616,6 +636,13 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 return self._send(200, json.dumps(list(reversed(_activity_log))).encode(), "application/json")
 
+            if path == "/api/logs":
+                if not self._require_auth():
+                    return
+                with _stats_lock:
+                    logs = list(reversed(_request_log))
+                return self._send(200, json.dumps(logs).encode(), "application/json")
+
             if path == "/api/add-source":
                 if not self._require_auth():
                     return
@@ -648,6 +675,33 @@ class Handler(BaseHTTPRequestHandler):
                 _log_activity("Cache rafraîchi", f"{n_dl} dlstreams / {n_vv} vavoo en {dur_ms}ms")
                 return self._send(200, json.dumps({"success": True, "dlstreams": n_dl, "vavoo": n_vv,
                                                     "ms": dur_ms}).encode(), "application/json")
+
+            if path == "/api/check":
+                if not self._require_auth():
+                    return
+                src = qs.get("src", ["dlstreams"])[0]
+                cid = qs.get("id", [None])[0]
+                if not cid:
+                    return self._send(400, json.dumps({"ok": False, "error": "id manquant"}).encode(), "application/json")
+                t0 = time.time()
+                try:
+                    if src == "vavoo":
+                        real = vavoo_resolve(_unb64u(cid))
+                        if not real:
+                            raise ValueError("flux introuvable")
+                        _proxy_get(real, {"User-Agent": _VAVOO_UA}, timeout=10)
+                        url = f"{self._self_base()}/vhls?v={_b64u(cid)}"
+                    else:
+                        m3u8, host = resolve(cid)
+                        _proxy_get(m3u8, {"Referer": host + "/", "Origin": host}, timeout=10)
+                        url = f"{self._self_base()}/hls/{cid}/index.m3u8"
+                    ms = int((time.time() - t0) * 1000)
+                    _log_activity("Test flux", f"#{cid} OK en {ms}ms")
+                    return self._send(200, json.dumps({"ok": True, "ms": ms, "url": url}).encode(), "application/json")
+                except Exception as e:
+                    ms = int((time.time() - t0) * 1000)
+                    _log_activity("Test flux", f"#{cid} échec ({type(e).__name__})")
+                    return self._send(200, json.dumps({"ok": False, "ms": ms, "error": str(e)}).encode(), "application/json")
 
             if path in ("/", "/manifest.json"):
                 lang = qs.get("lang", [None])[0]
@@ -758,7 +812,7 @@ class Handler(BaseHTTPRequestHandler):
         
         return {
             "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
-            "version": "1.5.0",
+"version": "1.6.0",
             "name": name,
             "description": desc,
             "resources": ["catalog", "meta", "stream"],
@@ -1240,6 +1294,60 @@ DASHBOARD_HTML = r"""<!doctype html>
     .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
     .fav-empty { grid-column: 1/-1; text-align: center; padding: 30px; color: var(--text-secondary); }
     .fav-empty a { color: var(--primary); }
+    .theme-btn {
+        margin-left: auto; width: 38px; height: 38px;
+        border-radius: 10px; border: 1px solid var(--border);
+        background: var(--bg-hover); color: var(--text-primary);
+        font-size: 16px; cursor: pointer; transition: all .2s;
+        display: grid; place-items: center; flex-shrink: 0;
+    }
+    .theme-btn:hover { border-color: var(--primary); }
+    body.light {
+        --bg-dark: #f1f5f9;
+        --bg-card: #ffffff;
+        --bg-hover: #e2e8f0;
+        --text-primary: #0f172a;
+        --text-secondary: #64748b;
+        --border: #e2e8f0;
+    }
+    body.light .login-container { background: rgba(255, 255, 255, 0.88); }
+    body.light .sparkline .bar { background: linear-gradient(180deg, #4f46e5, rgba(79, 70, 229, .35)); }
+    .sparkline { display: flex; align-items: flex-end; gap: 3px; height: 90px; }
+    .sparkline .bar {
+        flex: 1; border-radius: 3px 3px 0 0;
+        background: linear-gradient(180deg, #6366f1, rgba(99, 102, 241, .35));
+        transition: height .5s ease; min-height: 2px;
+    }
+    .check-btn {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 4px 10px; border: 1px solid var(--border);
+        border-radius: 7px; background: transparent; color: var(--text-secondary);
+        font-size: 12px; cursor: pointer; transition: all .2s; white-space: nowrap;
+    }
+    .check-btn:hover { border-color: var(--primary); color: var(--text-primary); }
+    .check-btn.ok { border-color: var(--success); color: var(--success); background: rgba(16,185,129,.08); }
+    .check-btn.ko { border-color: var(--error); color: var(--error); background: rgba(239,68,68,.08); }
+    .check-btn.busy { pointer-events: none; opacity: .6; }
+    .log-feed { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .log-row {
+        display: flex; gap: 10px; align-items: baseline;
+        padding: 5px 8px; border-radius: 6px;
+        border-bottom: 1px solid var(--border);
+    }
+    .log-row:hover { background: var(--bg-hover); }
+    .log-time { color: var(--text-secondary); white-space: nowrap; }
+    .log-method {
+        min-width: 36px; text-align: center; font-weight: 600;
+        padding: 1px 6px; border-radius: 4px; font-size: 11px;
+    }
+    .log-method.GET { color: var(--success); background: rgba(16,185,129,.12); }
+    .log-method.POST { color: var(--warning); background: rgba(245,158,11,.12); }
+    .log-code { min-width: 30px; text-align: right; font-weight: 700; }
+    .log-code.ok { color: var(--success); }
+    .log-code.warn { color: var(--warning); }
+    .log-code.err { color: var(--error); }
+    .log-ip { color: var(--text-secondary); }
+    .log-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     @media (max-width: 768px) {
         .sidebar { transform: translateX(-100%); }
         .sidebar.open { transform: translateX(0); }
@@ -1268,6 +1376,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         <div class="sidebar-header">
             <div class="logo">▶</div>
             <h2>dlstreams</h2>
+            <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Basculer le thème">🌙</button>
         </div>
         <div class="nav-section">
             <div class="nav-section-title">Navigation</div>
@@ -1362,8 +1471,20 @@ DASHBOARD_HTML = r"""<!doctype html>
             </section>
 
             <section class="card">
-                <h2>🕒 Activité récente</h2>
-                <div id="activity-list" style="font-size:13px;color:var(--text-secondary)">chargement…</div>
+                <h2>📈 Trafic — dernière heure</h2>
+                <div class="sparkline" id="sparkline"></div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-top:6px">
+                    <span>il y a 1h</span><span>maintenant</span>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>🕒 Logs serveur <span style="font-size:13px;color:var(--text-secondary);font-weight:400">— en direct</span></h2>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+                    <button class="check-btn" id="log-pause" onclick="toggleLogPause()">⏸ pause</button>
+                    <span style="font-size:12px;color:var(--text-secondary)" id="log-status">en cours…</span>
+                </div>
+                <div class="log-feed" id="log-list" style="max-height:320px;overflow-y:auto"></div>
             </section>
 
             <section class="card">
@@ -1414,7 +1535,7 @@ DASHBOARD_HTML = r"""<!doctype html>
 
             <section class="card">
                 <h2>🕒 Activité récente</h2>
-                <div id="activity-list" style="font-size:13px;color:var(--text-secondary)">chargement…</div>
+                <div id="activity-list-src" style="font-size:13px;color:var(--text-secondary)">chargement…</div>
             </section>
         </div>
 
@@ -1471,6 +1592,17 @@ const fmtDur = s => {
     return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");
 };
 const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
+
+// Theme clair/sombre, persisté en localStorage
+function applyTheme(t){
+    document.body.classList.toggle("light", t==="light");
+    localStorage.setItem("dl_theme", t);
+    $("#theme-btn").textContent = t==="light" ? "☀️" : "🌙";
+}
+function toggleTheme(){
+    applyTheme(localStorage.getItem("dl_theme")==="light" ? "dark" : "light");
+}
+applyTheme(localStorage.getItem("dl_theme") || "dark");
 
 // Session reelle : verifiee cote serveur via le cookie httponly (plus de
 // localStorage -- n'importe qui pouvait s'auto-connecter depuis la console
@@ -1555,8 +1687,8 @@ function navigateTo(page) {
     $('#pageTitle').textContent = titles[page][0];
     $('#pageSubtitle').textContent = titles[page][1];
     
-    if (page === 'dashboard') { renderFavs(); loadActivity(); }
-    if (page === 'sources') { loadManualChannels(); loadActivity(); }
+    if (page === 'dashboard') { renderFavs(); }
+    if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams');
         render();
@@ -1576,6 +1708,7 @@ async function refreshStats(){
         $("#c-req").textContent = (d.requests||0).toLocaleString('fr-FR');
         $("#c-err").textContent = d.errors || 0;
         renderChart(d.lang_counts || {});
+        renderSparkline(d.history || []);
         $("#update-time").classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
     }catch(e){
@@ -1607,11 +1740,21 @@ function renderChart(lang_counts){
         </div>`).join("");
 }
 
-async function loadActivity() {
+function renderSparkline(history){
+    const el = $("#sparkline");
+    if(!el) return;
+    const arr = (history||[]).slice(-60);
+    if(!arr.length){ el.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;padding:10px">aucune donnée</div>'; return; }
+    const max = Math.max(...arr, 1);
+    el.innerHTML = arr.map(n => `<div class="bar" style="height:${Math.max(4, Math.round(n/max*100))}%" title="${n} req"></div>`).join("");
+}
+
+async function loadActivity(targetId = "activity-list") {
     try {
         const r = await apiFetch("/api/activity");
         const log = await r.json();
-        const el = $("#activity-list");
+        const el = $("#" + targetId);
+        if(!el) return;
         if (!log.length) { el.innerHTML = "aucune activité pour le moment"; return; }
         el.innerHTML = log.slice(0, 20).map(e =>
             `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
@@ -1723,9 +1866,35 @@ function render(){
             ${logo}
             <div class="name">${escapeHtml(c.name)}</div>
             <div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div>
+            <span class="check-btn ${checkCls(key)}" onclick="event.preventDefault();event.stopPropagation();checkStream('${escapeHtml(key)}')">${checkLabel(key)}</span>
             <span class="fav-star ${isFav(key)?"active":""}" onclick="event.preventDefault();event.stopPropagation();toggleFavKey('${escapeHtml(key)}')">★</span>
         </a>`;
     }).join("");
+}
+
+const CHECKED = {};
+function checkCls(key){ const s = CHECKED[key]; return s ? (s.state==="busy"?"busy":s.state) : ""; }
+function checkLabel(key){
+    const s = CHECKED[key];
+    if(!s) return '▶ test';
+    if(s.state==="busy") return '⏳…';
+    if(s.state==="ok") return '✓ '+(s.ms||0)+'ms';
+    return '✗ KO';
+}
+async function checkStream(key){
+    if(CHECKED[key] && CHECKED[key].state==="busy") return;
+    CHECKED[key] = {state:"busy"};
+    render();
+    const src = key.split(":")[0];
+    const id = key.slice(key.indexOf(":")+1);
+    try{
+        const r = await apiFetch(`/api/check?src=${src}&id=${encodeURIComponent(id)}`);
+        const d = await r.json();
+        CHECKED[key] = {state: d.ok ? "ok" : "ko", ms: d.ms, url: d.url};
+    }catch(e){
+        if (e.message !== 'unauthenticated') CHECKED[key] = {state:"ko", ms:0};
+    }
+    render();
 }
 
 function getFavs(){ try{ return JSON.parse(localStorage.getItem("dl_favs")||"[]"); }catch(e){ return []; } }
@@ -1874,12 +2043,44 @@ function initLinks(){
     $("#host").textContent = BASE;
 }
 
+let LOG_PAUSED = false, _logTimer = null;
+async function loadLogs(){
+    if(LOG_PAUSED) return;
+    try{
+        const r = await apiFetch("/api/logs");
+        const logs = await r.json();
+        const el = $("#log-list");
+        if(!el) return;
+        el.innerHTML = logs.slice(0, 60).map(l => `
+            <div class="log-row">
+                <span class="log-time">${escapeHtml(l.t)}</span>
+                <span class="log-method ${escapeHtml(l.method)}">${escapeHtml(l.method)}</span>
+                <span class="log-code ${l.code>=500?'err':(l.code>=400?'warn':'ok')}">${l.code}</span>
+                <span class="log-ip">${escapeHtml(l.ip)}</span>
+                <span class="log-path">${escapeHtml(l.path)}</span>
+            </div>`).join("") || '<div style="color:var(--text-secondary);text-align:center;padding:20px">aucune requête</div>';
+        $("#log-status").textContent = "dernière MAJ " + new Date().toLocaleTimeString('fr-FR');
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Logs error:", e);
+    }
+}
+function toggleLogPause(){
+    LOG_PAUSED = !LOG_PAUSED;
+    $("#log-pause").textContent = LOG_PAUSED ? "▶ reprendre" : "⏸ pause";
+    if(!LOG_PAUSED) loadLogs();
+}
+function initLogs(){
+    loadLogs();
+    if(_logTimer) clearInterval(_logTimer);
+    _logTimer = setInterval(loadLogs, 3000);
+}
+
 async function boot(){
     await Promise.all([refreshStats(), loadCatalog("dlstreams")]);
     render();
     renderFavs();
     initLinks();
-    loadActivity();
+    initLogs();
     setInterval(refreshStats, 30000);
 }
 
