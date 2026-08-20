@@ -2517,18 +2517,6 @@ function fmtBytes(b){
     if(b >= 1024) return (b/1024).toFixed(1) + " Ko";
     return b + " o";
 }
-function fmtDur(s){
-    if(s==null) return "—";
-    const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
-    return (d?d+"j ":"") + (h?h+"h ":"") + m + "min";
-}
-function fmtAge(s){
-    if(s==null) return "jamais";
-    if(s < 60) return Math.floor(s) + "s";
-    if(s < 3600) return Math.floor(s/60) + "min";
-    if(s < 86400) return Math.floor(s/3600) + "h";
-    return Math.floor(s/86400) + "j";
-}
 function sysRows(rows){
     return rows.map(([k,v]) => `<div class="sys-row"><div class="sys-key">${escapeHtml(k)}</div><div class="sys-val">${escapeHtml(String(v))}</div></div>`).join('');
 }
