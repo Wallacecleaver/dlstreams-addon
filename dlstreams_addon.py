@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.12.3"
+_VERSION = "1.12.4"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -2053,18 +2053,27 @@ DASHBOARD_HTML = r"""<!doctype html>
   .fav-empty { grid-column:1/-1; text-align:center; padding:26px; color:var(--muted); font-size:13px; }
   .fav-empty a { color:var(--accent); }
 
-  .manual-channels-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; margin-top:16px; }
-  .manual-channel-item { display:flex; align-items:center; justify-content:space-between;
-    padding:12px; background:var(--surface2); border:1px solid var(--border);
-    border-radius:10px; transition:all .15s; }
-  .manual-channel-item:hover { border-color:var(--accent); }
-  .manual-channel-info { flex:1; }
-  .manual-channel-name { font-size:14px; font-weight:600; margin-bottom:4px; }
-  .manual-channel-meta { font-size:11px; color:var(--muted); }
-  .remove-btn { padding:6px 12px; background:rgba(239,68,68,0.1);
-    border:1px solid var(--error); border-radius:6px;
-    color:var(--error); cursor:pointer; font-size:12px; transition:all .2s; font-family:var(--font-body); }
-  .remove-btn:hover { background:rgba(239,68,68,0.2); }
+/* Sources manuelles */
+  .manual-channels-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin-top:16px; }
+  .manual-channel-card { display:flex; flex-direction:column; background:var(--surface2); border:1px solid var(--border);
+    border-radius:12px; overflow:hidden; text-decoration:none; color:var(--text); transition:all .18s; }
+  .manual-channel-card:hover { transform:translateY(-2px); border-color:var(--accent); box-shadow:0 10px 26px rgba(0,0,0,.35); }
+  .manual-tile { position:relative; aspect-ratio:16/9; background:var(--surface3); display:grid; place-items:center; overflow:hidden; }
+  .manual-logo { width:62%; max-height:62%; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+  .manual-badge { position:absolute; top:8px; left:8px; display:flex; align-items:center; gap:5px; font-size:9px; font-weight:800;
+    color:#fff; background:rgba(100,100,110,.9); padding:3px 9px; border-radius:999px; letter-spacing:.4px; }
+  .manual-body { padding:11px 13px 13px; display:flex; flex-direction:column; gap:5px; flex:1; }
+  .manual-name { font-size:13px; font-weight:700; color:var(--text); line-height:1.3;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .manual-meta { font-size:11px; color:var(--muted); font-family:var(--font-mono); }
+  .manual-actions { display:flex; gap:8px; margin-top:6px; padding-top:8px; border-top:1px solid var(--border); }
+  .manual-actions button { flex:1; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:600;
+    border:none; cursor:pointer; transition:all .15s; }
+  .manual-test { background:var(--accent); color:#fff; }
+  .manual-test:hover { background:#c53030; }
+  .manual-test.busy { opacity:.6; pointer-events:none; }
+  .manual-del { background:rgba(239,68,68,.1); color:var(--error); border:1px solid var(--error); }
+  .manual-del:hover { background:rgba(239,68,68,.2); }
   .add-source-box { background:var(--input-bg); border:2px dashed var(--border);
     border-radius:12px; padding:20px; margin-bottom:14px; transition:all .3s; }
   .add-source-box:hover { border-color:var(--accent); }
@@ -2073,10 +2082,15 @@ DASHBOARD_HTML = r"""<!doctype html>
     font-size:13px; font-family:var(--font-mono); margin-bottom:12px; transition:all .3s; }
   .add-source-input:focus { outline:none; border-color:var(--accent); }
   .add-source-btn { padding:12px 24px; background:var(--accent); border:none; border-radius:10px; color:#fff;
-    font-weight:700; font-size:13px; cursor:pointer; transition:all .2s; font-family:var(--font-body); }
+    font-weight:700; cursor:pointer; transition:all .2s; width:100%; }
   .add-source-btn:hover { background:#c53030; }
   .add-source-btn:disabled { opacity:.6; cursor:not-allowed; }
   .add-source-result { margin-top:12px; font-size:13px; }
+  .add-source-preview { margin-top:12px; max-height:200px; overflow-y:auto; }
+  .add-source-preview-item { padding:8px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    margin-bottom:6px; font-size:12px; display:flex; justify-content:space-between; gap:8px; }
+  .add-source-preview-name { font-weight:600; color:var(--text); }
+  .add-source-preview-id { color:var(--muted); font-family:var(--font-mono); }
   .alert { padding:10px 14px; border-radius:8px; margin-top:8px; font-size:12px; }
   .alert-success { background:rgba(72,187,120,0.12); border:1px solid var(--green); color:var(--green); }
   .alert-error { background:rgba(239,68,68,0.12); border:1px solid var(--error); color:var(--error); }
@@ -2548,7 +2562,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div class="page-header">
             <div>
               <div class="page-title">Sources</div>
-              <div class="page-sub">Gérer vos sources personnalisées</div>
+              <div class="page-sub">Ajoutez vos propres chaînes via le scraper dlstreams</div>
             </div>
           </div>
 
@@ -2559,14 +2573,17 @@ DASHBOARD_HTML = r"""<!doctype html>
                 <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121)">
                 <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
                 <div class="add-source-result" id="add-source-result"></div>
+                <div class="add-source-preview" id="add-source-preview" style="display:none"></div>
               </div>
             </div>
           </div>
 
           <div class="card">
-            <div class="card-head"><div class="card-title">📋 Sources ajoutées manuellement</div></div>
+            <div class="card-head">
+              <div class="card-title">📋 Sources ajoutées manuellement</div>
+              <span class="card-desc" id="manual-count" style="font-size:12px;color:var(--muted)"></span>
+            </div>
             <div class="card-body">
-              <p style="color:var(--text2);font-size:13px;margin-bottom:16px">Ces chaînes ont été ajoutées via le scraper et sont conservées en mémoire.</p>
               <div class="manual-channels-list" id="manual-channels-list">
                 <div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
               </div>
@@ -3087,27 +3104,55 @@ async function loadActivity(targetId) {
     }
 }
 
-async function loadManualChannels() {
-    try {
+// Sources manuelles
+async function loadManualChannels(){
+    try{
         const r = await apiFetch("/api/manual-channels");
         const channels = await r.json();
         const list = $("#manual-channels-list");
-        if (channels.length === 0) {
+        const cnt = $("#manual-count");
+        if(cnt) cnt.textContent = channels.length + (channels.length>1 ? " sources" : " source");
+        if(channels.length === 0){
             list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>';
             return;
         }
-        list.innerHTML = channels.map(ch => `
-            <div class="manual-channel-item">
-                <div class="manual-channel-info">
-                    <div class="manual-channel-name">${escapeHtml(ch.name)}</div>
-                    <div class="manual-channel-meta">ID: ${escapeHtml(ch.id)} · Ajoutée le ${escapeHtml(ch.added_at || 'N/A')}</div>
+        list.innerHTML = channels.map(ch => {
+            const href = `${BASE}/hls/${ch.id}/index.m3u8`;
+            const added = ch.added_at ? ' · ' + ch.added_at : '';
+            return `<a class="manual-channel-card" href="${href}" target="_blank" title="${escapeHtml(ch.name)}">
+                <div class="manual-tile">
+                    <img class="manual-logo" src="${BASE}/logo/dlstreams/${ch.id}.png" alt="" loading="lazy" onerror="this.style.display='none'">
+                    <span class="manual-badge">MANUEL</span>
                 </div>
-                <button class="remove-btn" onclick="removeChannel('${escapeHtml(ch.id)}')">🗑️ Supprimer</button>
-            </div>
-        `).join('');
-    } catch(e) {
+                <div class="manual-body">
+                    <div class="manual-name">${escapeHtml(ch.name)}</div>
+                    <div class="manual-meta">ID: ${escapeHtml(ch.id)}${added}</div>
+                    <div class="manual-actions">
+                        <button class="manual-test" onclick="event.preventDefault();event.stopPropagation();testManual('${escapeHtml(ch.id)}', this)">▶ Test</button>
+                        <button class="manual-del" onclick="event.preventDefault();event.stopPropagation();removeChannel('${escapeHtml(ch.id)}')">🗑️ Supprimer</button>
+                    </div>
+                </div>
+            </a>`;
+        }).join('');
+    }catch(e){
         if (e.message !== 'unauthenticated') console.error("Load manual channels error:", e);
     }
+}
+async function testManual(id, btn){
+    if(CHECKED[id] && CHECKED[id].state==="busy") return;
+    if(btn) btn.classList.add("busy");
+    CHECKED[id] = {state:"busy"};
+    render();
+    try{
+        const r = await apiFetch(`/api/check?src=dlstreams&id=${encodeURIComponent(id)}`);
+        const d = await r.json();
+        CHECKED[id] = {state: d.ok ? "ok" : "ko", ms: d.ms, url: d.url};
+        saveChecked();
+    }catch(e){
+        if (e.message !== 'unauthenticated') CHECKED[id] = {state:"ko", ms:0};
+    }
+    if(btn) btn.classList.remove("busy");
+    render();
 }
 
 async function removeChannel(id) {
@@ -3404,17 +3449,29 @@ document.addEventListener("click", (e)=>{
 $("#add-source-btn").addEventListener("click", async ()=>{
     const url = $("#source-url").value.trim();
     const out = $("#add-source-result");
+    const preview = $("#add-source-preview");
     if(!url){
         out.innerHTML = '<div class="alert alert-error">Veuillez entrer une URL</div>';
         return;
     }
     $("#add-source-btn").disabled = true;
     $("#add-source-btn").textContent = "⏳ Scraping...";
+    out.innerHTML = "";
+    preview.style.display = "none";
+    preview.innerHTML = "";
     try{
         const r = await apiFetch(`/api/add-source?url=${encodeURIComponent(url)}`);
         const d = await r.json();
         if(d.success){
             out.innerHTML = `<div class="alert alert-success">${d.message}</div>`;
+            if(d.channels && d.channels.length){
+                preview.style.display = "block";
+                preview.innerHTML = d.channels.map(ch => `
+                    <div class="add-source-preview-item">
+                        <div class="add-source-preview-name">${escapeHtml(ch.name)}</div>
+                        <div class="add-source-preview-id">ID: ${escapeHtml(ch.id)}</div>
+                    </div>`).join('');
+            }
             $("#source-url").value = "";
             toast(d.message, 'success');
             await loadManualChannels();
