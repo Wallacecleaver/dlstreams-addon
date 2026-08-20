@@ -799,6 +799,20 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send(502, f"resolve/proxy error: {type(e).__name__}: {e}".encode(), "text/plain")
 
+    def do_DELETE(self):
+        u = urllib.parse.urlsplit(self.path)
+        path = u.path
+
+        if path == "/api/logs":
+            if not self._require_auth():
+                return
+            with _stats_lock:
+                _request_log.clear()
+            _log_activity("Logs effacés")
+            return self._send(200, json.dumps({"success": True}).encode(), "application/json")
+
+        return self._send(404, b"not found", "text/plain")
+
     def _manifest(self, lang_filter: str | None = None) -> dict:
         _extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]
         name = "dlstreams + Vavoo"
@@ -857,731 +871,590 @@ DASHBOARD_HTML = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dlstreams — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
 <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    :root {
-        --primary: #6366f1;
-        --primary-dark: #4f46e5;
-        --secondary: #ec4899;
-        --bg-dark: #0f172a;
-        --bg-card: #1e293b;
-        --bg-hover: #334155;
-        --text-primary: #f1f5f9;
-        --text-secondary: #94a3b8;
-        --border: #334155;
-        --success: #10b981;
-        --warning: #f59e0b;
-        --error: #ef4444;
-        --gradient: linear-gradient(135deg, #6366f1 0%, #ec4899 100%);
-    }
-    body {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background: var(--bg-dark);
-        background-image: 
-            radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-            radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%);
-        color: var(--text-primary);
-        line-height: 1.6;
-        min-height: 100vh;
-    }
-    .login-screen {
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .login-container {
-        background: rgba(30, 41, 59, 0.8);
-        backdrop-filter: blur(20px);
-        border: 1px solid var(--border);
-        border-radius: 24px;
-        padding: 48px;
-        width: 90%;
-        max-width: 420px;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        animation: slideUp 0.5s ease-out;
-    }
-    .login-logo { text-align: center; margin-bottom: 32px; }
-    .login-logo .logo-icon {
-        width: 80px; height: 80px; margin: 0 auto 16px;
-        background: var(--gradient); border-radius: 20px;
-        display: grid; place-items: center; font-size: 40px;
-        font-weight: 800; color: #0b0f1a;
-        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
-    }
-    .login-logo h1 {
-        font-size: 28px; font-weight: 700;
-        background: var(--gradient);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    .login-form input {
-        width: 100%; padding: 14px 18px;
-        background: var(--bg-dark); border: 2px solid var(--border);
-        border-radius: 12px; color: var(--text-primary);
-        font-size: 15px; transition: all 0.3s; margin-bottom: 16px;
-    }
-    .login-form input:focus {
-        outline: none; border-color: var(--primary);
-        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
-    }
-    .login-form button {
-        width: 100%; padding: 14px; background: var(--gradient);
-        border: none; border-radius: 12px; color: white;
-        font-weight: 600; font-size: 15px; cursor: pointer;
-        transition: all 0.3s; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-    .login-form button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
-    }
-    .error-message {
-        background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error);
-        color: var(--error); padding: 12px; border-radius: 8px;
-        margin-bottom: 16px; text-align: center; animation: shake 0.5s;
-    }
-    .dashboard-container { display: none; }
-    .dashboard-container.active { display: flex; }
-    .sidebar {
-        position: fixed; left: 0; top: 0; bottom: 0; width: 280px;
-        background: var(--bg-card); border-right: 1px solid var(--border);
-        padding: 24px; overflow-y: auto; z-index: 100;
-        display: flex; flex-direction: column;
-    }
-    .sidebar-header {
-        display: flex; align-items: center; gap: 12px;
-        padding-bottom: 24px; border-bottom: 1px solid var(--border);
-        margin-bottom: 24px;
-    }
-    .sidebar-header .logo {
-        width: 40px; height: 40px; border-radius: 10px;
-        background: var(--gradient); display: grid; place-items: center;
-        font-weight: 800; color: #0b0f1a; font-size: 20px;
-    }
-    .sidebar-header h2 {
-        font-size: 18px; font-weight: 700;
-        background: var(--gradient);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    .nav-section { margin-bottom: 24px; }
-    .nav-section-title {
-        font-size: 11px; text-transform: uppercase;
-        letter-spacing: 0.05em; color: var(--text-secondary);
-        margin-bottom: 12px; padding-left: 12px; font-weight: 600;
-    }
-    .nav-item {
-        display: flex; align-items: center; gap: 12px;
-        padding: 12px; border-radius: 10px; cursor: pointer;
-        transition: all 0.2s; margin-bottom: 4px;
-        color: var(--text-secondary); text-decoration: none; font-size: 14px;
-    }
-    .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .nav-item.active {
-        background: rgba(99, 102, 241, 0.15);
-        color: var(--primary); font-weight: 500;
-    }
-    .nav-item .icon { font-size: 18px; }
-    .logout-btn {
-        margin-top: auto; padding: 12px; border-radius: 10px;
-        background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error);
-        color: var(--error); cursor: pointer; transition: all 0.2s;
-        display: flex; align-items: center; gap: 12px; font-size: 14px;
-    }
-    .logout-btn:hover { background: rgba(239, 68, 68, 0.2); }
-    .main-content { margin-left: 280px; padding: 32px; flex: 1; }
-    .top-bar {
-        display: flex; justify-content: space-between; align-items: center;
-        margin-bottom: 32px; padding-bottom: 24px;
-        border-bottom: 1px solid var(--border);
-    }
-    .page-title h1 {
-        font-size: 28px; font-weight: 700; margin-bottom: 4px;
-        background: var(--gradient);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    .page-title p { color: var(--text-secondary); font-size: 14px; }
-    .refresh-btn {
-        padding: 10px 20px; background: var(--bg-card);
-        border: 1px solid var(--border); border-radius: 10px;
-        color: var(--text-primary); cursor: pointer; transition: all 0.2s;
-        display: flex; align-items: center; gap: 8px; font-size: 14px;
-    }
-    .refresh-btn:hover { background: var(--bg-hover); border-color: var(--primary); }
-    .stats-grid {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 20px; margin-bottom: 32px;
-    }
-    .stat-card {
-        background: var(--bg-card); border: 1px solid var(--border);
-        border-radius: 16px; padding: 24px; transition: all 0.3s;
-        position: relative; overflow: hidden; animation: slideUp 0.5s ease-out;
-    }
-    .stat-card::before {
-        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-        background: var(--gradient); opacity: 0; transition: opacity 0.3s;
-    }
-    .stat-card:hover {
-        transform: translateY(-4px); border-color: var(--primary);
-        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
-    }
-    .stat-card:hover::before { opacity: 1; }
-    .stat-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
-    .stat-value {
-        font-size: 32px; font-weight: 700;
-        background: var(--gradient);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 8px;
-    }
-    .stat-hint { font-size: 12px; color: var(--text-secondary); }
-    .card {
-        background: var(--bg-card); border: 1px solid var(--border);
-        border-radius: 16px; padding: 24px; margin-bottom: 24px;
-        animation: slideUp 0.5s ease-out;
-    }
-    .card h2 {
-        font-size: 18px; font-weight: 600; margin-bottom: 20px;
-        display: flex; align-items: center; gap: 10px;
-    }
-    .add-source-box {
-        background: var(--bg-dark); border: 2px dashed var(--border);
-        border-radius: 12px; padding: 24px; margin-bottom: 20px;
-        transition: all 0.3s;
-    }
-    .add-source-box:hover { border-color: var(--primary); }
-    .add-source-input {
-        width: 100%; background: var(--bg-card); border: 2px solid var(--border);
-        border-radius: 10px; padding: 12px 16px; color: var(--text-primary);
-        font-size: 14px; margin-bottom: 12px; transition: all 0.3s;
-    }
-    .add-source-input:focus {
-        outline: none; border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-    }
-    .add-source-btn {
-        padding: 12px 24px; background: var(--gradient);
-        border: none; border-radius: 10px; color: white;
-        font-weight: 600; font-size: 14px; cursor: pointer;
-        transition: all 0.2s; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-    .add-source-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
-    }
-    .add-source-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-    .add-source-result { margin-top: 12px; font-size: 13px; }
-    .manual-channels-list {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 12px; margin-top: 16px;
-    }
-    .manual-channel-item {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 12px; background: var(--bg-dark); border: 1px solid var(--border);
-        border-radius: 10px; transition: all 0.2s;
-    }
-    .manual-channel-item:hover { border-color: var(--primary); }
-    .manual-channel-info { flex: 1; }
-    .manual-channel-name { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
-    .manual-channel-meta { font-size: 11px; color: var(--text-secondary); }
-    .remove-btn {
-        padding: 6px 12px; background: rgba(239, 68, 68, 0.1);
-        border: 1px solid var(--error); border-radius: 6px;
-        color: var(--error); cursor: pointer; font-size: 12px;
-        transition: all 0.2s;
-    }
-    .remove-btn:hover { background: rgba(239, 68, 68, 0.2); }
-    .search-bar {
-        display: flex; gap: 10px; align-items: center;
-        flex-wrap: wrap; margin-bottom: 20px;
-    }
-    .search-bar input {
-        flex: 1; min-width: 200px; background: var(--bg-dark);
-        border: 2px solid var(--border); border-radius: 10px;
-        padding: 12px 16px; color: var(--text-primary); font-size: 14px;
-    }
-    .search-bar input:focus {
-        outline: none; border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-    }
-    .search-bar select {
-        background: var(--bg-dark); border: 2px solid var(--border);
-        border-radius: 10px; padding: 12px 16px;
-        color: var(--text-primary); cursor: pointer;
-    }
-    .tabs { display: flex; gap: 6px; }
-    .tab {
-        padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
-        background: transparent; color: var(--text-secondary);
-        cursor: pointer; transition: all 0.2s; font-size: 13px;
-    }
-    .tab.active {
-        background: var(--gradient); color: #0b0f1a;
-        border-color: transparent; font-weight: 600;
-    }
-    .channel-list {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        gap: 10px;
-    }
-    .channel-item {
-        display: flex; align-items: center; gap: 10px; padding: 12px;
-        border: 1px solid var(--border); border-radius: 10px;
-        background: var(--bg-dark); cursor: pointer; transition: all 0.2s;
-        text-decoration: none; color: var(--text-primary);
-    }
-    .channel-item:hover {
-        border-color: var(--primary); transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
-    }
-    .channel-item .name {
-        flex: 1; font-size: 13px;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .channel-item .id {
-        color: var(--text-secondary); font-size: 11px;
-        font-family: ui-monospace, monospace;
-    }
-    .access-grid {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 14px;
-    }
-    .access-card {
-        background: var(--bg-dark); border: 1px solid var(--border);
-        border-radius: 12px; padding: 16px;
-    }
-    .access-card .label {
-        font-size: 12px; color: var(--text-secondary);
-        text-transform: uppercase; letter-spacing: 0.05em;
-        margin-bottom: 8px; font-weight: 600;
-    }
-    .access-card a {
-        color: var(--primary); text-decoration: none;
-        word-break: break-all; font-size: 13px;
-    }
-    .access-card a:hover { color: var(--secondary); }
-    .copy-btn {
-        display: inline-flex; align-items: center; gap: 6px;
-        margin-top: 8px; padding: 6px 12px; border: 1px solid var(--border);
-        border-radius: 8px; background: transparent; color: var(--text-secondary);
-        font-size: 12px; cursor: pointer; transition: all 0.2s;
-    }
-    .copy-btn:hover { color: var(--text-primary); border-color: var(--primary); }
-    .player-modal {
-        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.95); z-index: 1000;
-        display: none; align-items: center; justify-content: center; padding: 20px;
-    }
-    .player-modal.active { display: flex; }
-    .player-container {
-        width: 100%; max-width: 1200px; background: var(--bg-card);
-        border-radius: 16px; overflow: hidden;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    }
-    .player-header {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 16px 20px; border-bottom: 1px solid var(--border);
-    }
-    .player-header h3 { margin: 0; font-size: 16px; }
-    .player-close {
-        background: none; border: none; color: var(--text-secondary);
-        font-size: 24px; cursor: pointer; width: 32px; height: 32px;
-        display: grid; place-items: center; border-radius: 6px; transition: all 0.2s;
-    }
-    .player-close:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .player-body { padding: 20px; }
-    .player-frame {
-        width: 100%; aspect-ratio: 16/9; background: #000;
-        border-radius: 8px; border: none;
-    }
-    .alert {
-        padding: 10px 14px; border-radius: 8px; margin-top: 8px; font-size: 12px;
-    }
-    .alert-success {
-        background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success);
-        color: var(--success);
-    }
-    .alert-error {
-        background: rgba(239, 68, 68, 0.15); border: 1px solid var(--error);
-        color: var(--error);
-    }
-    .toast {
-        position: fixed; bottom: 20px; right: 20px;
-        background: var(--bg-card); border: 1px solid var(--border);
-        border-radius: 12px; padding: 16px 20px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 2000;
-        animation: slideInRight 0.3s ease-out;
-        display: flex; align-items: center; gap: 12px;
-    }
-    .toast.success { border-color: var(--success); }
-    .toast.error { border-color: var(--error); }
-    .status-indicator {
-        display: flex; align-items: center; gap: 8px;
-        padding: 6px 12px; border-radius: 20px;
-        background: rgba(16, 185, 129, 0.1); border: 1px solid var(--success);
-        color: var(--success); font-size: 12px; font-weight: 500;
-    }
-    .status-dot {
-        width: 8px; height: 8px; border-radius: 50%;
-        background: var(--success); animation: pulse 2s infinite;
-    }
-    .page { display: none; }
-    .page.active { display: block; }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-    @keyframes slideUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes slideInRight {
-        from { opacity: 0; transform: translateX(100px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        25% { transform: translateX(-10px); }
-        75% { transform: translateX(10px); }
-    }
-    .stat-card .stat-icon {
-        position: absolute; top: 18px; right: 18px;
-        font-size: 22px; opacity: 0.9;
-    }
-    .stat-card.accent-dl::before { background: linear-gradient(135deg, #6366f1, #818cf8); }
-    .stat-card.accent-vv::before { background: linear-gradient(135deg, #ec4899, #f472b6); }
-    .stat-card.accent-manual::before { background: linear-gradient(135deg, #10b981, #34d399); }
-    .stat-card.accent-up::before { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
-    .stat-card.accent-req::before { background: linear-gradient(135deg, #0ea5e9, #38bdf8); }
-    .stat-card.accent-err::before { background: linear-gradient(135deg, #ef4444, #f87171); }
-    .cache-badge {
-        display: inline-flex; align-items: center; gap: 6px;
-        font-size: 11px; padding: 3px 10px; border-radius: 20px;
-        border: 1px solid var(--border); color: var(--text-secondary);
-    }
-    .cache-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-    .cache-badge.ok { color: var(--success); border-color: rgba(16,185,129,.4); background: rgba(16,185,129,.08); }
-    .cache-badge.stale { color: var(--warning); border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.08); }
-    .cache-badge.old { color: var(--error); border-color: rgba(239,68,68,.4); background: rgba(239,68,68,.08); }
-    .fav-star {
-        font-size: 16px; color: var(--text-secondary); cursor: pointer;
-        transition: transform .2s, color .2s; user-select: none; padding: 2px 6px;
-    }
-    .fav-star:hover { transform: scale(1.25); color: var(--warning); }
-    .fav-star.active { color: var(--warning); text-shadow: 0 0 12px rgba(245,158,11,.6); }
-    .chart { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
-    .chart-row { display: grid; grid-template-columns: 110px 1fr 48px; align-items: center; gap: 12px; }
-    .chart-label { font-size: 13px; color: var(--text-secondary); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .chart-bar { height: 22px; background: var(--bg-dark); border-radius: 6px; overflow: hidden; }
-    .chart-fill {
-        height: 100%; border-radius: 6px; width: 0;
-        background: var(--gradient);
-        transition: width .8s cubic-bezier(.22, 1, .36, 1);
-    }
-    .chart-count { font-size: 12px; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
-    .update-time {
-        font-size: 12px; color: var(--text-secondary);
-        display: flex; align-items: center; gap: 8px; white-space: nowrap;
-    }
-    .update-time .spinner {
-        width: 13px; height: 13px; border: 2px solid var(--border);
-        border-top-color: var(--primary); border-radius: 50%;
-        animation: spin .8s linear infinite; opacity: 0;
-    }
-    .update-time.loading .spinner { opacity: 1; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-    .fav-empty { grid-column: 1/-1; text-align: center; padding: 30px; color: var(--text-secondary); }
-    .fav-empty a { color: var(--primary); }
-    .theme-btn {
-        margin-left: auto; width: 38px; height: 38px;
-        border-radius: 10px; border: 1px solid var(--border);
-        background: var(--bg-hover); color: var(--text-primary);
-        font-size: 16px; cursor: pointer; transition: all .2s;
-        display: grid; place-items: center; flex-shrink: 0;
-    }
-    .theme-btn:hover { border-color: var(--primary); }
-    body.light {
-        --bg-dark: #f1f5f9;
-        --bg-card: #ffffff;
-        --bg-hover: #e2e8f0;
-        --text-primary: #0f172a;
-        --text-secondary: #64748b;
-        --border: #e2e8f0;
-    }
-    body.light .login-container { background: rgba(255, 255, 255, 0.88); }
-    body.light .sparkline .bar { background: linear-gradient(180deg, #4f46e5, rgba(79, 70, 229, .35)); }
-    .sparkline { display: flex; align-items: flex-end; gap: 3px; height: 90px; }
-    .sparkline .bar {
-        flex: 1; border-radius: 3px 3px 0 0;
-        background: linear-gradient(180deg, #6366f1, rgba(99, 102, 241, .35));
-        transition: height .5s ease; min-height: 2px;
-    }
-    .check-btn {
-        display: inline-flex; align-items: center; gap: 5px;
-        padding: 4px 10px; border: 1px solid var(--border);
-        border-radius: 7px; background: transparent; color: var(--text-secondary);
-        font-size: 12px; cursor: pointer; transition: all .2s; white-space: nowrap;
-    }
-    .check-btn:hover { border-color: var(--primary); color: var(--text-primary); }
-    .check-btn.ok { border-color: var(--success); color: var(--success); background: rgba(16,185,129,.08); }
-    .check-btn.ko { border-color: var(--error); color: var(--error); background: rgba(239,68,68,.08); }
-    .check-btn.busy { pointer-events: none; opacity: .6; }
-    .log-feed { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-    .log-row {
-        display: flex; gap: 10px; align-items: baseline;
-        padding: 5px 8px; border-radius: 6px;
-        border-bottom: 1px solid var(--border);
-    }
-    .log-row:hover { background: var(--bg-hover); }
-    .log-time { color: var(--text-secondary); white-space: nowrap; }
-    .log-method {
-        min-width: 36px; text-align: center; font-weight: 600;
-        padding: 1px 6px; border-radius: 4px; font-size: 11px;
-    }
-    .log-method.GET { color: var(--success); background: rgba(16,185,129,.12); }
-    .log-method.POST { color: var(--warning); background: rgba(245,158,11,.12); }
-    .log-code { min-width: 30px; text-align: right; font-weight: 700; }
-    .log-code.ok { color: var(--success); }
-    .log-code.warn { color: var(--warning); }
-    .log-code.err { color: var(--error); }
-    .log-ip { color: var(--text-secondary); }
-    .log-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    @media (max-width: 768px) {
-        .sidebar { transform: translateX(-100%); }
-        .sidebar.open { transform: translateX(0); }
-        .main-content { margin-left: 0; padding: 20px; }
-        .stats-grid { grid-template-columns: 1fr; }
-    }
+  :root {
+    --bg:#0a0a0b; --surface:#111113; --surface2:#18181b; --border:rgba(255,255,255,0.06);
+    --accent:#e53e3e; --accent-dim:rgba(229,62,62,0.08); --green:#48bb78;
+    --text:#f0f0f0; --text2:#888; --muted:#666; --input-bg:#0a0a0b; --card-hover:rgba(255,255,255,0.02);
+    --warn:#f59e0b; --error:#ef4444; --info:#60a5fa;
+    --font-display:'Bebas Neue',sans-serif; --font-mono:'Rajdhani',monospace; --font-body:'DM Sans',sans-serif;
+  }
+  body.light {
+    --bg:#f1f5f9; --surface:#ffffff; --surface2:#f8fafc; --border:rgba(0,0,0,0.08);
+    --accent:#dc2626; --accent-dim:rgba(220,38,38,0.08); --green:#38a169;
+    --text:#0f172a; --text2:#475569; --muted:#94a3b8; --input-bg:#f8fafc; --card-hover:rgba(0,0,0,0.02);
+    --info:#2563eb;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; transition:background .3s,color .3s; }
+
+  /* LOGIN */
+  #login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; position:relative; }
+  #login-screen::before { content:''; position:fixed; top:-200px; left:50%; transform:translateX(-50%);
+    width:600px; height:500px; background:radial-gradient(ellipse,rgba(229,62,62,0.08) 0%,transparent 70%); pointer-events:none; }
+  .login-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:40px; width:340px;
+    box-shadow:0 24px 80px rgba(0,0,0,0.3); position:relative; z-index:1; }
+  .login-logo { text-align:center; margin-bottom:12px; }
+  .login-logo .logo-icon { width:64px; height:64px; margin:0 auto 10px; border-radius:16px;
+    background:linear-gradient(135deg,var(--accent),#ff7a59); display:grid; place-items:center;
+    font-size:28px; font-weight:800; color:#fff; box-shadow:0 8px 28px rgba(229,62,62,.4); }
+  .login-title { font-family:var(--font-display); font-size:30px; font-weight:400; letter-spacing:1px; text-align:center; color:var(--text); margin-bottom:2px; }
+  .login-sub { font-size:11px; color:var(--muted); text-align:center; margin-bottom:24px; letter-spacing:.5px; text-transform:uppercase; }
+  .field label { display:block; font-size:12px; color:var(--text2); margin-bottom:6px; font-weight:600; }
+  .field input { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:11px 14px;
+    color:var(--text); font-family:var(--font-mono); font-size:14px; transition:border-color .2s; margin-bottom:16px; }
+  .field input:focus { outline:none; border-color:var(--accent); }
+  .login-error { font-size:12px; color:var(--accent); text-align:center; margin-bottom:12px; padding:8px 12px;
+    background:rgba(229,62,62,0.08); border:1px solid rgba(229,62,62,0.2); border-radius:8px; display:none; }
+  .btn-primary { width:100%; background:var(--accent); color:#fff; border:none; border-radius:8px; padding:12px;
+    font-family:var(--font-body); font-size:14px; font-weight:700; cursor:pointer; transition:background .2s; }
+  .btn-primary:hover { background:#c53030; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
+  .shake { animation:shake .4s; }
+
+  /* LAYOUT */
+  #dashboard { display:none; }
+  #dashboard.active { display:block; }
+  .layout { display:flex; min-height:100vh; }
+  .sidebar { width:250px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column;
+    position:fixed; top:0; bottom:0; left:0; z-index:10; overflow-y:auto; }
+  .sidebar-logo { padding:18px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .sidebar-logo-brand { display:flex; align-items:center; gap:10px; min-width:0; }
+  .sidebar-logo-icon { width:34px; height:34px; border-radius:10px; flex-shrink:0;
+    background:linear-gradient(135deg,var(--accent),#ff7a59); display:grid; place-items:center;
+    font-size:16px; font-weight:800; color:#fff; }
+  .sidebar-logo-text .title { font-family:var(--font-display); font-size:20px; letter-spacing:.5px; font-weight:400; color:var(--text); white-space:nowrap; }
+  .sidebar-logo-text .sub { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .theme-btn { background:var(--surface2); border:1px solid var(--border); border-radius:8px; width:32px; height:32px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:15px; transition:all .2s; flex-shrink:0; }
+  .theme-btn:hover { border-color:var(--accent); }
+  .sidebar-nav { flex:1; padding:14px 10px; }
+  .nav-section-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; padding:8px 10px 6px; font-weight:700; }
+  .nav-item { display:flex; align-items:center; gap:9px; padding:9px 12px; border-radius:8px; font-size:13px; font-weight:600;
+    color:var(--text2); cursor:pointer; margin-bottom:2px; border:none; background:none; width:100%; text-align:left;
+    font-family:var(--font-body); transition:all .15s; text-decoration:none; }
+  .nav-item:hover { background:var(--surface2); color:var(--text); }
+  .nav-item.active { background:var(--accent-dim); color:var(--accent); }
+  .nav-badge { margin-left:auto; background:var(--accent); color:#fff; font-size:10px; font-weight:800; border-radius:20px;
+    padding:1px 7px; min-width:16px; text-align:center; }
+  .sidebar-bottom { padding:12px 10px; border-top:1px solid var(--border); }
+  .btn-logout { width:100%; background:none; border:1px solid var(--border); border-radius:8px; padding:8px; font-size:12px;
+    color:var(--muted); cursor:pointer; font-family:var(--font-body); transition:all .2s; }
+  .btn-logout:hover { color:var(--accent); border-color:var(--accent); }
+
+  .main { margin-left:250px; padding:28px 32px 60px; }
+  .page { display:none; }
+  .page.active { display:block; }
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+  .page-title { font-family:var(--font-display); font-size:34px; font-weight:400; letter-spacing:.5px; color:var(--text); margin-bottom:2px; }
+  .page-sub { font-size:13px; color:var(--text2); }
+  .header-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+  .btn-add, .btn-outline-sm { display:flex; align-items:center; gap:6px; border-radius:7px; padding:8px 14px; font-size:12px;
+    font-weight:700; font-family:var(--font-body); cursor:pointer; transition:all .2s; text-decoration:none; }
+  .btn-add { background:var(--accent-dim); border:1px solid rgba(229,62,62,0.2); color:var(--accent); }
+  .btn-add:hover { background:var(--accent); color:#fff; }
+  .btn-outline-sm { background:none; border:1px solid var(--border); color:var(--text2); }
+  .btn-outline-sm:hover { color:var(--text); border-color:var(--text2); }
+
+  .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
+  .stat-card { position:relative; overflow:hidden; border-radius:16px; padding:18px 20px;
+    background:var(--surface); border:1px solid var(--border);
+    display:flex; flex-direction:column; gap:4px;
+    transition:border-color .2s, transform .2s; }
+  .stat-card::after { content:''; position:absolute; top:-45%; right:-18%; width:150px; height:150px; border-radius:50%;
+    background:radial-gradient(circle, var(--card-glow,rgba(229,62,62,.16)), transparent 70%); pointer-events:none; }
+  .stat-card:hover { transform:translateY(-2px); border-color:rgba(229,62,62,.25); }
+  .stat-card.c-red { --card-glow:rgba(229,62,62,.26); --card-icon-bg:rgba(229,62,62,.14); }
+  .stat-card.c-blue { --card-glow:rgba(96,165,250,.26); --card-icon-bg:rgba(96,165,250,.14); }
+  .stat-card.c-purple { --card-glow:rgba(167,139,250,.26); --card-icon-bg:rgba(167,139,250,.14); }
+  .stat-card.c-green { --card-glow:rgba(72,187,120,.26); --card-icon-bg:rgba(72,187,120,.14); }
+  .stat-card.c-orange { --card-glow:rgba(245,158,11,.26); --card-icon-bg:rgba(245,158,11,.14); }
+  .stat-card.c-blue2 { --card-glow:rgba(56,189,248,.26); --card-icon-bg:rgba(56,189,248,.14); }
+  .stat-card.c-red2 { --card-glow:rgba(230,57,70,.26); --card-icon-bg:rgba(230,57,70,.14); }
+  .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1.1px; font-weight:700; }
+  .stat-value { font-size:34px; font-weight:700; color:var(--text); line-height:1.05;
+    font-family:var(--font-mono); letter-spacing:.5px; padding-right:44px; }
+  .stat-icon { position:absolute; top:16px; right:16px; width:34px; height:34px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+    background:var(--card-icon-bg,rgba(229,62,62,.12)); }
+  .stat-hint { font-size:12px; color:var(--text2); margin-top:2px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .cache-badge { display:inline-flex; align-items:center; gap:6px;
+    font-size:11px; padding:3px 10px; border-radius:20px;
+    border:1px solid var(--border); color:var(--text2); }
+  .cache-badge .dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .cache-badge.ok { color:var(--green); border-color:rgba(72,187,120,.4); background:rgba(72,187,120,.08); }
+  .cache-badge.stale { color:var(--warn); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.08); }
+  .cache-badge.old { color:var(--error); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.08); }
+
+  .ov-grid-2 { display:grid; grid-template-columns:1.6fr 1fr; gap:20px; margin-bottom:20px; }
+  .ov-chart-wrap { width:100%; }
+  .ov-chart { width:100%; height:auto; display:block; }
+  .ov-chart-grid { stroke:var(--border); stroke-width:1; stroke-dasharray:3 5; }
+  .ov-chart-xlabel { font-size:9px; fill:var(--muted); font-family:var(--font-body); }
+  .ov-split { display:flex; align-items:center; gap:24px; padding:8px 4px; }
+  .ov-donut { width:132px; height:132px; flex-shrink:0; }
+  .ov-donut-total { font-size:20px; font-weight:700; fill:var(--text); font-family:var(--font-mono); }
+  .ov-donut-sub { font-size:8px; fill:var(--muted); text-transform:uppercase; letter-spacing:1px; font-weight:700; font-family:var(--font-body); }
+  .ov-split-legend { display:flex; flex-direction:column; gap:10px; }
+  .ov-legend-item { display:flex; align-items:center; gap:9px; font-size:13px; color:var(--text2); font-weight:600; }
+  .ov-legend-item b { margin-left:auto; font-family:var(--font-mono); font-size:16px; color:var(--text); }
+  .ov-legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+  .chart-bar-row { display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:12px; }
+  .chart-bar-row .chart-label { font-size:13px; color:var(--text2); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chart-bar-row .chart-bar { height:18px; background:var(--surface2); border-radius:6px; overflow:hidden; }
+  .chart-bar-row .chart-fill { height:100%; border-radius:6px; width:0; background:var(--accent); opacity:.85; transition:width .8s cubic-bezier(.22,1,.36,1); }
+  .chart-bar-row .chart-count { font-size:12px; color:var(--text2); text-align:right; font-family:var(--font-mono); }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-bottom:20px; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border);
+    flex-wrap:wrap; gap:8px; background:linear-gradient(180deg, rgba(230,57,70,0.05), rgba(230,57,70,0)); }
+  .card-title { font-size:15px; font-weight:800; color:var(--text); letter-spacing:.01em; }
+  .card-body { padding:20px; }
+  .card-desc { font-size:12px; color:var(--text2); margin-top:2px; }
+
+  .search-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .search-bar input[type="search"], .search-bar input[type="text"] { flex:1; min-width:180px; background:var(--input-bg);
+    border:1px solid var(--border); border-radius:8px; padding:9px 13px; color:var(--text); font-size:13px; font-family:var(--font-body); }
+  .search-bar input:focus, .search-bar select:focus { outline:none; border-color:var(--accent); }
+  .search-bar select { background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:9px 12px;
+    color:var(--text); cursor:pointer; font-family:var(--font-body); font-size:13px; }
+  .tabs { display:flex; gap:6px; }
+  .tab { padding:8px 14px; border-radius:8px; border:1px solid var(--border);
+    background:transparent; color:var(--text2); cursor:pointer; transition:all .15s; font-size:12px; font-weight:700; font-family:var(--font-body); }
+  .tab:hover { color:var(--text); background:var(--surface2); }
+  .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .channel-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
+  .channel-item { display:flex; align-items:center; gap:10px; padding:11px 12px;
+    border:1px solid var(--border); border-radius:10px;
+    background:var(--surface2); cursor:pointer; transition:all .15s;
+    text-decoration:none; color:var(--text); }
+  .channel-item:hover { border-color:var(--accent); transform:translateY(-1px); background:var(--card-hover); }
+  .channel-item .logo { width:28px; height:28px; border-radius:6px; object-fit:cover; background:#000; flex-shrink:0; }
+  .channel-item .name { flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .channel-item .id { color:var(--muted); font-size:11px; font-family:var(--font-mono); }
+  .fav-star { font-size:16px; color:var(--text2); cursor:pointer; transition:transform .2s,color .2s; user-select:none; padding:2px 6px; }
+  .fav-star:hover { transform:scale(1.25); color:var(--warn); }
+  .fav-star.active { color:var(--warn); text-shadow:0 0 12px rgba(245,158,11,.6); }
+  .check-btn { display:inline-flex; align-items:center; gap:5px;
+    padding:4px 10px; border:1px solid var(--border);
+    border-radius:7px; background:transparent; color:var(--text2);
+    font-size:11px; font-weight:700; cursor:pointer; transition:all .2s; white-space:nowrap; font-family:var(--font-body); }
+  .check-btn:hover { border-color:var(--accent); color:var(--text); }
+  .check-btn.ok { border-color:var(--green); color:var(--green); background:rgba(72,187,120,.08); }
+  .check-btn.ko { border-color:var(--error); color:var(--error); background:rgba(239,68,68,.08); }
+  .check-btn.busy { pointer-events:none; opacity:.6; }
+  .mini-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
+  .fav-empty { grid-column:1/-1; text-align:center; padding:26px; color:var(--muted); font-size:13px; }
+  .fav-empty a { color:var(--accent); }
+
+  .manual-channels-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; margin-top:16px; }
+  .manual-channel-item { display:flex; align-items:center; justify-content:space-between;
+    padding:12px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; transition:all .15s; }
+  .manual-channel-item:hover { border-color:var(--accent); }
+  .manual-channel-info { flex:1; }
+  .manual-channel-name { font-size:14px; font-weight:600; margin-bottom:4px; }
+  .manual-channel-meta { font-size:11px; color:var(--muted); }
+  .remove-btn { padding:6px 12px; background:rgba(239,68,68,0.1);
+    border:1px solid var(--error); border-radius:6px;
+    color:var(--error); cursor:pointer; font-size:12px; transition:all .2s; font-family:var(--font-body); }
+  .remove-btn:hover { background:rgba(239,68,68,0.2); }
+  .add-source-box { background:var(--input-bg); border:2px dashed var(--border);
+    border-radius:12px; padding:20px; margin-bottom:14px; transition:all .3s; }
+  .add-source-box:hover { border-color:var(--accent); }
+  .add-source-input { width:100%; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:12px 16px; color:var(--text);
+    font-size:13px; font-family:var(--font-mono); margin-bottom:12px; transition:all .3s; }
+  .add-source-input:focus { outline:none; border-color:var(--accent); }
+  .add-source-btn { padding:12px 24px; background:var(--accent); border:none; border-radius:10px; color:#fff;
+    font-weight:700; font-size:13px; cursor:pointer; transition:all .2s; font-family:var(--font-body); }
+  .add-source-btn:hover { background:#c53030; }
+  .add-source-btn:disabled { opacity:.6; cursor:not-allowed; }
+  .add-source-result { margin-top:12px; font-size:13px; }
+  .alert { padding:10px 14px; border-radius:8px; margin-top:8px; font-size:12px; }
+  .alert-success { background:rgba(72,187,120,0.12); border:1px solid var(--green); color:var(--green); }
+  .alert-error { background:rgba(239,68,68,0.12); border:1px solid var(--error); color:var(--error); }
+
+  .access-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; }
+  .access-card { background:var(--surface2); border:1px solid var(--border);
+    border-radius:12px; padding:16px; }
+  .access-card .label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; font-weight:700; }
+  .access-card a { color:var(--accent); text-decoration:none; word-break:break-all; font-size:13px; font-family:var(--font-mono); }
+  .access-card a:hover { color:var(--text); }
+  .copy-btn { display:inline-flex; align-items:center; gap:6px;
+    margin-top:8px; padding:6px 12px; border:1px solid var(--border);
+    border-radius:8px; background:transparent; color:var(--text2);
+    font-size:12px; cursor:pointer; transition:all .2s; font-family:var(--font-body); }
+  .copy-btn:hover { color:var(--text); border-color:var(--accent); }
+  .access-card code { color:var(--accent); word-break:break-all; font-size:12px; font-family:var(--font-mono); }
+  .access-card .api-row { font-size:12px; color:var(--text2); padding:2px 0; }
+  .access-card .api-row code { color:var(--text); }
+
+  .player-modal { position:fixed; top:0; left:0; right:0; bottom:0;
+    background:rgba(0,0,0,0.95); z-index:1000;
+    display:none; align-items:center; justify-content:center; padding:20px; }
+  .player-modal.active { display:flex; }
+  .player-container { width:100%; max-width:1200px; background:var(--surface);
+    border:1px solid var(--border); border-radius:16px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+  .player-header { display:flex; justify-content:space-between; align-items:center;
+    padding:16px 20px; border-bottom:1px solid var(--border); }
+  .player-header h3 { margin:0; font-size:15px; font-weight:700; }
+  .player-close { background:none; border:none; color:var(--text2); font-size:24px; cursor:pointer; width:32px; height:32px;
+    display:grid; place-items:center; border-radius:6px; transition:all .2s; }
+  .player-close:hover { background:var(--surface2); color:var(--text); }
+  .player-body { padding:20px; }
+  .player-frame { width:100%; aspect-ratio:16/9; background:#000; border-radius:8px; border:none; }
+
+  /* LOGS — terminal live-tail */
+  .logs-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .logs-group { display:flex; align-items:center; gap:6px; }
+  .logs-group label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:700; }
+  .logs-select, .logs-search input { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:7px 10px;
+    font-size:12px; font-weight:600; color:var(--text); font-family:var(--font-body); cursor:pointer; }
+  .logs-search input { cursor:text; min-width:160px; font-weight:500; }
+  .logs-search input:focus, .logs-select:focus { outline:none; border-color:var(--accent); }
+  .logs-pausebtn { display:flex; align-items:center; gap:6px; background:var(--surface2); border:1px solid var(--border); border-radius:7px;
+    padding:7px 12px; font-size:12px; font-weight:700; color:var(--text2); cursor:pointer; font-family:var(--font-body); transition:all .15s; }
+  .logs-pausebtn:hover { color:var(--text); border-color:var(--text2); }
+  .logs-pausebtn.paused { background:var(--accent-dim); border-color:rgba(229,62,62,0.3); color:var(--accent); }
+  .logs-status { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+  .logs-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:logsPulse 1.6s infinite; flex-shrink:0; }
+  .logs-dot.paused { background:var(--muted); animation:none; }
+  @keyframes logsPulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .logs-term { height:360px; overflow-y:auto; background:var(--bg); font-family:var(--font-mono);
+    font-size:13px; line-height:1.7; border-radius:12px; }
+  .logs-term::-webkit-scrollbar { width:8px; }
+  .logs-term::-webkit-scrollbar-thumb { background:var(--border); border-radius:8px; }
+  .log-row { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; padding:6px 16px; border-bottom:1px solid var(--border); border-left:3px solid transparent; }
+  .log-row:hover { background:var(--card-hover); }
+  .log-row.row-warn { border-left-color:#f59e0b; background:rgba(245,158,11,0.04); }
+  .log-row.row-err { border-left-color:var(--accent); background:rgba(230,57,70,0.05); }
+  .log-time { color:var(--muted); flex-shrink:0; font-size:12px; }
+  .log-method { font-weight:800; flex-shrink:0; min-width:42px; text-align:center; font-size:11px; padding:1px 6px; border-radius:4px; }
+  .log-method.GET { color:var(--info); background:rgba(96,165,250,.12); }
+  .log-method.POST { color:var(--warn); background:rgba(245,158,11,.12); }
+  .log-code { min-width:30px; text-align:right; font-weight:700; flex-shrink:0; }
+  .log-code.ok { color:var(--green); }
+  .log-code.warn { color:var(--warn); }
+  .log-code.err { color:var(--error); }
+  .log-ip { color:var(--muted); flex-shrink:0; }
+  .log-path { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .logs-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;
+    color:var(--muted); font-family:var(--font-body); gap:8px; }
+  .logs-empty .icon { font-size:32px; opacity:.4; }
+
+  .update-time { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; white-space:nowrap; font-weight:600; }
+  .update-time .spinner { width:13px; height:13px; border:2px solid var(--border);
+    border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; opacity:0; }
+  .update-time.loading .spinner { opacity:1; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .status-indicator { display:flex; align-items:center; gap:8px;
+    padding:6px 12px; border-radius:20px;
+    background:rgba(72,187,120,0.08); border:1px solid rgba(72,187,120,.4);
+    color:var(--green); font-size:12px; font-weight:600; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  .toast { position:fixed; bottom:24px; right:24px; background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-size:13px; font-weight:600; color:var(--text); box-shadow:0 8px 32px rgba(0,0,0,0.3);
+    opacity:0; transform:translateY(10px); transition:all .3s; z-index:200; }
+  .toast.show { opacity:1; transform:translateY(0); }
+  .toast.success { border-color:var(--green); }
+  .toast.error { border-color:var(--error); }
+  .toast.warn { border-color:var(--warn); }
+
+  footer { margin-top:40px; color:var(--muted); font-size:12px; text-align:center; }
+
+  @media (max-width:900px) {
+    .sidebar { display:none; }
+    .main { margin-left:0; padding:20px 16px 60px; }
+    .stats-grid { grid-template-columns:repeat(2,1fr); }
+    .ov-grid-2 { grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
-<div class="login-screen" id="loginScreen">
-    <div class="login-container">
-        <div class="login-logo">
-            <div class="logo-icon">▶</div>
-            <h1>dlstreams</h1>
-        </div>
-        <div id="loginError"></div>
-        <form class="login-form" onsubmit="handleLogin(event)">
-            <input type="password" id="passwordInput" placeholder="Mot de passe" required>
-            <button type="submit">Se connecter</button>
-        </form>
+
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-icon">▶</div>
+        <div class="login-title">dlstreams</div>
+      </div>
+      <div class="login-sub">Accès dashboard</div>
+      <div class="login-error" id="login-error">Mot de passe incorrect</div>
+      <div class="field">
+        <label>Mot de passe</label>
+        <input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')handleLogin(event)">
+      </div>
+      <button class="btn-primary" onclick="handleLogin(event)">Se connecter</button>
     </div>
-</div>
+  </div>
 
-<div class="dashboard-container" id="dashboard">
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo">▶</div>
-            <h2>dlstreams</h2>
-            <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Basculer le thème">🌙</button>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-title">Navigation</div>
-            <a class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')"><span class="icon">📊</span> Dashboard</a>
-            <a class="nav-item" data-page="catalog" onclick="navigateTo('catalog')"><span class="icon">📺</span> Catalogue</a>
-            <a class="nav-item" data-page="sources" onclick="navigateTo('sources')"><span class="icon">📡</span> Sources</a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-title">Liens</div>
-            <a href="/configure" class="nav-item"><span class="icon">🎨</span> Configuration</a>
-        </div>
-        <button class="logout-btn" onclick="logout()">
-            <span class="icon">🚪</span> Déconnexion
-        </button>
-    </aside>
-
-    <main class="main-content">
-        <div class="top-bar">
-            <div class="page-title">
-                <h1 id="pageTitle">Dashboard</h1>
-                <p id="pageSubtitle">Vue d'ensemble de votre addon</p>
+  <div id="dashboard">
+    <div class="layout">
+      <div class="sidebar">
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-brand">
+            <div class="sidebar-logo-icon">▶</div>
+            <div class="sidebar-logo-text">
+              <div class="title">dlstreams</div>
+              <div class="sub">Dashboard</div>
             </div>
-            <div style="display: flex; gap: 12px; align-items: center;">
-                <div class="update-time" id="update-time">
-                    <div class="spinner"></div>
-                    <span id="update-label">Mise à jour…</span>
-                </div>
-                <div class="status-indicator">
-                    <div class="status-dot"></div>
-                    <span>En ligne</span>
-                </div>
-                <button class="refresh-btn" onclick="refreshAll()">
-                    <span>↻</span> Actualiser
-                </button>
-            </div>
+          </div>
+          <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Basculer le thème">🌙</button>
         </div>
+        <div class="sidebar-nav">
+          <div class="nav-section-label">Menu</div>
+          <button class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">📊 Vue d'ensemble</button>
+          <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
+          <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
+          <div class="nav-section-label">Liens</div>
+          <a href="/configure" class="nav-item">🎨 Configuration</a>
+        </div>
+        <div class="sidebar-bottom">
+          <button class="btn-logout" onclick="logout()">Déconnexion</button>
+        </div>
+      </div>
 
-        <!-- Page Dashboard -->
+      <div class="main">
+
+        <!-- PAGE: OVERVIEW -->
         <div class="page active" id="page-dashboard">
-            <section class="stats-grid">
-                <div class="stat-card accent-dl">
-                    <div class="stat-icon">📡</div>
-                    <div class="stat-label">Chaînes dlstreams</div>
-                    <div class="stat-value" id="c-dl">—</div>
-                    <div class="stat-hint" id="c-dl-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
-                </div>
-                <div class="stat-card accent-vv">
-                    <div class="stat-icon">📺</div>
-                    <div class="stat-label">Chaînes Vavoo</div>
-                    <div class="stat-value" id="c-vv">—</div>
-                    <div class="stat-hint" id="c-vv-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
-                </div>
-                <div class="stat-card accent-manual">
-                    <div class="stat-icon">➕</div>
-                    <div class="stat-label">Sources manuelles</div>
-                    <div class="stat-value" id="c-manual">0</div>
-                    <div class="stat-hint">ajoutées par vous</div>
-                </div>
-                <div class="stat-card accent-up">
-                    <div class="stat-icon">⏱️</div>
-                    <div class="stat-label">Uptime</div>
-                    <div class="stat-value" id="c-up">—</div>
-                    <div class="stat-hint">depuis démarrage</div>
-                </div>
-                <div class="stat-card accent-req">
-                    <div class="stat-icon">🔁</div>
-                    <div class="stat-label">Requêtes</div>
-                    <div class="stat-value" id="c-req">—</div>
-                    <div class="stat-hint">total depuis démarrage</div>
-                </div>
-                <div class="stat-card accent-err">
-                    <div class="stat-icon">⚠️</div>
-                    <div class="stat-label">Erreurs</div>
-                    <div class="stat-value" id="c-err">—</div>
-                    <div class="stat-hint">requêtes en échec</div>
-                </div>
-            </section>
+          <div class="page-header">
+            <div>
+              <div class="page-title">Vue d'ensemble</div>
+              <div class="page-sub">Statistiques de votre proxy de chaînes</div>
+            </div>
+            <div class="header-actions">
+              <span class="update-time" id="update-time"><div class="spinner"></div><span id="update-label">Mise à jour…</span></span>
+              <div class="status-indicator"><div class="status-dot"></div><span>En ligne</span></div>
+              <button class="btn-outline-sm" onclick="refreshAll()">↻ Actualiser</button>
+            </div>
+          </div>
 
-            <section class="card">
-                <h2>⭐ Favoris <span style="font-size:13px;color:var(--text-secondary);font-weight:400">— épinglés depuis le catalogue</span></h2>
-                <div class="search-bar">
-                    <input id="fav-q" type="search" placeholder="Filtrer mes favoris…">
-                </div>
-                <div class="mini-grid" id="fav-list">
-                    <div class="fav-empty">Aucun favori — va dans le <a href="#" onclick="navigateTo('catalog');return false">Catalogue</a> et clique sur ★ pour épingler une chaîne</div>
-                </div>
-            </section>
+          <div class="stats-grid">
+            <div class="stat-card c-red">
+              <div class="stat-icon">📡</div>
+              <div class="stat-label">Chaînes dlstreams</div>
+              <div class="stat-value" id="c-dl">—</div>
+              <div class="stat-hint" id="c-dl-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+            </div>
+            <div class="stat-card c-blue">
+              <div class="stat-icon">📺</div>
+              <div class="stat-label">Chaînes Vavoo</div>
+              <div class="stat-value" id="c-vv">—</div>
+              <div class="stat-hint" id="c-vv-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+            </div>
+            <div class="stat-card c-green">
+              <div class="stat-icon">➕</div>
+              <div class="stat-label">Sources manuelles</div>
+              <div class="stat-value" id="c-manual">0</div>
+              <div class="stat-hint">ajoutées par vous</div>
+            </div>
+            <div class="stat-card c-purple">
+              <div class="stat-icon">⏱️</div>
+              <div class="stat-label">Uptime</div>
+              <div class="stat-value" id="c-up">—</div>
+              <div class="stat-hint">depuis démarrage</div>
+            </div>
+            <div class="stat-card c-blue2">
+              <div class="stat-icon">🔁</div>
+              <div class="stat-label">Requêtes</div>
+              <div class="stat-value" id="c-req">—</div>
+              <div class="stat-hint">total depuis démarrage</div>
+            </div>
+            <div class="stat-card c-red2">
+              <div class="stat-icon">⚠️</div>
+              <div class="stat-label">Erreurs</div>
+              <div class="stat-value" id="c-err">—</div>
+              <div class="stat-hint">requêtes en échec</div>
+            </div>
+          </div>
 
-            <section class="card">
-                <h2>📈 Répartition par langue</h2>
-                <div class="chart" id="lang-chart"></div>
-            </section>
+          <div class="ov-grid-2">
+            <div class="card">
+              <div class="card-head"><div class="card-title">Trafic — dernière heure</div></div>
+              <div class="card-body"><div class="ov-chart-wrap" id="traffic-chart"></div></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><div class="card-title">Répartition par langue</div></div>
+              <div class="card-body" id="lang-split"></div>
+            </div>
+          </div>
 
-            <section class="card">
-                <h2>📈 Trafic — dernière heure</h2>
-                <div class="sparkline" id="sparkline"></div>
-                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-top:6px">
-                    <span>il y a 1h</span><span>maintenant</span>
-                </div>
-            </section>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">⭐ Favoris</div>
+              <div class="search-bar" style="min-width:220px"><input type="search" id="fav-q" placeholder="Filtrer mes favoris…"></div>
+            </div>
+            <div class="card-body">
+              <div class="mini-grid" id="fav-list">
+                <div class="fav-empty">Aucun favori — va dans le <a href="#" onclick="navigateTo('catalog');return false">Catalogue</a> et clique sur ★ pour épingler une chaîne</div>
+              </div>
+            </div>
+          </div>
 
-            <section class="card">
-                <h2>🕒 Logs serveur <span style="font-size:13px;color:var(--text-secondary);font-weight:400">— en direct</span></h2>
-                <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-                    <button class="check-btn" id="log-pause" onclick="toggleLogPause()">⏸ pause</button>
-                    <span style="font-size:12px;color:var(--text-secondary)" id="log-status">en cours…</span>
-                </div>
-                <div class="log-feed" id="log-list" style="max-height:320px;overflow-y:auto"></div>
-            </section>
+          <div class="card">
+            <div class="card-head logs-toolbar">
+              <div class="logs-group">
+                <label>Méthode</label>
+                <select class="logs-select" id="logs-method" onchange="renderLogs()">
+                  <option value="">Toutes</option>
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                </select>
+              </div>
+              <div class="logs-group logs-search">
+                <input type="text" id="logs-search" placeholder="Rechercher une route ou une IP..." oninput="renderLogs()">
+              </div>
+              <div class="logs-group">
+                <label>Rafraîchissement</label>
+                <select class="logs-select" id="logs-interval" onchange="restartLogPolling()">
+                  <option value="2000">2s</option>
+                  <option value="5000" selected>5s</option>
+                  <option value="10000">10s</option>
+                  <option value="0">Off</option>
+                </select>
+              </div>
+              <button class="logs-pausebtn" id="logs-pausebtn" onclick="toggleLogPause()">⏸️ Pause</button>
+              <button class="btn-outline-sm" onclick="exportLogs()">⬇️ Exporter</button>
+              <button class="btn-outline-sm" onclick="clearLogs()">🗑️ Vider</button>
+              <div class="logs-status" style="margin-left:auto">
+                <div class="logs-dot" id="logs-dot"></div>
+                <span id="logs-statustext">Live</span>
+              </div>
+            </div>
+            <div class="logs-term" id="logs-term">
+              <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs...</p></div>
+            </div>
+          </div>
 
-            <section class="card">
-                <h2>📱 Accès rapide</h2>
-                <div class="access-grid">
-                    <div class="access-card">
-                        <div class="label">Stremio — installer l'addon</div>
-                        <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Addons → « Install via URL »</div>
-                        <a id="manifest" href="#">—</a>
-                        <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
-                    </div>
-                    <div class="access-card">
-                        <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
-                        <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Ouvre un flux par son id :</div>
-                        <code id="vlc" style="color:var(--primary);word-break:break-all;font-size:12px">—</code>
-                        <button class="copy-btn" data-copy="vlc">📋 copier</button>
-                    </div>
-                    <div class="access-card">
-                        <div class="label">Endpoints de l'API</div>
-                        <div style="margin-top:6px;font-size:12px;color:var(--text-secondary)">
-                            <div><code>/manifest.json</code> — Stremio</div>
-                            <div><code>/api/channels</code> — annuaire</div>
-                            <div><code>/configure</code> — config langue</div>
-                        </div>
-                    </div>
+          <div class="card">
+            <div class="card-head"><div class="card-title">📱 Accès rapide</div></div>
+            <div class="card-body">
+              <div class="access-grid">
+                <div class="access-card">
+                  <div class="label">Stremio — installer l'addon</div>
+                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">Addons → « Install via URL »</div>
+                  <a id="manifest" href="#">—</a>
+                  <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
                 </div>
-            </section>
+                <div class="access-card">
+                  <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
+                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">Ouvre un flux par son id :</div>
+                  <code id="vlc">—</code>
+                  <button class="copy-btn" data-copy="vlc">📋 copier</button>
+                </div>
+                <div class="access-card">
+                  <div class="label">Endpoints de l'API</div>
+                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">
+                    <div class="api-row"><code>/manifest.json</code> — Stremio</div>
+                    <div class="api-row"><code>/api/channels</code> — annuaire</div>
+                    <div class="api-row"><code>/configure</code> — config langue</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Page Sources -->
+        <!-- PAGE: SOURCES -->
         <div class="page" id="page-sources">
-            <section class="card">
-                <h2>📡 Ajouter une source</h2>
-                <div class="add-source-box">
-                    <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121)">
-                    <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
-                    <div class="add-source-result" id="add-source-result"></div>
-                </div>
-            </section>
+          <div class="page-header">
+            <div>
+              <div class="page-title">Sources</div>
+              <div class="page-sub">Gérer vos sources personnalisées</div>
+            </div>
+          </div>
 
-            <section class="card">
-                <h2>📋 Sources ajoutées manuellement</h2>
-                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">Ces chaînes ont été ajoutées via le scraper et sont conservées en mémoire.</p>
-                <div class="manual-channels-list" id="manual-channels-list">
-                    <div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
-                </div>
-            </section>
+          <div class="card">
+            <div class="card-head"><div class="card-title">📡 Ajouter une source</div></div>
+            <div class="card-body">
+              <div class="add-source-box">
+                <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121)">
+                <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
+                <div class="add-source-result" id="add-source-result"></div>
+              </div>
+            </div>
+          </div>
 
-            <section class="card">
-                <h2>🕒 Activité récente</h2>
-                <div id="activity-list-src" style="font-size:13px;color:var(--text-secondary)">chargement…</div>
-            </section>
+          <div class="card">
+            <div class="card-head"><div class="card-title">📋 Sources ajoutées manuellement</div></div>
+            <div class="card-body">
+              <p style="color:var(--text2);font-size:13px;margin-bottom:16px">Ces chaînes ont été ajoutées via le scraper et sont conservées en mémoire.</p>
+              <div class="manual-channels-list" id="manual-channels-list">
+                <div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🕒 Activité récente</div></div>
+            <div class="card-body">
+              <div id="activity-list-src" style="font-size:13px;color:var(--text2)">chargement…</div>
+            </div>
+          </div>
         </div>
 
-        <!-- Page Catalogue -->
+        <!-- PAGE: CATALOG -->
         <div class="page" id="page-catalog">
-            <section class="card">
-                <h2>📺 Catalogue complet</h2>
-                <div class="search-bar">
-                    <input id="q" type="search" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
-                    <select id="lang-filter">
-                        <option value="all">🌍 Toutes langues</option>
-                        <option value="fr" selected>🇫🇷 Français</option>
-                        <option value="en">🇬🇧 English</option>
-                        <option value="es">🇪🇸 Español</option>
-                        <option value="de">🇩🇪 Deutsch</option>
-                        <option value="it">🇮🇹 Italiano</option>
-                        <option value="ar">🇸🇦 Arabe</option>
-                        <option value="pt">🇵🇹 Português</option>
-                        <option value="other">📺 Autres</option>
-                    </select>
-                    <div class="tabs">
-                        <button class="tab active" data-src="dlstreams">dlstreams</button>
-                        <button class="tab" data-src="vavoo">Vavoo</button>
-                    </div>
+          <div class="page-header">
+            <div>
+              <div class="page-title">Catalogue</div>
+              <div class="page-sub">Explorer toutes les chaînes disponibles</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="search-bar" style="flex:1">
+                <input type="search" id="q" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
+                <select id="lang-filter">
+                  <option value="all">🌍 Toutes langues</option>
+                  <option value="fr" selected>🇫🇷 Français</option>
+                  <option value="en">🇬🇧 English</option>
+                  <option value="es">🇪🇸 Español</option>
+                  <option value="de">🇩🇪 Deutsch</option>
+                  <option value="it">🇮🇹 Italiano</option>
+                  <option value="ar">🇸🇦 Arabe</option>
+                  <option value="pt">🇵🇹 Português</option>
+                  <option value="other">📺 Autres</option>
+                </select>
+                <div class="tabs">
+                  <button class="tab active" data-src="dlstreams">dlstreams</button>
+                  <button class="tab" data-src="vavoo">Vavoo</button>
                 </div>
-                <div class="channel-list" id="list"><div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
-            </section>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="channel-list" id="list"><div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
+            </div>
+          </div>
         </div>
 
-        <footer style="margin-top:40px;color:var(--text-secondary);font-size:12px;text-align:center">
-            dlstreams addon+proxy · Python stdlib pure · zéro dépendance · <span id="host"></span>
-        </footer>
-    </main>
-</div>
-
-<div class="player-modal" id="player-modal">
-    <div class="player-container">
-        <div class="player-header">
-            <h3 id="player-title">Lecture</h3>
-            <button class="player-close" id="player-close">×</button>
-        </div>
-        <div class="player-body">
-            <video class="player-frame" id="player-frame" controls autoplay></video>
-        </div>
+      </div>
     </div>
-</div>
+  </div>
+
+  <div class="player-modal" id="player-modal">
+    <div class="player-container">
+      <div class="player-header">
+        <h3 id="player-title">Lecture</h3>
+        <button class="player-close" id="player-close">×</button>
+      </div>
+      <div class="player-body">
+        <video class="player-frame" id="player-frame" controls autoplay></video>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
 
 <script>
 const BASE = location.origin;
@@ -1604,44 +1477,42 @@ function toggleTheme(){
 }
 applyTheme(localStorage.getItem("dl_theme") || "dark");
 
-// Session reelle : verifiee cote serveur via le cookie httponly (plus de
-// localStorage -- n'importe qui pouvait s'auto-connecter depuis la console
-// sans jamais connaitre le mot de passe).
+// Session verifiee cote serveur via cookie httponly
 async function checkSession() {
     try {
         const r = await fetch("/api/stats");
         if (r.ok) {
-            $('#loginScreen').style.display = 'none';
+            $('#login-screen').style.display = 'none';
             $('#dashboard').classList.add('active');
             await boot();
         }
-    } catch (e) { /* pas connecte : ecran de login reste affiche */ }
+    } catch (e) { /* pas connecte */ }
 }
 
-// Wrapper fetch : si la session a expire en cours d'usage, renvoie a l'ecran
-// de login au lieu d'afficher des erreurs silencieuses.
 async function apiFetch(url, opts) {
     const r = await fetch(url, opts);
     if (r.status === 401) {
         $('#dashboard').classList.remove('active');
-        $('#loginScreen').style.display = 'flex';
-        showToast('Session expirée, reconnecte-toi', 'error');
+        $('#login-screen').style.display = 'flex';
+        toast('Session expirée, reconnecte-toi', 'error');
         throw new Error('unauthenticated');
     }
     return r;
 }
 
-function showToast(message, type = 'success') {
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+function toast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (type ? ' ' + type : '');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
 function handleLogin(e) {
-    e.preventDefault();
-    const password = $('#passwordInput').value;
+    if (e) e.preventDefault();
+    const password = $('#login-password').value;
+    const err = document.getElementById('login-error');
+    err.style.display = 'none';
     fetch('/api/auth', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1650,43 +1521,46 @@ function handleLogin(e) {
         .then(r => r.json().then(data => ({ok: r.ok, data})))
         .then(({ok, data}) => {
             if (ok && data.success) {
-                $('#loginError').innerHTML = '';
-                $('#loginScreen').style.display = 'none';
+                err.innerHTML = '';
+                $('#login-screen').style.display = 'none';
                 $('#dashboard').classList.add('active');
-                showToast('✅ Connecté avec succès');
+                toast('✅ Connecté avec succès', 'success');
                 boot();
             } else {
-                $('#loginError').innerHTML = `<div class="error-message">${data.message || 'Mot de passe incorrect'}</div>`;
+                err.textContent = data.message || 'Mot de passe incorrect';
+                err.style.display = 'block';
+                const card = document.querySelector('.login-card');
+                card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
             }
         })
-        .catch(() => { $('#loginError').innerHTML = '<div class="error-message">Erreur réseau</div>'; });
+        .catch(() => { err.textContent = 'Erreur réseau'; err.style.display = 'block'; });
 }
 
 function logout() {
     fetch('/api/logout').finally(() => {
         $('#dashboard').classList.remove('active');
-        $('#loginScreen').style.display = 'flex';
-        $('#passwordInput').value = '';
-        showToast('👋 Déconnecté');
+        $('#login-screen').style.display = 'flex';
+        $('#login-password').value = '';
+        toast('👋 Déconnecté');
     });
 }
 
 function navigateTo(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    
+
     $(`#page-${page}`).classList.add('active');
     document.querySelector(`[data-page="${page}"]`).classList.add('active');
-    
+
     const titles = {
-        dashboard: ['Dashboard', 'Vue d\'ensemble de votre addon'],
+        dashboard: ['Vue d\'ensemble', 'Statistiques de votre proxy de chaînes'],
         sources: ['Sources', 'Gérer vos sources personnalisées'],
         catalog: ['Catalogue', 'Explorer toutes les chaînes disponibles']
     };
-    
-    $('#pageTitle').textContent = titles[page][0];
-    $('#pageSubtitle').textContent = titles[page][1];
-    
+
+    $('#pageTitle') && (document.querySelector('.page.active .page-title').textContent = titles[page][0]);
+    document.querySelector('.page.active .page-sub').textContent = titles[page][1];
+
     if (page === 'dashboard') { renderFavs(); }
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'catalog') {
@@ -1699,68 +1573,130 @@ async function refreshStats(){
     try{
         const r = await apiFetch("/api/stats");
         const d = await r.json();
-        $("#c-dl").textContent = d.dlstreams.count;
+        animateNumber($("#c-dl"), d.dlstreams.count);
         setCacheBadge($("#c-dl-h"), d.dlstreams.age_seconds);
-        $("#c-vv").textContent = d.vavoo.count;
+        animateNumber($("#c-vv"), d.vavoo.count);
         setCacheBadge($("#c-vv-h"), d.vavoo.age_seconds);
         $("#c-up").textContent = fmtDur(d.uptime);
-        $("#c-manual").textContent = d.manual_channels || 0;
-        $("#c-req").textContent = (d.requests||0).toLocaleString('fr-FR');
-        $("#c-err").textContent = d.errors || 0;
-        renderChart(d.lang_counts || {});
-        renderSparkline(d.history || []);
-        $("#update-time").classList.remove("loading");
+        animateNumber($("#c-manual"), d.manual_channels || 0);
+        animateNumber($("#c-req"), d.requests||0);
+        animateNumber($("#c-err"), d.errors || 0);
+        renderAreaChart(d.history || []);
+        renderLangSplit(d.lang_counts || {});
+        const ut = $("#update-time");
+        ut.classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
     }catch(e){
         if (e.message !== 'unauthenticated') console.error("Stats error:", e);
     }
 }
 
+function animateNumber(el, target) {
+    if (!el) return;
+    const startVal = parseInt(el.textContent.replace(/\D/g,''), 10) || 0;
+    const dur = 500;
+    const t0 = performance.now();
+    function frame(now) {
+        const t = Math.min((now - t0) / dur, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        el.textContent = Math.round(startVal + (target - startVal) * eased).toLocaleString('fr-FR');
+        if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+}
+
 function setCacheBadge(el, age){
     if(age == null){ el.innerHTML = '<span class="cache-badge old"><span class="dot"></span>pas encore chargé</span>'; return; }
-    let cls = "ok", label = "cache : il y a " + fmtAge(age);
+    let cls = "ok", label = "il y a " + fmtAge(age);
     if(age > 3600){ cls = "old"; label = "périmé (" + fmtAge(age) + ")"; }
     else if(age > 600){ cls = "stale"; }
     el.innerHTML = `<span class="cache-badge ${cls}"><span class="dot"></span>${label}</span>`;
 }
 
-function renderChart(lang_counts){
-    const el = $("#lang-chart");
+// Graphique en aires (SVG) du trafic de la derniere heure
+function renderAreaChart(history){
+    const el = $("#traffic-chart");
+    if(!el) return;
+    const arr = (history||[]).slice(-60);
+    if(!arr.length){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
+    const W = 600, H = 170, PX = 12, PY = 24, PB = 28;
+    const maxV = Math.max(1, ...arr);
+    const n = arr.length;
+    const stepX = n > 1 ? (W - PX * 2) / (n - 1) : 0;
+    const yOf = v => H - PB - (v / maxV) * (H - PY - PB);
+    const pts = arr.map((v, i) => ({ x: PX + i * stepX, y: yOf(v), v }));
+    const baseY = H - PB;
+    const line = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+    const area = line + ' L' + pts[pts.length-1].x.toFixed(1) + ' ' + baseY + ' L' + pts[0].x.toFixed(1) + ' ' + baseY + ' Z';
+    const last = pts[pts.length-1];
+    const grid = [0.25, 0.5, 0.75, 1].map(f => {
+        const gy = baseY - f * (H - PY - PB);
+        return '<line x1="'+PX+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PX)+'" y2="'+gy.toFixed(1)+'" class="ov-chart-grid"/>';
+    }).join('');
+    const labelEvery = Math.max(1, Math.round(n / 6));
+    const labels = pts.map((p, i) => {
+        if (i !== n-1 && i % labelEvery !== 0) return '';
+        const ago = n - 1 - i;
+        const t = new Date(Date.now() - ago * 60000);
+        return '<text x="'+p.x.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" class="ov-chart-xlabel"'+(i===n-1?' style="fill:var(--accent);font-weight:800"':'')+'>'+
+            t.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'</text>';
+    }).join('');
+    const dots = pts.map((p,i) => '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.5" style="fill:var(--surface);stroke:var(--accent);stroke-width:2"><title>'+p.v+' req</title></circle>').join('');
+    el.innerHTML = '<svg class="ov-chart" viewBox="0 0 '+W+' '+H+'">' +
+        '<defs><linearGradient id="ov-fill" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" style="stop-color:var(--accent);stop-opacity:0.32"/>' +
+        '<stop offset="100%" style="stop-color:var(--accent);stop-opacity:0"/>' +
+        '</linearGradient></defs>' + grid +
+        '<path d="'+area+'" fill="url(#ov-fill)"/>' +
+        '<path d="'+line+'" fill="none" style="stroke:var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="9" fill="var(--accent)" opacity="0.18"/>' +
+        '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="4" fill="var(--accent)"/>' +
+        dots + labels + '</svg>';
+}
+
+// Donut de repartition par langue
+function renderLangSplit(lang_counts){
+    const el = $("#lang-split");
     if(!el) return;
     const flags = {fr:"🇫🇷",en:"🇬🇧",es:"🇪🇸",de:"🇩🇪",it:"🇮🇹",ar:"🇸🇦",pt:"🇵🇹",other:"📺"};
     const names = {fr:"Français",en:"English",es:"Español",de:"Deutsch",it:"Italiano",ar:"Arabe",pt:"Português",other:"Autres"};
+    const colors = {fr:'#e53e3e',en:'#60a5fa',es:'#f59e0b',de:'#a78bfa',it:'#48bb78',ar:'#34d399',pt:'#38bdf8',other:'#94a3b8'};
     const entries = Object.entries(lang_counts).sort((a,b)=>b[1]-a[1]);
-    if(!entries.length){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
-    const max = Math.max(...entries.map(e=>e[1]), 1);
-    el.innerHTML = entries.map(([lang,n]) => `
-        <div class="chart-row">
-            <div class="chart-label">${flags[lang]||"🌍"} ${names[lang]||lang}</div>
-            <div class="chart-bar"><div class="chart-fill" style="width:${Math.round(n/max*100)}%"></div></div>
-            <div class="chart-count">${n}</div>
-        </div>`).join("");
+    const total = entries.reduce((s,e)=>s+e[1], 0);
+    if(!total){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
+    const segments = entries.map(([lang,n]) => ({ label: (flags[lang]||"🌍")+' '+(names[lang]||lang), value: n, color: colors[lang]||'#94a3b8' }));
+    const R = 40, C = 2 * Math.PI * R;
+    let acc = 0;
+    let arcs = '<circle cx="50" cy="50" r="'+R+'" fill="none" style="stroke:var(--surface2)" stroke-width="13"/>';
+    segments.forEach(seg => {
+        const len = (seg.value / total) * C;
+        arcs += '<circle cx="50" cy="50" r="'+R+'" fill="none" style="stroke:'+seg.color+'" stroke-width="13" stroke-linecap="round" stroke-dasharray="'+len.toFixed(2)+' '+C.toFixed(2)+'" stroke-dashoffset="'+(-acc).toFixed(2)+'" transform="rotate(-90 50 50)"/>';
+        acc += len;
+    });
+    const legend = segments.map(seg => {
+        const pct = Math.round((seg.value / total) * 100);
+        return '<div class="ov-legend-item"><span class="ov-legend-dot" style="background:'+seg.color+'"></span><span>'+escapeHtml(seg.label)+'</span><b>'+pct+'%</b></div>';
+    }).join('');
+    el.innerHTML = '<div class="ov-split">' +
+        '<svg viewBox="0 0 100 100" class="ov-donut">' + arcs +
+        '<text x="50" y="46" text-anchor="middle" class="ov-donut-total">'+total.toLocaleString('fr-FR')+'</text>' +
+        '<text x="50" y="59" text-anchor="middle" class="ov-donut-sub">chaînes</text>' +
+        '</svg>' +
+        '<div class="ov-split-legend">' + legend + '</div></div>';
 }
 
-function renderSparkline(history){
-    const el = $("#sparkline");
-    if(!el) return;
-    const arr = (history||[]).slice(-60);
-    if(!arr.length){ el.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;padding:10px">aucune donnée</div>'; return; }
-    const max = Math.max(...arr, 1);
-    el.innerHTML = arr.map(n => `<div class="bar" style="height:${Math.max(4, Math.round(n/max*100))}%" title="${n} req"></div>`).join("");
-}
-
-async function loadActivity(targetId = "activity-list") {
+async function loadActivity(targetId) {
     try {
         const r = await apiFetch("/api/activity");
         const log = await r.json();
-        const el = $("#" + targetId);
+        const el = $("#" + (targetId || "activity-list"));
         if(!el) return;
         if (!log.length) { el.innerHTML = "aucune activité pour le moment"; return; }
         el.innerHTML = log.slice(0, 20).map(e =>
             `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
-                <span style="color:var(--text-primary)">${escapeHtml(e.action)}</span>
+                <span style="color:var(--text)">${escapeHtml(e.action)}</span>
                 ${e.details ? ' — ' + escapeHtml(e.details) : ''}
-                <span style="float:right;color:var(--text-secondary)">${e.time}</span>
+                <span style="float:right;color:var(--muted)">${e.time}</span>
             </div>`
         ).join("");
     } catch(e) {
@@ -1773,12 +1709,10 @@ async function loadManualChannels() {
         const r = await apiFetch("/api/manual-channels");
         const channels = await r.json();
         const list = $("#manual-channels-list");
-        
         if (channels.length === 0) {
-            list.innerHTML = '<div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>';
+            list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>';
             return;
         }
-        
         list.innerHTML = channels.map(ch => `
             <div class="manual-channel-item">
                 <div class="manual-channel-info">
@@ -1795,7 +1729,6 @@ async function loadManualChannels() {
 
 async function removeChannel(id) {
     if (!confirm('Supprimer cette chaîne ?')) return;
-    
     try {
         const r = await apiFetch('/api/remove-channel', {
             method: 'POST',
@@ -1803,16 +1736,15 @@ async function removeChannel(id) {
             body: JSON.stringify({id})
         });
         const d = await r.json();
-        
         if (d.success) {
-            showToast('✅ Chaîne supprimée');
+            toast('✅ Chaîne supprimée', 'success');
             await loadManualChannels();
             await refreshStats();
         } else {
-            showToast('❌ Erreur: ' + d.message, 'error');
+            toast('❌ Erreur: ' + d.message, 'error');
         }
     } catch(e) {
-        if (e.message !== 'unauthenticated') showToast('❌ Erreur: ' + e.message, 'error');
+        if (e.message !== 'unauthenticated') toast('❌ Erreur: ' + e.message, 'error');
     }
 }
 
@@ -1821,9 +1753,9 @@ async function refreshAll() {
         const r = await apiFetch("/api/refresh-cache");
         const d = await r.json();
         await refreshStats();
-        showToast(`✅ Cache rafraîchi : ${d.dlstreams} dlstreams / ${d.vavoo} vavoo`);
+        toast(`✅ Cache rafraîchi : ${d.dlstreams} dlstreams / ${d.vavoo} vavoo`, 'success');
     } catch(e) {
-        if (e.message !== 'unauthenticated') showToast('❌ Erreur de rafraîchissement', 'error');
+        if (e.message !== 'unauthenticated') toast('❌ Erreur de rafraîchissement', 'error');
     }
 }
 
@@ -1844,15 +1776,15 @@ function render(){
     const q = $("#q").value.toLowerCase().trim();
     const words = q ? q.split(/\s+/) : [];
     const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
-    
+
     const items = (ALL[CURRENT]||[]).filter(c => {
         if (lang && c.lang !== lang) return false;
         return words.every(w => (c.name||"").toLowerCase().includes(w));
     }).slice(0, 300);
-    
+
     const list = $("#list");
     if(!items.length){
-        list.innerHTML = '<div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">aucun résultat</div>';
+        list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">aucun résultat</div>';
         return;
     }
     list.innerHTML = items.map(c => {
@@ -1860,7 +1792,7 @@ function render(){
         const href = CURRENT==="vavoo"
             ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}`
             : `${BASE}/hls/${c.id}/index.m3u8`;
-        const logo = c.logo ? `<img src="${escapeHtml(c.logo)}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
+        const logo = c.logo ? `<img class="logo" src="${escapeHtml(c.logo)}" alt="" onerror="this.style.display='none'">` : "";
         const key = (CURRENT==="vavoo"?"vavoo:":"dlstreams:")+c.id;
         return `<a class="channel-item" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
             ${logo}
@@ -1910,8 +1842,8 @@ function toggleFav(ch, src){
     const key = src+":"+ch.id;
     const favs = getFavs();
     const i = favs.findIndex(f=>f.key===key);
-    if(i>=0){ favs.splice(i,1); showToast("Retiré des favoris"); }
-    else { favs.push({key, src, id: ch.id, name: ch.name, logo: ch.logo||""}); showToast("⭐ Ajouté aux favoris"); }
+    if(i>=0){ favs.splice(i,1); toast("Retiré des favoris"); }
+    else { favs.push({key, src, id: ch.id, name: ch.name, logo: ch.logo||""}); toast("⭐ Ajouté aux favoris", "success"); }
     saveFavs(favs);
     renderFavs();
     render();
@@ -1927,7 +1859,7 @@ function renderFavs(){
     }
     el.innerHTML = favs.map(f=>{
         const href = f.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(f.id))}` : `${BASE}/hls/${f.id}/index.m3u8`;
-        const logo = f.logo ? `<img src="${escapeHtml(f.logo)}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
+        const logo = f.logo ? `<img class="logo" src="${escapeHtml(f.logo)}" alt="" onerror="this.style.display='none'">` : "";
         return `<a class="channel-item" href="${href}" data-play="${href}" title="${escapeHtml(f.name)}">
             ${logo}
             <div class="name">${escapeHtml(f.name)}</div>
@@ -1938,7 +1870,7 @@ function renderFavs(){
 }
 function removeFav(key){
     saveFavs(getFavs().filter(f=>f.key!==key));
-    showToast("Retiré des favoris");
+    toast("Retiré des favoris");
     renderFavs();
     render();
 }
@@ -1980,8 +1912,9 @@ document.addEventListener("click", (e)=>{
 
 $("#add-source-btn").addEventListener("click", async ()=>{
     const url = $("#source-url").value.trim();
+    const out = $("#add-source-result");
     if(!url){
-        $("#add-source-result").innerHTML = '<div class="alert alert-error">Veuillez entrer une URL</div>';
+        out.innerHTML = '<div class="alert alert-error">Veuillez entrer une URL</div>';
         return;
     }
     $("#add-source-btn").disabled = true;
@@ -1990,19 +1923,19 @@ $("#add-source-btn").addEventListener("click", async ()=>{
         const r = await apiFetch(`/api/add-source?url=${encodeURIComponent(url)}`);
         const d = await r.json();
         if(d.success){
-            $("#add-source-result").innerHTML = `<div class="alert alert-success">${d.message}</div>`;
+            out.innerHTML = `<div class="alert alert-success">${d.message}</div>`;
             $("#source-url").value = "";
-            showToast(d.message);
+            toast(d.message, 'success');
             await loadManualChannels();
             await refreshStats();
         }else{
-            $("#add-source-result").innerHTML = `<div class="alert alert-error">${d.message}</div>`;
-            showToast(d.message, 'error');
+            out.innerHTML = `<div class="alert alert-error">${d.message}</div>`;
+            toast(d.message, 'error');
         }
     }catch(e){
         if (e.message !== 'unauthenticated') {
-            $("#add-source-result").innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
-            showToast('Erreur: ' + e.message, 'error');
+            out.innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
+            toast('Erreur: ' + e.message, 'error');
         }
     }finally{
         $("#add-source-btn").disabled = false;
@@ -2028,7 +1961,7 @@ document.querySelectorAll(".copy-btn").forEach(b=>b.addEventListener("click",()=
     const el = $("#"+b.dataset.copy);
     const txt = el.href || el.textContent;
     navigator.clipboard.writeText(txt).then(()=>{
-        showToast('✅ URL copiée');
+        toast('✅ URL copiée', 'success');
         const old = b.textContent;
         b.textContent = "✓ copié";
         setTimeout(()=>b.textContent=old,1200);
@@ -2040,39 +1973,97 @@ function initLinks(){
     $("#manifest").href = m;
     $("#manifest").textContent = m;
     $("#vlc").textContent = `${BASE}/hls/121/index.m3u8`;
-    $("#host").textContent = BASE;
 }
 
-let LOG_PAUSED = false, _logTimer = null;
-async function loadLogs(){
-    if(LOG_PAUSED) return;
-    try{
-        const r = await apiFetch("/api/logs");
-        const logs = await r.json();
-        const el = $("#log-list");
-        if(!el) return;
-        el.innerHTML = logs.slice(0, 60).map(l => `
-            <div class="log-row">
-                <span class="log-time">${escapeHtml(l.t)}</span>
-                <span class="log-method ${escapeHtml(l.method)}">${escapeHtml(l.method)}</span>
-                <span class="log-code ${l.code>=500?'err':(l.code>=400?'warn':'ok')}">${l.code}</span>
-                <span class="log-ip">${escapeHtml(l.ip)}</span>
-                <span class="log-path">${escapeHtml(l.path)}</span>
-            </div>`).join("") || '<div style="color:var(--text-secondary);text-align:center;padding:20px">aucune requête</div>';
-        $("#log-status").textContent = "dernière MAJ " + new Date().toLocaleTimeString('fr-FR');
-    }catch(e){
-        if (e.message !== 'unauthenticated') console.error("Logs error:", e);
+// ---- LOGS live (terminal) ----
+let allLogs = [];
+let logsInterval = null;
+let logsPaused = false;
+
+function restartLogPolling() {
+    if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
+    if (logsPaused) return;
+    const ms = Number(document.getElementById('logs-interval').value);
+    if (ms > 0) logsInterval = setInterval(loadLogs, ms);
+}
+
+function toggleLogPause() {
+    logsPaused = !logsPaused;
+    const btn = document.getElementById('logs-pausebtn');
+    const dot = document.getElementById('logs-dot');
+    const text = document.getElementById('logs-statustext');
+    if (logsPaused) {
+        if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
+        btn.textContent = '▶️ Reprendre'; btn.classList.add('paused');
+        dot.classList.add('paused'); text.textContent = 'Paused';
+    } else {
+        btn.textContent = '⏸️ Pause'; btn.classList.remove('paused');
+        dot.classList.remove('paused'); text.textContent = 'Live';
+        restartLogPolling();
     }
 }
-function toggleLogPause(){
-    LOG_PAUSED = !LOG_PAUSED;
-    $("#log-pause").textContent = LOG_PAUSED ? "▶ reprendre" : "⏸ pause";
-    if(!LOG_PAUSED) loadLogs();
+
+async function loadLogs() {
+    if (logsPaused) return;
+    try {
+        const res = await apiFetch('/api/logs');
+        if (!res.ok) { return; }
+        allLogs = await res.json();
+        renderLogs();
+    } catch (e) { /* silencieux */ }
 }
-function initLogs(){
-    loadLogs();
-    if(_logTimer) clearInterval(_logTimer);
-    _logTimer = setInterval(loadLogs, 3000);
+
+function renderLogs() {
+    const methodFilter = document.getElementById('logs-method').value;
+    const search = document.getElementById('logs-search').value.trim().toLowerCase();
+
+    let filtered = [...allLogs].reverse(); // du plus ancien au plus récent, défilement vers le bas
+    if (methodFilter) filtered = filtered.filter(l => l.method === methodFilter);
+    if (search) filtered = filtered.filter(l =>
+        String(l.path||'').toLowerCase().includes(search) || String(l.ip||'').toLowerCase().includes(search));
+
+    const term = document.getElementById('logs-term');
+    if (!filtered.length) {
+        term.innerHTML = '<div class="logs-empty"><div class="icon">📋</div><p>Aucun log ne correspond</p></div>';
+        return;
+    }
+    const wasAtBottom = term.scrollTop + term.clientHeight >= term.scrollHeight - 40;
+    term.innerHTML = filtered.slice(0, 120).map(l => {
+        const cls = l.code >= 500 ? 'row-err' : (l.code >= 400 ? 'row-warn' : '');
+        const codeCls = l.code >= 500 ? 'err' : (l.code >= 400 ? 'warn' : 'ok');
+        return `<div class="log-row ${cls}">
+            <span class="log-time">${escapeHtml(l.t)}</span>
+            <span class="log-method ${escapeHtml(l.method)}">${escapeHtml(l.method)}</span>
+            <span class="log-code ${codeCls}">${l.code}</span>
+            <span class="log-ip">${escapeHtml(l.ip)}</span>
+            <span class="log-path">${escapeHtml(l.path)}</span>
+        </div>`;
+    }).join('');
+    if (wasAtBottom) term.scrollTop = term.scrollHeight;
+}
+
+function exportLogs() {
+    if (!allLogs.length) { toast('⚠️ Aucun log à exporter', 'warn'); return; }
+    const lines = [...allLogs].reverse().map(l => `[${l.t}] ${l.method} ${l.code} ${l.ip} ${l.path}`);
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'dlstreams-logs.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('✅ Export téléchargé', 'success');
+}
+
+async function clearLogs() {
+    if (!confirm('Vider tous les logs ? Cette action est irréversible.')) return;
+    try {
+        const res = await fetch('/api/logs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
+        if (res.ok) { toast('✅ Logs vidés', 'success'); await loadLogs(); }
+        else toast('❌ Erreur lors du reset', 'error');
+    } catch (e) { toast('❌ ' + e.message, 'error'); }
 }
 
 async function boot(){
@@ -2080,16 +2071,15 @@ async function boot(){
     render();
     renderFavs();
     initLinks();
-    initLogs();
+    loadLogs();
+    restartLogPolling();
     setInterval(refreshStats, 30000);
 }
 
-// Vérifier la session au chargement
 checkSession();
 </script>
 </body>
-</html>
-"""
+</html>"""
 
 CONFIGURE_HTML = r"""<!doctype html>
 <html lang="fr">
