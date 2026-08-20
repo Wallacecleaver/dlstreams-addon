@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.12.1"
+_VERSION = "1.12.2"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -140,6 +140,19 @@ _CH_LOGO = {
     "419": "https://static.epg.best/fr/TF1SeriesFilms.fr.png",
     "421": "https://static.epg.best/fr/6ter.fr.png",
     "422": "https://static.epg.best/fr/RMCStory.fr.png",
+    "423": "https://commons.wikimedia.org/wiki/Special:FilePath/Logo_de_RMC_d%C3%A9couverte_depuis_le_08-11-2025.png",
+    "424": "https://static.epg.best/fr/Cherie25.fr.png",
+    "414": "https://static.epg.best/fr/FranceInfo.fr.png",
+    "420": "https://static.epg.best/fr/LEquipe21.fr.png",
+    "645": "https://static.epg.best/fr/LEquipe21.fr.png",
+    "201": "https://static.epg.best/fr/BeinSports1.fr.png",
+    "202": "https://static.epg.best/fr/BeinSports2.fr.png",
+    "203": "https://static.epg.best/fr/BeinSports3.fr.png",
+    "116": "https://static.epg.best/fr/BeinSports1.fr.png",
+    "772": "https://static.epg.best/fr/Eurosport1.fr.png",
+    "960": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
+    "68": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
+    "76": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
 }
 
 # ============================ REGLAGES ============================
@@ -2028,10 +2041,6 @@ DASHBOARD_HTML = r"""<!doctype html>
   .play-badge { width:46px; height:46px; border-radius:50%; background:var(--accent); color:#fff; display:grid;
     place-items:center; font-size:16px; box-shadow:0 8px 24px rgba(229,62,62,.5); transform:scale(.8); transition:transform .18s; }
   .chan-card:hover .play-badge { transform:scale(1); }
-  .chan-fav { position:absolute; top:8px; right:8px; font-size:15px; color:rgba(255,255,255,.5); cursor:pointer;
-    background:rgba(0,0,0,.45); border-radius:8px; padding:3px 8px; line-height:1; transition:all .18s; z-index:2; }
-  .chan-fav:hover { color:#f59e0b; transform:scale(1.12); }
-  .chan-fav.active { color:#f59e0b; text-shadow:0 0 10px rgba(245,158,11,.7); }
   .chan-check { position:absolute; top:8px; left:8px; font-size:10px; font-weight:800; padding:3px 8px; border-radius:8px;
     background:rgba(0,0,0,.5); color:#aaa; cursor:pointer; z-index:2; font-family:var(--font-mono); transition:all .18s; letter-spacing:.3px; }
   .chan-check.ok { color:#48bb78; }
@@ -2215,18 +2224,6 @@ DASHBOARD_HTML = r"""<!doctype html>
   .now-sub { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .now-time { font-size:11px; color:var(--muted); font-family:var(--font-mono); flex-shrink:0; }
 
-  /* Favoris : actions + badge scan */
-  .fav-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .fav-chk { font-size:12px; font-weight:800; flex-shrink:0; }
-  .fav-chk.ok { color:var(--green); }
-  .fav-chk.ko { color:var(--error); }
-  .scan-status { padding:10px 20px; font-size:13px; color:var(--text2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
-  .scan-status .scan-spin { width:13px; height:13px; border:2px solid var(--border); border-top-color:var(--accent);
-    border-radius:50%; animation:spin .8s linear infinite; }
-  .scan-status b { color:var(--text); }
-  .scan-ok { color:var(--green); font-weight:800; }
-  .scan-ko { color:var(--error); font-weight:800; }
-
   /* Page Système */
   .sys-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
   .sys-row { display:flex; justify-content:space-between; gap:12px; padding:10px 14px;
@@ -2286,9 +2283,6 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
           <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages</button>
-          <div class="nav-section-label">Raccourcis</div>
-          <button class="nav-shortcut" onclick="sidebarAction('scan')" title="Teste la disponibilité de toutes vos chaînes favorites"><span class="sc-ico">🩺</span><span class="sc-txt">Tester mes favoris</span></button>
-          <button class="nav-shortcut" onclick="sidebarAction('m3u-favs')" title="Télécharge une playlist de vos favoris"><span class="sc-ico">⬇️</span><span class="sc-txt">Export favoris M3U</span></button>
         </div>
         <div class="sidebar-bottom">
           <button class="btn-logout" onclick="logout()">Déconnexion</button>
@@ -3179,7 +3173,6 @@ function render(){
             <div class="chan-tile">
                 <img class="chan-logo" src="${logoUrl}" alt="" loading="lazy">
                 <span class="chan-check ${checkCls(key)}" onclick="event.preventDefault();event.stopPropagation();checkStream('${escapeHtml(key)}')">${checkLabel(key)}</span>
-                <span class="chan-fav ${isFav(key)?"active":""}" onclick="event.preventDefault();event.stopPropagation();toggleFavKey('${escapeHtml(key)}')">★</span>
                 <span class="chan-play"><span class="play-badge">▶</span></span>
             </div>
             <div class="chan-body">
@@ -3218,93 +3211,6 @@ async function checkStream(key){
     render();
 }
 
-function getFavs(){ try{ return JSON.parse(localStorage.getItem("dl_favs")||"[]"); }catch(e){ return []; } }
-function saveFavs(f){ localStorage.setItem("dl_favs", JSON.stringify(f)); }
-function isFav(key){ return getFavs().some(f=>f.key===key); }
-function toggleFavKey(key){
-    const src = key.split(":")[0];
-    const id = key.slice(key.indexOf(":")+1);
-    const ch = (ALL[src]||[]).find(c => String(c.id)===String(id));
-    if(ch) toggleFav(ch, src);
-}
-function toggleFav(ch, src){
-    const key = src+":"+ch.id;
-    const favs = getFavs();
-    const i = favs.findIndex(f=>f.key===key);
-    if(i>=0){ favs.splice(i,1); toast("Retiré des favoris"); }
-    else { favs.push({key, src, id: ch.id, name: ch.name, logo: ch.logo||""}); toast("⭐ Ajouté aux favoris", "success"); }
-    saveFavs(favs);
-    renderFavs();
-    render();
-}
-function renderFavs(){
-    const el = $("#fav-list");
-    if(!el) return;
-    const q = ($("#fav-q").value||"").toLowerCase().trim();
-    const favs = getFavs().filter(f=>!q || (f.name||"").toLowerCase().includes(q)).slice(0,100);
-    if(!favs.length){
-        el.innerHTML = '<div class="fav-empty">Aucun favori — va dans le <a href="#" onclick="navigateTo(\'catalog\');return false">Catalogue</a> et clique sur ★ pour épingler une chaîne</div>';
-        return;
-    }
-    el.innerHTML = favs.map(f=>{
-        const href = f.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(f.id))}` : `${BASE}/hls/${f.id}/index.m3u8`;
-        const logo = f.logo ? `<img class="logo" src="${escapeHtml(f.logo)}" alt="" onerror="this.style.display='none'">` : "";
-        const st = CHECKED[f.key];
-        const badge = st ? `<span class="fav-chk ${st.state==="ok"?"ok":"ko"}">${st.state==="ok"?"✓":"✗"}</span>` : "";
-        return `<a class="channel-item" href="${href}" data-play="${href}" title="${escapeHtml(f.name)}">
-            ${logo}
-            <div class="name">${escapeHtml(f.name)}</div>
-            <div class="id">${f.src==="vavoo"?"vavoo":"#"+f.id}</div>
-            ${badge}
-            <span class="fav-star active" onclick="event.preventDefault();event.stopPropagation();removeFav('${escapeHtml(f.key)}')">★</span>
-        </a>`;
-    }).join("");
-}
-function removeFav(key){
-    saveFavs(getFavs().filter(f=>f.key!==key));
-    toast("Retiré des favoris");
-    renderFavs();
-    render();
-}
-
-// Scan de santé en masse des favoris
-async function scanFavs(){
-    const favs = getFavs();
-    if(!favs.length){ toast('⚠️ Aucun favori à tester', 'warn'); return; }
-    const tested = favs.slice(0,200);
-    const btn = $("#scan-favs-btn");
-    const status = $("#scan-status");
-    if(btn){ btn.disabled = true; btn.textContent = "⏳ Scan en cours..."; }
-    if(status){
-        status.style.display = 'flex';
-        status.innerHTML = '<div class="scan-spin"></div><span>Test de <b>' + tested.length + '</b> chaîne(s)' + (favs.length > 200 ? ' (sur ' + favs.length + ', max 200)' : '') + '…</span>';
-    }
-    try{
-        const r = await apiFetch('/api/check-batch', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({items: tested.map(f => ({src: f.src, id: f.src==="vavoo" ? b64u(f.id) : f.id}))})
-        });
-        const d = await r.json();
-        const results = d.results || [];
-        const ok = results.filter(x=>x.ok).length;
-        results.forEach(res => { CHECKED[res.key] = {state: res.ok ? "ok" : "ko", ms: res.ms}; });
-        saveChecked();
-        if(status) status.innerHTML = '<span>Scan terminé : <b>' + ok + '</b> OK / <b>' + results.length + '</b> chaînes</span>' +
-            '<span class="scan-ok">✓</span><span class="scan-ko">✗</span>';
-        renderFavs();
-        render();
-        toast(`Scan terminé : ${ok}/${results.length} OK`, ok === results.length ? 'success' : 'warn');
-    }catch(e){
-        if (e.message !== 'unauthenticated') {
-            if(status) status.innerHTML = '<span class="scan-ko">✗ Scan impossible : ' + escapeHtml(e.message) + '</span>';
-            toast('❌ Scan impossible: ' + e.message, 'error');
-        }
-    }finally{
-        if(btn){ btn.disabled = false; btn.textContent = "🩺 Tester mes favoris"; }
-    }
-}
-
 // Export M3U
 function downloadText(filename, text){
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -3324,12 +3230,6 @@ function buildM3U(chans){
     });
     return lines.join('\n');
 }
-function exportFavsM3U(){
-    const favs = getFavs();
-    if(!favs.length){ toast('⚠️ Aucun favori à exporter', 'warn'); return; }
-    downloadText('dlstreams-favoris.m3u', buildM3U(favs));
-    toast(`✅ ${favs.length} favori(s) exporté(s)`, 'success');
-}
 async function exportCatalogM3U(){
     if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
     const q = ($("#q").value||"").toLowerCase().trim();
@@ -3342,14 +3242,6 @@ async function exportCatalogM3U(){
     if(!chans.length){ toast('⚠️ Aucune chaîne à exporter', 'warn'); return; }
     downloadText('dlstreams-' + CURRENT + '.m3u', buildM3U(chans.map(c => Object.assign({}, c, {src: CURRENT}))));
     toast(`✅ ${chans.length} chaînes exportées`, 'success');
-}
-
-// Raccourcis sidebar : actions rapides
-function sidebarAction(action){
-    if(action === 'scan'){ navigateTo('dashboard'); setTimeout(()=>scanFavs(), 200); }
-    else if(action === 'm3u-favs'){ exportFavsM3U(); }
-    else if(action === 'm3u-catalog'){ navigateTo('catalog'); setTimeout(()=>exportCatalogM3U(), 200); }
-    else if(action === 'logs-clear'){ navigateTo('logs'); setTimeout(()=>clearLogs(), 200); }
 }
 
 // ===== REGLAGES =====
