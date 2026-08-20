@@ -19,7 +19,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.7.0"
+_VERSION = "1.7.2"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -39,6 +39,7 @@ _stats_lock = threading.Lock()
 _hist: list[list[int]] = []      # [minute_unix, nb_requetes] -> sparkline (1h)
 _request_log: list[dict] = []    # journal des requetes (buffer 300)
 _chan_plays: dict[str, int] = {}  # cle "src:id" -> nb de lectures de flux
+_recent_plays: list[dict] = []    # dernieres lectures (buffer 40)
 _HIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_hist.json")
 _HIST_KEEP_MIN = 7 * 24 * 60      # minutes conservees dans l'historique (7 jours)
 
@@ -209,22 +210,39 @@ def _track_play(src: str, cid: str):
     key = f"{src}:{cid}"
     with _stats_lock:
         _chan_plays[key] = _chan_plays.get(key, 0) + 1
+        _recent_plays.append({"src": src, "cid": cid, "t": time.time()})
+        if len(_recent_plays) > 40:
+            del _recent_plays[:len(_recent_plays) - 40]
 
-def _top_channels(n: int = 10) -> list[dict]:
+def _name_for(src: str, cid: str) -> str:
+    if src == "vavoo":
+        ch = next((x for x in _vavoo_cache.get("list", []) if x.get("id") == cid), None)
+    else:
+        ch = next((x for x in _ch_cache.get("list", []) if str(x.get("id")) == str(cid)), None)
+    return (ch.get("name") or cid) if ch else cid
+
+def _top_channels(n: int = 30) -> list[dict]:
     with _stats_lock:
         items = sorted(_chan_plays.items(), key=lambda kv: -kv[1])[:n]
     out = []
     for key, plays in items:
         src, _, cid = key.partition(":")
-        name = cid
-        if src == "vavoo":
-            ch = next((x for x in _vavoo_cache.get("list", []) if x.get("id") == cid), None)
-        else:
-            ch = next((x for x in _ch_cache.get("list", []) if str(x.get("id")) == str(cid)), None)
-        if ch:
-            name = ch.get("name") or cid
-        out.append({"key": key, "src": src, "id": cid, "name": name, "plays": plays})
+        out.append({"key": key, "src": src, "id": cid, "name": _name_for(src, cid), "plays": plays})
     return out
+
+def _recent_plays_list(n: int = 15) -> list[dict]:
+    with _stats_lock:
+        items = list(reversed(_recent_plays))[:n]
+    out = []
+    for p in items:
+        key = f"{p['src']}:{p['cid']}"
+        out.append({"key": key, "src": p["src"], "id": p["cid"],
+                    "name": _name_for(p["src"], p["cid"]), "t": p["t"]})
+    return out
+
+def _plays_map() -> dict[str, int]:
+    with _stats_lock:
+        return dict(_chan_plays)
 
 def _system_info() -> dict:
     import shutil
@@ -556,6 +574,7 @@ def _stats() -> dict:
         "history": [list(pair) for pair in _hist],
         "daily_totals": _daily_totals(),
         "top_channels": _top_channels(),
+        "recent_plays": _recent_plays_list(),
     }
 
 def _daily_totals() -> list[dict]:
@@ -821,6 +840,11 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 lang = qs.get("lang", [None])[0]
                 return self._send(200, json.dumps(channels(lang_filter=lang)).encode(), "application/json", True)
+
+            if path == "/api/plays":
+                if not self._require_auth():
+                    return
+                return self._send(200, json.dumps(_plays_map()).encode(), "application/json")
 
             if path == "/api/vavoo-channels":
                 if not self._require_auth():
@@ -1413,6 +1437,7 @@ DASHBOARD_HTML = r"""<!doctype html>
   .top-bar { height:8px; background:var(--surface2); border-radius:6px; overflow:hidden; }
   .top-bar-fill { height:100%; background:var(--accent); border-radius:6px; opacity:.85; transition:width .8s cubic-bezier(.22,1,.36,1); }
   .top-plays { font-size:12px; color:var(--text2); text-align:right; font-family:var(--font-mono); font-weight:700; }
+  .top-time { font-size:12px; color:var(--text2); font-weight:600; }
 
   /* Favoris : actions + badge scan */
   .fav-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -1550,7 +1575,7 @@ DASHBOARD_HTML = r"""<!doctype html>
               <div class="stat-icon">⚠️</div>
               <div class="stat-label">Erreurs</div>
               <div class="stat-value" id="c-err">—</div>
-              <div class="stat-hint">requêtes en échec</div>
+              <div class="stat-hint" id="c-err-h">requêtes en échec</div>
             </div>
           </div>
 
@@ -1563,6 +1588,7 @@ DASHBOARD_HTML = r"""<!doctype html>
                   <button class="range-btn" data-range="1440" onclick="setChartRange(1440)">24h</button>
                   <button class="range-btn" data-range="10080" onclick="setChartRange(10080)">7j</button>
                 </div>
+                <span class="card-desc" id="chart-total"></span>
               </div>
               <div class="card-body"><div class="ov-chart-wrap" id="traffic-chart"></div></div>
             </div>
@@ -1574,11 +1600,18 @@ DASHBOARD_HTML = r"""<!doctype html>
 
           <div class="card">
             <div class="card-head">
-              <div class="card-title">🔥 Top chaînes</div>
+              <div class="card-title">🔥 Lectures</div>
+              <div class="chart-range">
+                <button class="range-btn active" data-chtab="top" onclick="setChTab('top')">Top</button>
+                <button class="range-btn" data-chtab="recent" onclick="setChTab('recent')">Récents</button>
+              </div>
               <span class="card-desc" id="top-total"></span>
             </div>
             <div class="card-body" id="top-channels">
               <div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>
+            </div>
+            <div class="card-body" id="top-more-wrap" style="display:none;padding-top:0">
+              <button class="btn-outline-sm" id="top-more" onclick="toggleTopLimit()" style="width:100%">Voir plus</button>
             </div>
           </div>
 
@@ -1743,6 +1776,10 @@ DASHBOARD_HTML = r"""<!doctype html>
                   <option value="pt">🇵🇹 Português</option>
                   <option value="other">📺 Autres</option>
                 </select>
+                <select id="catalog-sort" onchange="setCatalogSort()">
+                  <option value="name">Tri : Nom</option>
+                  <option value="plays">Tri : Lectures</option>
+                </select>
                 <div class="tabs">
                   <button class="tab active" data-src="dlstreams">dlstreams</button>
                   <button class="tab" data-src="vavoo">Vavoo</button>
@@ -1864,7 +1901,10 @@ function logout() {
     });
 }
 
+let _lastPage = null;
 function navigateTo(page) {
+    _lastPage = page;
+    try { if (location.hash !== '#' + page) history.replaceState(null, '', '#' + page); } catch(e){}
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
@@ -1888,6 +1928,10 @@ function navigateTo(page) {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
     }
 }
+window.addEventListener('hashchange', () => {
+    const p = location.hash.replace('#', '');
+    if (p && p !== _lastPage && document.getElementById('page-' + p)) navigateTo(p);
+});
 
 async function refreshStats(){
     try{
@@ -1901,9 +1945,15 @@ async function refreshStats(){
         animateNumber($("#c-manual"), d.manual_channels || 0);
         animateNumber($("#c-req"), d.requests||0);
         animateNumber($("#c-err"), d.errors || 0);
+        const errH = $("#c-err-h");
+        if(errH) errH.textContent = (d.requests && d.errors)
+            ? Math.min(100, (d.errors / d.requests * 100)).toFixed(1) + '% des requêtes'
+            : 'requêtes en échec';
         renderAreaChart(d.history || []);
         renderLangSplit(d.lang_counts || {});
-        renderTopChannels(d.top_channels || []);
+        LAST_TOP = d.top_channels || [];
+        LAST_REC = d.recent_plays || [];
+        renderChannelsCard();
         LAST_LANG_COUNTS = d.lang_counts || {};
         renderLangShortcuts();
         const ut = $("#update-time");
@@ -1952,6 +2002,8 @@ function renderAreaChart(history){
     const nowMin = Date.now() / 1000;
     const windowMin = CHART_RANGE === 10080 ? 10080 : (CHART_RANGE === 1440 ? 1440 : 60);
     const arr = LAST_HIST.filter(h => nowMin - h[0] <= windowMin + 1);
+    const tot = $("#chart-total");
+    if(tot) tot.textContent = arr.length ? arr.reduce((a,h)=>a+h[1], 0).toLocaleString('fr-FR') + ' requêtes' : '';
     if(!arr.length){ el.innerHTML = '<div class="fav-empty">aucune donnée sur cette période</div>'; return; }
     const counts = arr.map(h => h[1]);
     const W = 600, H = 170, PX = 12, PY = 24, PB = 28;
@@ -1992,24 +2044,59 @@ function renderAreaChart(history){
         dots + labels + '</svg>';
 }
 
-// Top chaînes les plus regardées
-function renderTopChannels(tops){
+// Card "Lectures" : Top chaînes / Récents
+let CH_TAB = 'top', LAST_TOP = [], LAST_REC = [], _topLimit = 10;
+function setChTab(t){
+    CH_TAB = t;
+    document.querySelectorAll('.card [data-chtab]').forEach(b=>b.classList.toggle('active', b.dataset.chtab===t));
+    renderChannelsCard();
+}
+function toggleTopLimit(){
+    _topLimit = _topLimit === 10 ? 30 : 10;
+    renderChannelsCard();
+}
+function fmtAgo(t){
+    const s = Math.max(1, Math.round((Date.now()/1000 - t)));
+    if (s < 60) return 'à l\'instant';
+    if (s < 3600) return 'il y a ' + Math.floor(s/60) + ' min';
+    if (s < 86400) return 'il y a ' + Math.floor(s/3600) + ' h';
+    return 'il y a ' + Math.floor(s/86400) + ' j';
+}
+function renderChannelsCard(){
     const el = $("#top-channels");
     if(!el) return;
-    const total = (tops||[]).reduce((a,t)=>a+t.plays, 0);
+    const moreWrap = $("#top-more-wrap");
     const tot = $("#top-total");
-    if(tot) tot.textContent = total ? `${total} lecture${total>1?"s":""}` : "";
-    if(!tops || !tops.length){ el.innerHTML = '<div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>'; return; }
-    const max = Math.max(...tops.map(t=>t.plays));
-    el.innerHTML = tops.map(t => {
+    const isTop = CH_TAB === 'top';
+    const list = isTop ? LAST_TOP : LAST_REC;
+    if(!list.length){
+        el.innerHTML = '<div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>';
+        if(moreWrap) moreWrap.style.display = 'none';
+        if(tot) tot.textContent = '';
+        return;
+    }
+    const shown = isTop ? list.slice(0, _topLimit) : list.slice(0, 12);
+    const max = isTop ? Math.max(...list.map(t=>t.plays)) : 1;
+    el.innerHTML = shown.map(t => {
         const href = t.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(t.id))}` : `${BASE}/hls/${t.id}/index.m3u8`;
-        const bar = Math.round((t.plays / max) * 100);
+        const bar = isTop ? Math.round((t.plays / max) * 100) : 0;
         return `<div class="top-row" data-play="${href}" title="${escapeHtml(t.name)}">
             <div class="top-name">${escapeHtml(t.name)}</div>
-            <div class="top-bar"><div class="top-bar-fill" style="width:${bar}%"></div></div>
-            <div class="top-plays">${t.plays}</div>
+            ${isTop
+                ? `<div class="top-bar"><div class="top-bar-fill" style="width:${bar}%"></div></div><div class="top-plays">${t.plays}</div>`
+                : `<div class="top-bar"><span class="top-time">${fmtAgo(t.t)}</span></div><div class="top-plays" style="color:var(--accent)">▶</div>`}
         </div>`;
     }).join('');
+    if(tot){
+        tot.textContent = isTop
+            ? (LAST_TOP.reduce((a,t)=>a+t.plays, 0) + ' lecture' + (LAST_TOP.length>1?'s':''))
+            : 'dernière : ' + fmtAgo(LAST_REC[0].t);
+    }
+    if(moreWrap){
+        moreWrap.style.display = isTop && list.length > 10 ? 'block' : 'none';
+        const btn = $("#top-more");
+        if(btn) btn.textContent = _topLimit === 10 ? `Voir plus (${list.length})` : 'Voir moins';
+    }
 }
 
 // Donut de repartition par langue
@@ -2119,6 +2206,22 @@ async function refreshAll() {
 
 let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
 let LANG_FILTER = localStorage.getItem("dl_lang") || "fr";
+let SORT = localStorage.getItem("dl_sort") || "name";
+let PLAYS = {};
+
+async function loadPlays(){
+    try{
+        const r = await apiFetch("/api/plays");
+        PLAYS = await r.json();
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Plays error:", e);
+    }
+}
+function setCatalogSort(){
+    SORT = $("#catalog-sort").value;
+    localStorage.setItem("dl_sort", SORT);
+    render();
+}
 
 async function loadCatalog(src){
     const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;
@@ -2139,6 +2242,11 @@ function render(){
         if (lang && c.lang !== lang) return false;
         return words.every(w => (c.name||"").toLowerCase().includes(w));
     });
+    if (SORT === "plays") {
+        matches.sort((a,b) => (PLAYS[(CURRENT==="vavoo"?"vavoo:":"dlstreams:")+b.id]||0) - (PLAYS[(CURRENT==="vavoo"?"vavoo:":"dlstreams:")+a.id]||0));
+    } else {
+        matches.sort((a,b) => (a.name||"").localeCompare(b.name||"", 'fr', {sensitivity:'base'}));
+    }
     const items = matches.slice(0, 300);
 
     const count = $("#catalog-count");
@@ -2464,6 +2572,7 @@ $("#lang-filter").addEventListener("change", (e) => {
     render();
 });
 if($("#lang-filter")) $("#lang-filter").value = LANG_FILTER;
+if($("#catalog-sort")) $("#catalog-sort").value = SORT;
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
     b.classList.add("active");
@@ -2633,12 +2742,14 @@ function restartServer(){
 }
 
 async function boot(){
-    await Promise.all([refreshStats(), loadCatalog("dlstreams")]);
+    await Promise.all([refreshStats(), loadCatalog("dlstreams"), loadPlays()]);
     render();
     renderFavs();
     loadLogs();
     restartLogPolling();
     setInterval(refreshStats, 30000);
+    const hp = location.hash.replace('#', '');
+    if (hp && hp !== 'dashboard' && document.getElementById('page-' + hp)) navigateTo(hp);
 }
 
 checkSession();
