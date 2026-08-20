@@ -1191,6 +1191,55 @@ DASHBOARD_HTML = r"""<!doctype html>
         25% { transform: translateX(-10px); }
         75% { transform: translateX(10px); }
     }
+    .stat-card .stat-icon {
+        position: absolute; top: 18px; right: 18px;
+        font-size: 22px; opacity: 0.9;
+    }
+    .stat-card.accent-dl::before { background: linear-gradient(135deg, #6366f1, #818cf8); }
+    .stat-card.accent-vv::before { background: linear-gradient(135deg, #ec4899, #f472b6); }
+    .stat-card.accent-manual::before { background: linear-gradient(135deg, #10b981, #34d399); }
+    .stat-card.accent-up::before { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+    .stat-card.accent-req::before { background: linear-gradient(135deg, #0ea5e9, #38bdf8); }
+    .stat-card.accent-err::before { background: linear-gradient(135deg, #ef4444, #f87171); }
+    .cache-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 11px; padding: 3px 10px; border-radius: 20px;
+        border: 1px solid var(--border); color: var(--text-secondary);
+    }
+    .cache-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .cache-badge.ok { color: var(--success); border-color: rgba(16,185,129,.4); background: rgba(16,185,129,.08); }
+    .cache-badge.stale { color: var(--warning); border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.08); }
+    .cache-badge.old { color: var(--error); border-color: rgba(239,68,68,.4); background: rgba(239,68,68,.08); }
+    .fav-star {
+        font-size: 16px; color: var(--text-secondary); cursor: pointer;
+        transition: transform .2s, color .2s; user-select: none; padding: 2px 6px;
+    }
+    .fav-star:hover { transform: scale(1.25); color: var(--warning); }
+    .fav-star.active { color: var(--warning); text-shadow: 0 0 12px rgba(245,158,11,.6); }
+    .chart { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+    .chart-row { display: grid; grid-template-columns: 110px 1fr 48px; align-items: center; gap: 12px; }
+    .chart-label { font-size: 13px; color: var(--text-secondary); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chart-bar { height: 22px; background: var(--bg-dark); border-radius: 6px; overflow: hidden; }
+    .chart-fill {
+        height: 100%; border-radius: 6px; width: 0;
+        background: var(--gradient);
+        transition: width .8s cubic-bezier(.22, 1, .36, 1);
+    }
+    .chart-count { font-size: 12px; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+    .update-time {
+        font-size: 12px; color: var(--text-secondary);
+        display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    }
+    .update-time .spinner {
+        width: 13px; height: 13px; border: 2px solid var(--border);
+        border-top-color: var(--primary); border-radius: 50%;
+        animation: spin .8s linear infinite; opacity: 0;
+    }
+    .update-time.loading .spinner { opacity: 1; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+    .fav-empty { grid-column: 1/-1; text-align: center; padding: 30px; color: var(--text-secondary); }
+    .fav-empty a { color: var(--primary); }
     @media (max-width: 768px) {
         .sidebar { transform: translateX(-100%); }
         .sidebar.open { transform: translateX(0); }
@@ -1223,17 +1272,12 @@ DASHBOARD_HTML = r"""<!doctype html>
         <div class="nav-section">
             <div class="nav-section-title">Navigation</div>
             <a class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')"><span class="icon">📊</span> Dashboard</a>
-            <a class="nav-item" data-page="sources" onclick="navigateTo('sources')"><span class="icon">📡</span> Sources</a>
             <a class="nav-item" data-page="catalog" onclick="navigateTo('catalog')"><span class="icon">📺</span> Catalogue</a>
+            <a class="nav-item" data-page="sources" onclick="navigateTo('sources')"><span class="icon">📡</span> Sources</a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-title">Configuration</div>
-            <a href="/configure" class="nav-item"><span class="icon">🎨</span> Page Configure</a>
-            <a href="/manifest.json" class="nav-item" target="_blank"><span class="icon">📦</span> Manifest Stremio</a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-title">API</div>
-            <a href="/api/stats" class="nav-item" target="_blank"><span class="icon">📈</span> Stats</a>
+            <div class="nav-section-title">Liens</div>
+            <a href="/configure" class="nav-item"><span class="icon">🎨</span> Configuration</a>
         </div>
         <button class="logout-btn" onclick="logout()">
             <span class="icon">🚪</span> Déconnexion
@@ -1247,6 +1291,10 @@ DASHBOARD_HTML = r"""<!doctype html>
                 <p id="pageSubtitle">Vue d'ensemble de votre addon</p>
             </div>
             <div style="display: flex; gap: 12px; align-items: center;">
+                <div class="update-time" id="update-time">
+                    <div class="spinner"></div>
+                    <span id="update-label">Mise à jour…</span>
+                </div>
                 <div class="status-indicator">
                     <div class="status-dot"></div>
                     <span>En ligne</span>
@@ -1260,26 +1308,62 @@ DASHBOARD_HTML = r"""<!doctype html>
         <!-- Page Dashboard -->
         <div class="page active" id="page-dashboard">
             <section class="stats-grid">
-                <div class="stat-card">
+                <div class="stat-card accent-dl">
+                    <div class="stat-icon">📡</div>
                     <div class="stat-label">Chaînes dlstreams</div>
                     <div class="stat-value" id="c-dl">—</div>
-                    <div class="stat-hint" id="c-dl-h">cache</div>
+                    <div class="stat-hint" id="c-dl-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card accent-vv">
+                    <div class="stat-icon">📺</div>
                     <div class="stat-label">Chaînes Vavoo</div>
                     <div class="stat-value" id="c-vv">—</div>
-                    <div class="stat-hint" id="c-vv-h">catalogue FR</div>
+                    <div class="stat-hint" id="c-vv-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card accent-manual">
+                    <div class="stat-icon">➕</div>
                     <div class="stat-label">Sources manuelles</div>
                     <div class="stat-value" id="c-manual">0</div>
                     <div class="stat-hint">ajoutées par vous</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card accent-up">
+                    <div class="stat-icon">⏱️</div>
                     <div class="stat-label">Uptime</div>
                     <div class="stat-value" id="c-up">—</div>
                     <div class="stat-hint">depuis démarrage</div>
                 </div>
+                <div class="stat-card accent-req">
+                    <div class="stat-icon">🔁</div>
+                    <div class="stat-label">Requêtes</div>
+                    <div class="stat-value" id="c-req">—</div>
+                    <div class="stat-hint">total depuis démarrage</div>
+                </div>
+                <div class="stat-card accent-err">
+                    <div class="stat-icon">⚠️</div>
+                    <div class="stat-label">Erreurs</div>
+                    <div class="stat-value" id="c-err">—</div>
+                    <div class="stat-hint">requêtes en échec</div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>⭐ Favoris <span style="font-size:13px;color:var(--text-secondary);font-weight:400">— épinglés depuis le catalogue</span></h2>
+                <div class="search-bar">
+                    <input id="fav-q" type="search" placeholder="Filtrer mes favoris…">
+                </div>
+                <div class="mini-grid" id="fav-list">
+                    <div class="fav-empty">Aucun favori — va dans le <a href="#" onclick="navigateTo('catalog');return false">Catalogue</a> et clique sur ★ pour épingler une chaîne</div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>📈 Répartition par langue</h2>
+                <div class="chart" id="lang-chart"></div>
+            </section>
+
+            <section class="card">
+                <h2>🕒 Activité récente</h2>
+                <div id="activity-list" style="font-size:13px;color:var(--text-secondary)">chargement…</div>
             </section>
 
             <section class="card">
@@ -1289,7 +1373,7 @@ DASHBOARD_HTML = r"""<!doctype html>
                         <div class="label">Stremio — installer l'addon</div>
                         <div style="margin-top:6px;font-size:13px;color:var(--text-secondary)">Addons → « Install via URL »</div>
                         <a id="manifest" href="#">—</a>
-                        <button class="copy-btn" data-copy="manifest"> copier l'URL</button>
+                        <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
                     </div>
                     <div class="access-card">
                         <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
@@ -1298,12 +1382,11 @@ DASHBOARD_HTML = r"""<!doctype html>
                         <button class="copy-btn" data-copy="vlc">📋 copier</button>
                     </div>
                     <div class="access-card">
-                        <div class="label">API Endpoints</div>
+                        <div class="label">Endpoints de l'API</div>
                         <div style="margin-top:6px;font-size:12px;color:var(--text-secondary)">
-                            <div><a href="/manifest.json">/manifest.json</a> — Stremio</div>
-                            <div><a href="/api/stats">/api/stats</a> — statut serveur</div>
-                            <div><a href="/api/channels">/api/channels</a> — annuaire</div>
-                            <div><a href="/configure">/configure</a> — config langue</div>
+                            <div><code>/manifest.json</code> — Stremio</div>
+                            <div><code>/api/channels</code> — annuaire</div>
+                            <div><code>/configure</code> — config langue</div>
                         </div>
                     </div>
                 </div>
@@ -1357,7 +1440,6 @@ DASHBOARD_HTML = r"""<!doctype html>
                         <button class="tab" data-src="vavoo">Vavoo</button>
                     </div>
                 </div>
-                <div id="lang-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px"></div>
                 <div class="channel-list" id="list"><div style="color:var(--text-secondary);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
             </section>
         </div>
@@ -1473,6 +1555,7 @@ function navigateTo(page) {
     $('#pageTitle').textContent = titles[page][0];
     $('#pageSubtitle').textContent = titles[page][1];
     
+    if (page === 'dashboard') { renderFavs(); loadActivity(); }
     if (page === 'sources') { loadManualChannels(); loadActivity(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams');
@@ -1485,22 +1568,43 @@ async function refreshStats(){
         const r = await apiFetch("/api/stats");
         const d = await r.json();
         $("#c-dl").textContent = d.dlstreams.count;
-        $("#c-dl-h").textContent = "cache : " + fmtAge(d.dlstreams.age_seconds);
+        setCacheBadge($("#c-dl-h"), d.dlstreams.age_seconds);
         $("#c-vv").textContent = d.vavoo.count;
-        $("#c-vv-h").textContent = "cache : " + fmtAge(d.vavoo.age_seconds);
+        setCacheBadge($("#c-vv-h"), d.vavoo.age_seconds);
         $("#c-up").textContent = fmtDur(d.uptime);
         $("#c-manual").textContent = d.manual_channels || 0;
-        const chipsEl = $("#lang-chips");
-        if (chipsEl && d.lang_counts) {
-            const flags = {fr:"🇫🇷",en:"🇬🇧",es:"🇪🇸",de:"🇩🇪",it:"🇮🇹",ar:"🇸🇦",pt:"🇵🇹",other:"📺"};
-            chipsEl.innerHTML = Object.entries(d.lang_counts)
-                .sort((a,b)=>b[1]-a[1])
-                .map(([lang,n]) => `<span class="tab" style="cursor:default">${flags[lang]||"🌍"} ${n}</span>`)
-                .join("");
-        }
+        $("#c-req").textContent = (d.requests||0).toLocaleString('fr-FR');
+        $("#c-err").textContent = d.errors || 0;
+        renderChart(d.lang_counts || {});
+        $("#update-time").classList.remove("loading");
+        $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
     }catch(e){
         if (e.message !== 'unauthenticated') console.error("Stats error:", e);
     }
+}
+
+function setCacheBadge(el, age){
+    if(age == null){ el.innerHTML = '<span class="cache-badge old"><span class="dot"></span>pas encore chargé</span>'; return; }
+    let cls = "ok", label = "cache : il y a " + fmtAge(age);
+    if(age > 3600){ cls = "old"; label = "périmé (" + fmtAge(age) + ")"; }
+    else if(age > 600){ cls = "stale"; }
+    el.innerHTML = `<span class="cache-badge ${cls}"><span class="dot"></span>${label}</span>`;
+}
+
+function renderChart(lang_counts){
+    const el = $("#lang-chart");
+    if(!el) return;
+    const flags = {fr:"🇫🇷",en:"🇬🇧",es:"🇪🇸",de:"🇩🇪",it:"🇮🇹",ar:"🇸🇦",pt:"🇵🇹",other:"📺"};
+    const names = {fr:"Français",en:"English",es:"Español",de:"Deutsch",it:"Italiano",ar:"Arabe",pt:"Português",other:"Autres"};
+    const entries = Object.entries(lang_counts).sort((a,b)=>b[1]-a[1]);
+    if(!entries.length){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
+    const max = Math.max(...entries.map(e=>e[1]), 1);
+    el.innerHTML = entries.map(([lang,n]) => `
+        <div class="chart-row">
+            <div class="chart-label">${flags[lang]||"🌍"} ${names[lang]||lang}</div>
+            <div class="chart-bar"><div class="chart-fill" style="width:${Math.round(n/max*100)}%"></div></div>
+            <div class="chart-count">${n}</div>
+        </div>`).join("");
 }
 
 async function loadActivity() {
@@ -1614,12 +1718,60 @@ function render(){
             ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}`
             : `${BASE}/hls/${c.id}/index.m3u8`;
         const logo = c.logo ? `<img src="${escapeHtml(c.logo)}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
+        const key = (CURRENT==="vavoo"?"vavoo:":"dlstreams:")+c.id;
         return `<a class="channel-item" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
             ${logo}
             <div class="name">${escapeHtml(c.name)}</div>
             <div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div>
+            <span class="fav-star ${isFav(key)?"active":""}" onclick="event.preventDefault();event.stopPropagation();toggleFavKey('${escapeHtml(key)}')">★</span>
         </a>`;
     }).join("");
+}
+
+function getFavs(){ try{ return JSON.parse(localStorage.getItem("dl_favs")||"[]"); }catch(e){ return []; } }
+function saveFavs(f){ localStorage.setItem("dl_favs", JSON.stringify(f)); }
+function isFav(key){ return getFavs().some(f=>f.key===key); }
+function toggleFavKey(key){
+    const src = key.split(":")[0];
+    const id = key.slice(key.indexOf(":")+1);
+    const ch = (ALL[src]||[]).find(c => String(c.id)===String(id));
+    if(ch) toggleFav(ch, src);
+}
+function toggleFav(ch, src){
+    const key = src+":"+ch.id;
+    const favs = getFavs();
+    const i = favs.findIndex(f=>f.key===key);
+    if(i>=0){ favs.splice(i,1); showToast("Retiré des favoris"); }
+    else { favs.push({key, src, id: ch.id, name: ch.name, logo: ch.logo||""}); showToast("⭐ Ajouté aux favoris"); }
+    saveFavs(favs);
+    renderFavs();
+    render();
+}
+function renderFavs(){
+    const el = $("#fav-list");
+    if(!el) return;
+    const q = ($("#fav-q").value||"").toLowerCase().trim();
+    const favs = getFavs().filter(f=>!q || (f.name||"").toLowerCase().includes(q)).slice(0,100);
+    if(!favs.length){
+        el.innerHTML = '<div class="fav-empty">Aucun favori — va dans le <a href="#" onclick="navigateTo(\'catalog\');return false">Catalogue</a> et clique sur ★ pour épingler une chaîne</div>';
+        return;
+    }
+    el.innerHTML = favs.map(f=>{
+        const href = f.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(f.id))}` : `${BASE}/hls/${f.id}/index.m3u8`;
+        const logo = f.logo ? `<img src="${escapeHtml(f.logo)}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;background:#000" onerror="this.style.display='none'">` : "";
+        return `<a class="channel-item" href="${href}" data-play="${href}" title="${escapeHtml(f.name)}">
+            ${logo}
+            <div class="name">${escapeHtml(f.name)}</div>
+            <div class="id">${f.src==="vavoo"?"vavoo":"#"+f.id}</div>
+            <span class="fav-star active" onclick="event.preventDefault();event.stopPropagation();removeFav('${escapeHtml(f.key)}')">★</span>
+        </a>`;
+    }).join("");
+}
+function removeFav(key){
+    saveFavs(getFavs().filter(f=>f.key!==key));
+    showToast("Retiré des favoris");
+    renderFavs();
+    render();
 }
 
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
@@ -1690,6 +1842,7 @@ $("#add-source-btn").addEventListener("click", async ()=>{
 });
 
 $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,120);}})());
+$("#fav-q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(renderFavs,120);}})());
 $("#lang-filter").addEventListener("change", (e) => {
     LANG_FILTER = e.target.value;
     loadCatalog(CURRENT);
@@ -1724,7 +1877,9 @@ function initLinks(){
 async function boot(){
     await Promise.all([refreshStats(), loadCatalog("dlstreams")]);
     render();
+    renderFavs();
     initLinks();
+    loadActivity();
     setInterval(refreshStats, 30000);
 }
 
