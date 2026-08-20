@@ -1205,6 +1205,7 @@ DASHBOARD_HTML = r"""<!doctype html>
   .search-bar input[type="search"], .search-bar input[type="text"] { flex:1; min-width:180px; background:var(--input-bg);
     border:1px solid var(--border); border-radius:8px; padding:9px 13px; color:var(--text); font-size:13px; font-family:var(--font-body); }
   .search-bar input:focus, .search-bar select:focus { outline:none; border-color:var(--accent); }
+  .search-bar select:disabled { opacity:.45; cursor:not-allowed; }
   .search-bar select { background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:9px 12px;
     color:var(--text); cursor:pointer; font-family:var(--font-body); font-size:13px; }
   .tabs { display:flex; gap:6px; }
@@ -1214,6 +1215,7 @@ DASHBOARD_HTML = r"""<!doctype html>
   .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
 
   .channel-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
+  .list-count { font-size:12px; color:var(--muted); margin-bottom:12px; font-weight:600; }
   .channel-item { display:flex; align-items:center; gap:10px; padding:11px 12px;
     border:1px solid var(--border); border-radius:10px;
     background:var(--surface2); cursor:pointer; transition:all .15s;
@@ -1532,6 +1534,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div class="card">
             <div class="card-head">
               <div class="card-title">🔥 Top chaînes</div>
+              <span class="card-desc" id="top-total"></span>
             </div>
             <div class="card-body" id="top-channels">
               <div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>
@@ -1573,6 +1576,7 @@ DASHBOARD_HTML = r"""<!doctype html>
                   <option value="">Toutes</option>
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
+                  <option value="DELETE">DELETE</option>
                 </select>
               </div>
               <div class="logs-group logs-search">
@@ -1706,6 +1710,7 @@ DASHBOARD_HTML = r"""<!doctype html>
               </div>
             </div>
             <div class="card-body">
+              <div class="list-count" id="catalog-count"></div>
               <div class="channel-list" id="list"><div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
             </div>
           </div>
@@ -1825,24 +1830,21 @@ function navigateTo(page) {
     $(`#page-${page}`).classList.add('active');
     document.querySelector(`[data-page="${page}"]`).classList.add('active');
 
-    const titles = {
-        dashboard: ['Vue d\'ensemble', 'Statistiques de votre proxy de chaînes'],
-        sources: ['Sources', 'Gérer vos sources personnalisées'],
-        catalog: ['Catalogue', 'Explorer toutes les chaînes disponibles'],
-        logs: ['Logs', 'Journal en direct des requêtes passées sur votre proxy'],
-        system: ['Système', 'Infos serveur, cache et redémarrage']
+    const subtitles = {
+        dashboard: 'Statistiques de votre proxy de chaînes',
+        sources: 'Gérer vos sources personnalisées',
+        catalog: 'Explorer toutes les chaînes disponibles',
+        logs: 'Journal en direct des requêtes passées sur votre proxy',
+        system: 'Infos serveur, cache et redémarrage'
     };
-
-    $('#pageTitle') && (document.querySelector('.page.active .page-title').textContent = titles[page][0]);
-    document.querySelector('.page.active .page-sub').textContent = titles[page][1];
+    document.querySelector('.page.active .page-sub').textContent = subtitles[page] || '';
 
     if (page === 'dashboard') { renderFavs(); }
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'logs') { loadLogs(); }
     if (page === 'system') { loadSystem(); }
     if (page === 'catalog') {
-        if (!ALL.dlstreams.length) loadCatalog('dlstreams');
-        render();
+        if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
     }
 }
 
@@ -1912,7 +1914,8 @@ function renderAreaChart(history){
     if(!arr.length){ el.innerHTML = '<div class="fav-empty">aucune donnée sur cette période</div>'; return; }
     const counts = arr.map(h => h[1]);
     const W = 600, H = 170, PX = 12, PY = 24, PB = 28;
-    const maxV = Math.max(1, ...counts);
+    let maxV = 1;
+    for(let i=0;i<counts.length;i++) if(counts[i] > maxV) maxV = counts[i];
     const n = counts.length;
     const stepX = n > 1 ? (W - PX * 2) / (n - 1) : 0;
     const yOf = v => H - PB - (v / maxV) * (H - PY - PB);
@@ -1952,6 +1955,9 @@ function renderAreaChart(history){
 function renderTopChannels(tops){
     const el = $("#top-channels");
     if(!el) return;
+    const total = (tops||[]).reduce((a,t)=>a+t.plays, 0);
+    const tot = $("#top-total");
+    if(tot) tot.textContent = total ? `${total} lecture${total>1?"s":""}` : "";
     if(!tops || !tops.length){ el.innerHTML = '<div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>'; return; }
     const max = Math.max(...tops.map(t=>t.plays));
     el.innerHTML = tops.map(t => {
@@ -2071,7 +2077,7 @@ async function refreshAll() {
 }
 
 let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
-let LANG_FILTER = "fr";
+let LANG_FILTER = localStorage.getItem("dl_lang") || "fr";
 
 async function loadCatalog(src){
     const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;
@@ -2088,10 +2094,18 @@ function render(){
     const words = q ? q.split(/\s+/) : [];
     const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
 
-    const items = (ALL[CURRENT]||[]).filter(c => {
+    const matches = (ALL[CURRENT]||[]).filter(c => {
         if (lang && c.lang !== lang) return false;
         return words.every(w => (c.name||"").toLowerCase().includes(w));
-    }).slice(0, 300);
+    });
+    const items = matches.slice(0, 300);
+
+    const count = $("#catalog-count");
+    if(count){
+        count.textContent = matches.length
+            ? (items.length < matches.length ? `${items.length} / ${matches.length} chaînes affichées` : `${matches.length} chaînes`)
+            : "aucun résultat";
+    }
 
     const list = $("#list");
     if(!items.length){
@@ -2115,7 +2129,8 @@ function render(){
     }).join("");
 }
 
-const CHECKED = {};
+const CHECKED = (()=>{ try{ return JSON.parse(localStorage.getItem("dl_checked")||"{}"); }catch(e){ return {}; } })();
+function saveChecked(){ try{ localStorage.setItem("dl_checked", JSON.stringify(CHECKED)); }catch(e){} }
 function checkCls(key){ const s = CHECKED[key]; return s ? (s.state==="busy"?"busy":s.state) : ""; }
 function checkLabel(key){
     const s = CHECKED[key];
@@ -2135,6 +2150,7 @@ async function checkStream(key){
         const r = await apiFetch(`/api/check?src=${src}&id=${encodeURIComponent(enc)}`);
         const d = await r.json();
         CHECKED[key] = {state: d.ok ? "ok" : "ko", ms: d.ms, url: d.url};
+        saveChecked();
     }catch(e){
         if (e.message !== 'unauthenticated') CHECKED[key] = {state:"ko", ms:0};
     }
@@ -2194,22 +2210,24 @@ function removeFav(key){
 async function scanFavs(){
     const favs = getFavs();
     if(!favs.length){ toast('⚠️ Aucun favori à tester', 'warn'); return; }
+    const tested = favs.slice(0,200);
     const btn = $("#scan-favs-btn");
     const status = $("#scan-status");
     btn.disabled = true;
     btn.textContent = "⏳ Scan en cours...";
     status.style.display = 'flex';
-    status.innerHTML = '<div class="scan-spin"></div><span>Test de <b>' + favs.length + '</b> chaîne(s)…</span>';
+    status.innerHTML = '<div class="scan-spin"></div><span>Test de <b>' + tested.length + '</b> chaîne(s)' + (favs.length > 200 ? ' (sur ' + favs.length + ', max 200)' : '') + '…</span>';
     try{
         const r = await apiFetch('/api/check-batch', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({items: favs.slice(0,200).map(f => ({src: f.src, id: f.src==="vavoo" ? b64u(f.id) : f.id}))})
+            body: JSON.stringify({items: tested.map(f => ({src: f.src, id: f.src==="vavoo" ? b64u(f.id) : f.id}))})
         });
         const d = await r.json();
         const results = d.results || [];
         const ok = results.filter(x=>x.ok).length;
         results.forEach(res => { CHECKED[res.key] = {state: res.ok ? "ok" : "ko", ms: res.ms}; });
+        saveChecked();
         status.innerHTML = '<span>Scan terminé : <b>' + ok + '</b> OK / <b>' + results.length + '</b> chaînes</span>' +
             '<span class="scan-ok">✓</span><span class="scan-ko">✗</span>';
         renderFavs();
@@ -2307,17 +2325,27 @@ function renderLangShortcuts(){
 }
 function goLang(lang){
     LANG_FILTER = lang;
+    localStorage.setItem("dl_lang", lang);
     const sel = $("#lang-filter");
-    if(sel) sel.value = lang;
+    if(sel){ sel.value = lang; sel.disabled = false; }
     renderLangShortcuts();
+    CURRENT = "dlstreams";
+    document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.src==="dlstreams"));
     navigateTo('catalog');
-    if (CURRENT !== "vavoo") loadCatalog(CURRENT).then(render);
+    loadCatalog("dlstreams").then(render);
 }
 
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 let _hls = null;
+function closePlayer(){
+    const video = $("#player-frame");
+    video.pause();
+    video.src = "";
+    if (_hls) { _hls.destroy(); _hls = null; }
+    $("#player-modal").classList.remove("active");
+}
 function openPlayer(url, title){
     $("#player-title").textContent = title;
     const video = $("#player-frame");
@@ -2333,13 +2361,9 @@ function openPlayer(url, title){
     }
     $("#player-modal").classList.add("active");
 }
-$("#player-close").addEventListener("click", ()=>{
-    const video = $("#player-frame");
-    video.pause();
-    video.src = "";
-    if (_hls) { _hls.destroy(); _hls = null; }
-    $("#player-modal").classList.remove("active");
-});
+$("#player-close").addEventListener("click", closePlayer);
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closePlayer(); });
+$("#player-modal").addEventListener("click", e=>{ if(e.target === e.currentTarget) closePlayer(); });
 document.addEventListener("click", (e)=>{
     if(e.target.closest(".channel-item") && e.target.closest(".channel-item").dataset.play){
         e.preventDefault();
@@ -2393,14 +2417,18 @@ $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTi
 $("#fav-q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(renderFavs,120);}})());
 $("#lang-filter").addEventListener("change", (e) => {
     LANG_FILTER = e.target.value;
+    localStorage.setItem("dl_lang", e.target.value);
     renderLangShortcuts();
     loadCatalog(CURRENT);
     render();
 });
+if($("#lang-filter")) $("#lang-filter").value = LANG_FILTER;
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
     b.classList.add("active");
     CURRENT = b.dataset.src;
+    const lf = $("#lang-filter");
+    if(lf) lf.disabled = CURRENT === "vavoo";
     if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
     render();
 }));
@@ -2467,7 +2495,7 @@ function renderLogs() {
         return;
     }
     const wasAtBottom = term.scrollTop + term.clientHeight >= term.scrollHeight - 40;
-    term.innerHTML = filtered.slice(0, 120).map(l => {
+    term.innerHTML = filtered.slice(0, 300).map(l => {
         const cls = l.code >= 500 ? 'row-err' : (l.code >= 400 ? 'row-warn' : '');
         const codeCls = l.code >= 500 ? 'err' : (l.code >= 400 ? 'warn' : 'ok');
         return `<div class="log-row ${cls}">
