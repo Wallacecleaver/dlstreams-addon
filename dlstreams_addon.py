@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.10.0"
+_VERSION = "1.10.1"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -2110,17 +2110,11 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
-          <button class="nav-item" data-page="system" onclick="navigateTo('system')">🖥️ Système</button>
           <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages</button>
-          <a class="nav-item" href="/configure" title="Choisir la langue par défaut de l'addon">🎨 Configuration</a>
           <div class="nav-section-label">Raccourcis</div>
           <button class="nav-shortcut" onclick="sidebarAction('scan')" title="Teste la disponibilité de toutes vos chaînes favorites"><span class="sc-ico">🩺</span><span class="sc-txt">Tester mes favoris</span></button>
           <button class="nav-shortcut" onclick="sidebarAction('m3u-favs')" title="Télécharge une playlist de vos favoris"><span class="sc-ico">⬇️</span><span class="sc-txt">Export favoris M3U</span></button>
-          <button class="nav-shortcut" onclick="sidebarAction('m3u-catalog')" title="Télécharge une playlist du catalogue filtré"><span class="sc-ico">⬇️</span><span class="sc-txt">Export catalogue M3U</span></button>
-          <button class="nav-shortcut" onclick="sidebarAction('logs-clear')" title="Efface le journal des requêtes"><span class="sc-ico">🧹</span><span class="sc-txt">Vider les logs</span></button>
           <button class="nav-shortcut" onclick="sidebarAction('restart')" title="Redémarre le processus serveur"><span class="sc-ico">🔁</span><span class="sc-txt">Redémarrer</span></button>
-          <div class="nav-section-label">Langues</div>
-          <div id="lang-list"><button class="nav-shortcut" disabled style="opacity:.5;cursor:default"><span class="sc-txt">chargement…</span></button></div>
         </div>
         <div class="sidebar-bottom">
           <button class="btn-logout" onclick="logout()">Déconnexion</button>
@@ -2278,41 +2272,6 @@ DASHBOARD_HTML = r"""<!doctype html>
             </div>
             <div class="logs-term" id="logs-term">
               <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs...</p></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- PAGE: SYSTEM -->
-        <div class="page" id="page-system">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Système</div>
-              <div class="page-sub">Infos serveur, cache et redémarrage</div>
-            </div>
-            <div class="header-actions">
-              <button class="btn-outline-sm" onclick="loadSystem()">↻ Actualiser</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">🖥️ Serveur</div></div>
-            <div class="card-body">
-              <div class="sys-grid" id="sys-grid"><div class="fav-empty">chargement…</div></div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">🗂️ Cache</div></div>
-            <div class="card-body">
-              <div class="sys-grid" id="sys-cache"><div class="fav-empty">chargement…</div></div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">🔄 Redémarrage</div></div>
-            <div class="card-body">
-              <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Redémarre le processus serveur. Sur Render, la plateforme le relance automatiquement.</p>
-              <button class="btn-danger" id="restart-btn" onclick="restartServer()">🔁 Redémarrer le serveur</button>
             </div>
           </div>
         </div>
@@ -2572,7 +2531,6 @@ function navigateTo(page) {
         sources: 'Gérer vos sources personnalisées',
         catalog: 'Explorer toutes les chaînes disponibles',
         logs: 'Journal en direct des requêtes passées sur votre proxy',
-        system: 'Infos serveur, cache et redémarrage',
         settings: 'Logos, EPG et catégories personnalisables'
     };
     document.querySelector('.page.active .page-sub').textContent = subtitles[page] || '';
@@ -2580,7 +2538,6 @@ function navigateTo(page) {
     if (page === 'dashboard') { renderFavs(); }
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'logs') { loadLogs(); }
-    if (page === 'system') { loadSystem(); }
     if (page === 'settings') { loadSettings(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
@@ -2612,8 +2569,6 @@ async function refreshStats(){
         LAST_TOP = d.top_channels || [];
         LAST_REC = d.recent_plays || [];
         renderChannelsCard();
-        LAST_LANG_COUNTS = d.lang_counts || {};
-        renderLangShortcuts();
         const ut = $("#update-time");
         ut.classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
@@ -3165,49 +3120,6 @@ async function refreshEpg(){
     }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur','error'); }
 }
 
-// Langues sidebar : boutons dynamiques avec compteurs
-const LANG_META = {
-    all:   ['🌍', 'Toutes'],
-    fr:    ['🇫🇷', 'Français'],
-    en:    ['🇬🇧', 'English'],
-    es:    ['🇪🇸', 'Español'],
-    pt:    ['🇵🇹', 'Português'],
-    it:    ['🇮🇹', 'Italiano'],
-    de:    ['🇩🇪', 'Deutsch'],
-    ar:    ['🇸🇦', 'Arabe'],
-    other: ['📺', 'Autres']
-};
-let LAST_LANG_COUNTS = {};
-function renderLangShortcuts(){
-    const wrap = $("#lang-list");
-    if(!wrap) return;
-    const lc = LAST_LANG_COUNTS || {};
-    const total = Object.values(lc).reduce((a,b)=>a+b,0);
-    const withOther = lc.other ? lc.other : 0;
-    const entries = [['all', total]].concat(
-        Object.entries(lc).filter(([k])=>k!=='other').sort((a,b)=>b[1]-a[1])
-    );
-    if(withOther) entries.push(['other', withOther]);
-    wrap.innerHTML = entries.map(([k,count]) => {
-        const [emoji, label] = LANG_META[k] || ['🌐', k];
-        const active = LANG_FILTER === k ? ' active' : '';
-        return `<button class="nav-shortcut nav-lang${active}" data-lang="${k}" onclick="goLang('${k}')" title="Filtrer le catalogue : ${label} (${count})">
-            <span class="sc-ico">${emoji}</span><span class="sc-txt">${label}</span><span class="sc-count">${count}</span>
-        </button>`;
-    }).join('');
-}
-function goLang(lang){
-    LANG_FILTER = lang;
-    localStorage.setItem("dl_lang", lang);
-    const sel = $("#lang-filter");
-    if(sel){ sel.value = lang; sel.disabled = false; }
-    renderLangShortcuts();
-    CURRENT = "dlstreams";
-    document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.src==="dlstreams"));
-    navigateTo('catalog');
-    loadCatalog("dlstreams").then(render);
-}
-
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
@@ -3291,7 +3203,6 @@ $("#fav-q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=s
 $("#lang-filter").addEventListener("change", (e) => {
     LANG_FILTER = e.target.value;
     localStorage.setItem("dl_lang", e.target.value);
-    renderLangShortcuts();
     loadCatalog(CURRENT);
     render();
 });
@@ -3417,41 +3328,6 @@ function fmtBytes(b){
 }
 function sysRows(rows){
     return rows.map(([k,v]) => `<div class="sys-row"><div class="sys-key">${escapeHtml(k)}</div><div class="sys-val">${escapeHtml(String(v))}</div></div>`).join('');
-}
-async function loadSystem(){
-    const grid = $("#sys-grid");
-    const cache = $("#sys-cache");
-    if(!grid) return;
-    grid.innerHTML = '<div class="fav-empty">chargement…</div>';
-    if(cache) cache.innerHTML = '<div class="fav-empty">chargement…</div>';
-    try{
-        const r = await apiFetch('/api/system');
-        const d = await r.json();
-        const mem = d.memory || {};
-        const cpu = mem.cpu != null ? ` · CPU ${mem.cpu}%` : "";
-        grid.innerHTML = sysRows([
-            ['Version', d.version],
-            ['Python', d.python],
-            ['Port', d.port],
-            ['PID', d.pid],
-            ['Plateforme', d.platform],
-            ['CPU', `${d.cpus} cœur(s)${cpu}`],
-            ['Mémoire (processus)', fmtBytes(mem.rss)],
-            ['Mémoire système', mem.total ? `${fmtBytes(mem.total - mem.available)} / ${fmtBytes(mem.total)} (${mem.percent}%)` : "n/d"],
-            ['Disque', d.disk ? `${fmtBytes(d.disk.used)} / ${fmtBytes(d.disk.total)} (libre ${fmtBytes(d.disk.free)})` : "n/d"],
-            ['Démarré le', d.started_at],
-            ['Uptime', fmtDur(d.uptime)],
-            ['Chaînes totales', d.channels_total],
-        ]);
-        if(cache){
-            cache.innerHTML = sysRows([
-                ['Chaînes dlstreams', `${d.cache.dlstreams.count} (maj ${d.cache.dlstreams.age_seconds!=null ? "il y a " + fmtAge(d.cache.dlstreams.age_seconds) : "jamais"})`],
-                ['Chaînes Vavoo', `${d.cache.vavoo.count} (maj ${d.cache.vavoo.age_seconds!=null ? "il y a " + fmtAge(d.cache.vavoo.age_seconds) : "jamais"})`],
-            ]);
-        }
-    }catch(e){
-        if (e.message !== 'unauthenticated') grid.innerHTML = '<div class="fav-empty">erreur de chargement</div>';
-    }
 }
 function restartServer(){
     if(!confirm('Redémarrer le serveur maintenant ?')) return;
