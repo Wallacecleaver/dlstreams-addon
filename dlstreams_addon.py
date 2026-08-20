@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.10.1"
+_VERSION = "1.11.0"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -45,6 +45,9 @@ _hist: list[list[int]] = []      # [minute_unix, nb_requetes] -> sparkline (1h)
 _request_log: list[dict] = []    # journal des requetes (buffer 300)
 _chan_plays: dict[str, int] = {}  # cle "src:id" -> nb de lectures de flux
 _recent_plays: list[dict] = []    # dernieres lectures (buffer 40)
+_hist_err: list[list[int]] = []   # [minute_unix, nb_erreurs] -> courbe des erreurs
+_live: dict[str, float] = {}      # cle "src:id" -> dernier timestamp de lecture (fenetre courte)
+_LIVE_WINDOW = 180                # secondes : une lecture est "en cours" pendant 3 min
 _HIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_hist.json")
 _HIST_KEEP_MIN = 7 * 24 * 60      # minutes conservees dans l'historique (7 jours)
 
@@ -457,15 +460,20 @@ def _sessions_save():
 
 def _hist_load():
     """Charge l'historique de trafic persiste (7 jours) au demarrage."""
-    global _hist
+    global _hist, _hist_err
     try:
         if os.path.exists(_HIST_FILE):
             with open(_HIST_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
             keep_from = time.time() // 60 - _HIST_KEEP_MIN
-            _hist = [[int(m), int(c)] for m, c in data
-                     if isinstance(m, (int, float)) and isinstance(c, (int, float))
-                     and m >= keep_from]
+            if isinstance(data, dict):
+                _hist = [[int(m), int(c)] for m, c in data.get("req", [])
+                         if isinstance(m, (int, float)) and isinstance(c, (int, float)) and m >= keep_from]
+                _hist_err = [[int(m), int(c)] for m, c in data.get("err", [])
+                             if isinstance(m, (int, float)) and isinstance(c, (int, float)) and m >= keep_from]
+            else:
+                _hist = [[int(m), int(c)] for m, c in data
+                         if isinstance(m, (int, float)) and isinstance(c, (int, float)) and m >= keep_from]
     except Exception:
         pass
 
@@ -473,17 +481,35 @@ def _hist_save():
     """Persiste l'historique sur disque (appele une fois par minute)."""
     try:
         with open(_HIST_FILE, "w", encoding="utf-8") as f:
-            json.dump(_hist, f)
+            json.dump({"req": _hist, "err": _hist_err}, f)
     except Exception:
         pass
 
 def _track_play(src: str, cid: str):
     key = f"{src}:{cid}"
+    now = time.time()
     with _stats_lock:
         _chan_plays[key] = _chan_plays.get(key, 0) + 1
-        _recent_plays.append({"src": src, "cid": cid, "t": time.time()})
+        _recent_plays.append({"src": src, "cid": cid, "t": now})
         if len(_recent_plays) > 40:
             del _recent_plays[:len(_recent_plays) - 40]
+        _live[key] = now
+        if len(_live) > 200:
+            cutoff = now - _LIVE_WINDOW
+            for k in [k for k, t in _live.items() if t < cutoff]:
+                del _live[k]
+
+def _live_plays() -> list[dict]:
+    """Lectures considerees 'en cours' (dernier acces < 3 min)."""
+    now = time.time()
+    with _stats_lock:
+        items = [(k, t) for k, t in _live.items() if now - t <= _LIVE_WINDOW]
+    items.sort(key=lambda kv: -kv[1])
+    out = []
+    for key, t in items:
+        src, _, cid = key.partition(":")
+        out.append({"key": key, "src": src, "id": cid, "name": _name_for(src, cid), "last": t})
+    return out
 
 def _name_for(src: str, cid: str) -> str:
     if src == "vavoo":
@@ -847,6 +873,8 @@ def _stats() -> dict:
         },
         "lang_counts": lang_counts,
         "history": [list(pair) for pair in _hist],
+        "hist_err": [list(pair) for pair in _hist_err],
+        "health": _health_snapshot,
         "daily_totals": _daily_totals(),
         "top_channels": _top_channels(),
         "recent_plays": _recent_plays_list(),
@@ -1035,6 +1063,67 @@ def _poster_get(name: str) -> bytes:
 _logo_cache: dict[str, bytes] = {}
 _logo_bad: set[str] = set()
 
+# --- Sante des services (carte "Etat des services" du dashboard) ---
+_health_snapshot: dict = {"at": 0.0}
+_health_lock = threading.Lock()
+_HEALTH_TTL = 60
+
+def _health_refresh(force: bool = False):
+    """Verifie dlstreams.st et l'API vavoo (en parallele), plus l'etat EPG/logos."""
+    with _health_lock:
+        if not force and time.time() - _health_snapshot.get("at", 0) < _HEALTH_TTL:
+            return
+    def _dl():
+        t0 = time.time()
+        try:
+            _get(SITE + "/", timeout=8)
+            return {"ok": True, "ms": int((time.time() - t0) * 1000)}
+        except Exception:
+            return {"ok": False, "ms": int((time.time() - t0) * 1000)}
+    def _vv():
+        t0 = time.time()
+        try:
+            _post_json(_VAVOO_PINGS[0], _vavoo_ping_body(), {"user-agent": _VAVOO_UA}, timeout=8)
+            return {"ok": True, "ms": int((time.time() - t0) * 1000)}
+        except Exception:
+            return {"ok": False, "ms": int((time.time() - t0) * 1000)}
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        dl = ex.submit(_dl).result()
+        vv = ex.submit(_vv).result()
+    with _epg_lock:
+        epg_channels = len(_epg_data)
+    epg_age = int(time.time() - _epg_at) if _epg_at else None
+    epg_ok = epg_channels > 0 and (epg_age is not None and epg_age < 36 * 3600)
+    logos_total = len(_CH_LOGO)
+    logos_loaded = len(_logo_cache)
+    logos_ok = logos_total > 0 and logos_loaded >= max(1, logos_total // 2)
+    with _health_lock:
+        _health_snapshot.update(
+            at=time.time(),
+            dlstreams=dl, vavoo=vv,
+            epg={"ok": epg_ok, "channels": epg_channels, "age": epg_age},
+            logos={"ok": logos_ok, "loaded": logos_loaded, "total": logos_total},
+        )
+
+def _now_playing() -> list[dict]:
+    """Programme en cours des chaines populaires (mini-EPG du dashboard)."""
+    with _epg_lock:
+        if not _epg_data:
+            return []
+    out = []
+    for c in _POPULAR_CHANNELS:
+        cur, nxt = _epg_slot(c["id"])
+        if not cur:
+            continue
+        out.append({
+            "id": c["id"],
+            "name": c["name"],
+            "logo": f"/logo/dlstreams/{c['id']}.png",
+            "cur": {"title": cur.get("title", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
+            "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
+        })
+    return out
+
 def _logo_bytes(src: str, c: dict) -> bytes:
     """Logo reel (proxye) si dispo, sinon poster genere. Jamais de tile cassee."""
     if not _settings.get("logos", True):
@@ -1086,6 +1175,12 @@ class Handler(BaseHTTPRequestHandler):
             _request_count += 1
             if code >= 400:
                 _error_count += 1
+                if _hist_err and _hist_err[-1][0] == now_min:
+                    _hist_err[-1][1] += 1
+                else:
+                    _hist_err.append([now_min, 1])
+                    while len(_hist_err) > 1 and _hist_err[0][0] < now_min - _HIST_KEEP_MIN:
+                        _hist_err.pop(0)
             if _hist and _hist[-1][0] == now_min:
                 _hist[-1][1] += 1
             else:
@@ -1093,7 +1188,8 @@ class Handler(BaseHTTPRequestHandler):
                 while len(_hist) > 1 and _hist[0][0] < now_min - _HIST_KEEP_MIN:
                     _hist.pop(0)
                 _hist_save()
-            if not self.path.startswith(("/api/stats", "/api/logs", "/api/activity")):
+            if not self.path.startswith(("/api/stats", "/api/logs", "/api/activity",
+                                          "/api/live", "/api/now", "/api/health")):
                 _request_log.append({
                     "t": time.strftime("%H:%M:%S"),
                     "method": self.command,
@@ -1320,6 +1416,12 @@ class Handler(BaseHTTPRequestHandler):
                                "message": "rafraichissement EPG lance"}).encode(),
                               "application/json")
 
+        if path == "/api/health":
+            if not self._require_auth():
+                return
+            _health_refresh(force=True)
+            return self._send(200, json.dumps(_health_snapshot).encode(), "application/json")
+
         return self._send(404, b"not found", "text/plain")
 
     def do_GET(self):
@@ -1366,6 +1468,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/stats":
                 if not self._require_auth():
                     return
+                threading.Thread(target=_health_refresh, daemon=True).start()
                 return self._send(200, json.dumps(_stats()).encode(), "application/json")
 
             if path == "/api/channels":
@@ -1378,6 +1481,16 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(_plays_map()).encode(), "application/json")
+
+            if path == "/api/live":
+                if not self._require_auth():
+                    return
+                return self._send(200, json.dumps(_live_plays()).encode(), "application/json")
+
+            if path == "/api/now":
+                if not self._require_auth():
+                    return
+                return self._send(200, json.dumps(_now_playing()).encode(), "application/json")
 
             if path == "/api/settings":
                 if not self._require_auth():
@@ -1696,6 +1809,7 @@ def main():
     threading.Thread(target=_warm_channels, daemon=True).start()
     threading.Thread(target=_warm_logos, daemon=True).start()
     threading.Thread(target=_epg_refresh, daemon=True).start()
+    threading.Thread(target=_health_refresh, daemon=True).start()
     srv.serve_forever()
 
 def _warm_channels():
@@ -2031,15 +2145,52 @@ DASHBOARD_HTML = r"""<!doctype html>
   .range-btn.active { background:var(--accent); color:#fff; }
 
   /* Top chaînes */
-  .top-row { display:grid; grid-template-columns:minmax(0,1fr) 1.2fr 44px; align-items:center; gap:12px;
+  .top-row { display:grid; grid-template-columns:30px minmax(0,1fr) 1.2fr 44px; align-items:center; gap:12px;
     padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
   .top-row:last-child { border-bottom:none; }
   .top-row:hover { background:var(--card-hover); }
+  .top-logo { width:28px; height:28px; border-radius:6px; object-fit:cover; background:#000; flex-shrink:0; }
   .top-name { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .top-bar { height:8px; background:var(--surface2); border-radius:6px; overflow:hidden; }
   .top-bar-fill { height:100%; background:var(--accent); border-radius:6px; opacity:.85; transition:width .8s cubic-bezier(.22,1,.36,1); }
   .top-plays { font-size:12px; color:var(--text2); text-align:right; font-family:var(--font-mono); font-weight:700; }
   .top-time { font-size:12px; color:var(--text2); font-weight:600; }
+
+  /* État des services */
+  .svc-row { display:flex; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid var(--border); }
+  .svc-row:last-child { border-bottom:none; }
+  .svc-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .svc-dot.ok { background:var(--green); box-shadow:0 0 8px rgba(72,187,120,.6); }
+  .svc-dot.stale { background:var(--warn); box-shadow:0 0 8px rgba(245,158,11,.5); }
+  .svc-dot.ko { background:var(--error); box-shadow:0 0 8px rgba(239,68,68,.6); }
+  .svc-name { font-size:13px; font-weight:600; color:var(--text); flex-shrink:0; }
+  .svc-desc { font-size:12px; color:var(--muted); margin-left:auto; text-align:right; }
+  .svc-count { font-family:var(--font-mono); font-weight:800; }
+  .svc-count.ok { color:var(--green); }
+  .svc-count.part { color:var(--warn); }
+  .svc-count.ko { color:var(--error); }
+  .svc-foot { border-top:1px solid var(--border); }
+
+  /* En ce moment (lectures live) */
+  .live-item { display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid var(--border);
+    text-decoration:none; color:var(--text); }
+  .live-item:last-child { border-bottom:none; }
+  .live-item:hover { background:var(--card-hover); }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px rgba(72,187,120,.7);
+    animation:pulse 1.6s infinite; flex-shrink:0; }
+  .live-name { flex:1; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .live-time { font-size:11px; color:var(--muted); font-family:var(--font-mono); flex-shrink:0; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  /* Programmes en cours (mini-EPG) */
+  .now-row { display:flex; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid var(--border);
+    text-decoration:none; color:var(--text); }
+  .now-row:last-child { border-bottom:none; }
+  .now-row:hover { background:var(--card-hover); }
+  .now-info { flex:1; min-width:0; }
+  .now-title { font-size:13px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .now-sub { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .now-time { font-size:11px; color:var(--muted); font-family:var(--font-mono); flex-shrink:0; }
 
   /* Favoris : actions + badge scan */
   .fav-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -2189,8 +2340,34 @@ DASHBOARD_HTML = r"""<!doctype html>
               <div class="card-body"><div class="ov-chart-wrap" id="traffic-chart"></div></div>
             </div>
             <div class="card">
-              <div class="card-head"><div class="card-title">Répartition par langue</div></div>
-              <div class="card-body" id="lang-split"></div>
+              <div class="card-head"><div class="card-title">🩺 État des services</div><span class="card-desc" id="svc-total"></span></div>
+              <div class="card-body" id="svc-services" style="padding-top:8px">
+                <div class="fav-empty">chargement…</div>
+              </div>
+              <div class="card-head svc-foot" style="justify-content:flex-end">
+                <button class="btn-outline-sm" id="svc-check-btn" onclick="checkServices()">↻ Vérifier maintenant</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ov-grid-2">
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title">Erreurs</div>
+                <div class="chart-range">
+                  <button class="range-btn active" data-range="60" onclick="setChartRange(60)">1h</button>
+                  <button class="range-btn" data-range="1440" onclick="setChartRange(1440)">24h</button>
+                  <button class="range-btn" data-range="10080" onclick="setChartRange(10080)">7j</button>
+                </div>
+                <span class="card-desc" id="err-total"></span>
+              </div>
+              <div class="card-body"><div class="ov-chart-wrap" id="err-chart"><div class="fav-empty">aucune donnée</div></div></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><div class="card-title">📡 En ce moment</div></div>
+              <div class="card-body" id="live-list" style="padding-top:8px">
+                <div class="fav-empty">aucune lecture en cours — ouvre une chaîne !</div>
+              </div>
             </div>
           </div>
 
@@ -2208,6 +2385,16 @@ DASHBOARD_HTML = r"""<!doctype html>
             </div>
             <div class="card-body" id="top-more-wrap" style="display:none;padding-top:0">
               <button class="btn-outline-sm" id="top-more" onclick="toggleTopLimit()" style="width:100%">Voir plus</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">📺 Programmes en cours</div>
+              <span class="card-desc" id="now-total"></span>
+            </div>
+            <div class="card-body" id="now-list" style="padding-top:8px">
+              <div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>
             </div>
           </div>
 
@@ -2564,10 +2751,12 @@ async function refreshStats(){
             ? Math.min(100, (d.errors / d.requests * 100)).toFixed(1) + '% des requêtes'
             : 'requêtes en échec';
         renderAreaChart(d.history || []);
-        renderLangSplit(d.lang_counts || {});
+        renderErrChart(d.hist_err || []);
+        renderServices(d.health || {});
         LAST_TOP = d.top_channels || [];
         LAST_REC = d.recent_plays || [];
         renderChannelsCard();
+        loadNow();
         const ut = $("#update-time");
         ut.classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
@@ -2600,22 +2789,20 @@ function setCacheBadge(el, age){
 
 // Graphique en aires (SVG) du trafic, range 1h / 24h / 7j
 let CHART_RANGE = 60;
-let LAST_HIST = [];
+let LAST_HIST = [], LAST_HIST_ERR = [];
 function setChartRange(mins){
     CHART_RANGE = mins;
     document.querySelectorAll('.range-btn').forEach(b=>b.classList.toggle('active', Number(b.dataset.range)===mins));
     renderAreaChart(LAST_HIST);
+    renderErrChart(LAST_HIST_ERR);
 }
-function renderAreaChart(history){
-    const el = $("#traffic-chart");
+function _areaChart(el, history, totalEl, accent, unit, gid){
     if(!el) return;
-    LAST_HIST = history || [];
-    if(!LAST_HIST.length){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
+    if(!history || !history.length){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
     const nowMin = Date.now() / 1000;
     const windowMin = CHART_RANGE === 10080 ? 10080 : (CHART_RANGE === 1440 ? 1440 : 60);
-    const arr = LAST_HIST.filter(h => nowMin - h[0] <= windowMin + 1);
-    const tot = $("#chart-total");
-    if(tot) tot.textContent = arr.length ? arr.reduce((a,h)=>a+h[1], 0).toLocaleString('fr-FR') + ' requêtes' : '';
+    const arr = history.filter(h => nowMin - h[0] <= windowMin + 1);
+    if(totalEl) totalEl.textContent = arr.length ? arr.reduce((a,h)=>a+h[1], 0).toLocaleString('fr-FR') + ' ' + unit : '';
     if(!arr.length){ el.innerHTML = '<div class="fav-empty">aucune donnée sur cette période</div>'; return; }
     const counts = arr.map(h => h[1]);
     const W = 600, H = 170, PX = 12, PY = 24, PB = 28;
@@ -2640,20 +2827,28 @@ function renderAreaChart(history){
         const fmt = windowMin >= 1440
             ? t.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})
             : t.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-        return '<text x="'+p.x.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" class="ov-chart-xlabel"'+(i===n-1?' style="fill:var(--accent);font-weight:800"':'')+'>'+
+        return '<text x="'+p.x.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" class="ov-chart-xlabel"'+(i===n-1?' style="fill:'+accent+';font-weight:800"':'')+'>'+
             fmt+'</text>';
     }).join('');
-    const dots = pts.filter((_,i)=>i%Math.max(1,Math.round(n/40))===0).map((p,i) => '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.5" style="fill:var(--surface);stroke:var(--accent);stroke-width:2"><title>'+p.v+' req</title></circle>').join('');
+    const dots = pts.filter((_,i)=>i%Math.max(1,Math.round(n/40))===0).map(p => '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.5" style="fill:var(--surface);stroke:'+accent+';stroke-width:2"><title>'+p.v+' '+unit+'</title></circle>').join('');
     el.innerHTML = '<svg class="ov-chart" viewBox="0 0 '+W+' '+H+'">' +
-        '<defs><linearGradient id="ov-fill" x1="0" y1="0" x2="0" y2="1">' +
-        '<stop offset="0%" style="stop-color:var(--accent);stop-opacity:0.32"/>' +
-        '<stop offset="100%" style="stop-color:var(--accent);stop-opacity:0"/>' +
+        '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" style="stop-color:'+accent+';stop-opacity:0.32"/>' +
+        '<stop offset="100%" style="stop-color:'+accent+';stop-opacity:0"/>' +
         '</linearGradient></defs>' + grid +
-        '<path d="'+area+'" fill="url(#ov-fill)"/>' +
-        '<path d="'+line+'" fill="none" style="stroke:var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
-        '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="9" fill="var(--accent)" opacity="0.18"/>' +
-        '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="4" fill="var(--accent)"/>' +
+        '<path d="'+area+'" fill="url(#'+gid+')"/>' +
+        '<path d="'+line+'" fill="none" style="stroke:'+accent+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="9" fill="'+accent+'" opacity="0.18"/>' +
+        '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="4" fill="'+accent+'"/>' +
         dots + labels + '</svg>';
+}
+function renderAreaChart(history){
+    LAST_HIST = history || [];
+    _areaChart($("#traffic-chart"), LAST_HIST, $("#chart-total"), 'var(--accent)', 'requêtes', 'ov-fill');
+}
+function renderErrChart(history){
+    LAST_HIST_ERR = history || [];
+    _areaChart($("#err-chart"), LAST_HIST_ERR, $("#err-total"), 'var(--error)', 'erreurs', 'ov-fill-err');
 }
 
 // Card "Lectures" : Top chaînes / Récents
@@ -2691,8 +2886,13 @@ function renderChannelsCard(){
     const max = isTop ? Math.max(...list.map(t=>t.plays)) : 1;
     el.innerHTML = shown.map(t => {
         const href = t.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(t.id))}` : `${BASE}/hls/${t.id}/index.m3u8`;
+        const logoUrl = t.src==="vavoo"
+            ? `${BASE}/logo/vavoo/${encodeURIComponent(b64u(t.id))}.png`
+            : `${BASE}/logo/dlstreams/${t.id}.png`;
+        const logo = `<img class="top-logo" src="${logoUrl}" alt="" loading="lazy" onerror="this.style.display='none'">`;
         const bar = isTop ? Math.round((t.plays / max) * 100) : 0;
         return `<div class="top-row" data-play="${href}" title="${escapeHtml(t.name)}">
+            ${logo}
             <div class="top-name">${escapeHtml(t.name)}</div>
             ${isTop
                 ? `<div class="top-bar"><div class="top-bar-fill" style="width:${bar}%"></div></div><div class="top-plays">${t.plays}</div>`
@@ -2711,35 +2911,100 @@ function renderChannelsCard(){
     }
 }
 
-// Donut de repartition par langue
-function renderLangSplit(lang_counts){
-    const el = $("#lang-split");
+// Carte "État des services"
+function renderServices(h){
+    const el = $("#svc-services");
     if(!el) return;
-    const flags = {fr:"🇫🇷",en:"🇬🇧",es:"🇪🇸",de:"🇩🇪",it:"🇮🇹",ar:"🇸🇦",pt:"🇵🇹",other:"📺"};
-    const names = {fr:"Français",en:"English",es:"Español",de:"Deutsch",it:"Italiano",ar:"Arabe",pt:"Português",other:"Autres"};
-    const colors = {fr:'#e53e3e',en:'#60a5fa',es:'#f59e0b',de:'#a78bfa',it:'#48bb78',ar:'#34d399',pt:'#38bdf8',other:'#94a3b8'};
-    const entries = Object.entries(lang_counts).sort((a,b)=>b[1]-a[1]);
-    const total = entries.reduce((s,e)=>s+e[1], 0);
-    if(!total){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
-    const segments = entries.map(([lang,n]) => ({ label: (flags[lang]||"🌍")+' '+(names[lang]||lang), value: n, color: colors[lang]||'#94a3b8' }));
-    const R = 40, C = 2 * Math.PI * R;
-    let acc = 0;
-    let arcs = '<circle cx="50" cy="50" r="'+R+'" fill="none" style="stroke:var(--surface2)" stroke-width="13"/>';
-    segments.forEach(seg => {
-        const len = (seg.value / total) * C;
-        arcs += '<circle cx="50" cy="50" r="'+R+'" fill="none" style="stroke:'+seg.color+'" stroke-width="13" stroke-linecap="round" stroke-dasharray="'+len.toFixed(2)+' '+C.toFixed(2)+'" stroke-dashoffset="'+(-acc).toFixed(2)+'" transform="rotate(-90 50 50)"/>';
-        acc += len;
-    });
-    const legend = segments.map(seg => {
-        const pct = Math.round((seg.value / total) * 100);
-        return '<div class="ov-legend-item"><span class="ov-legend-dot" style="background:'+seg.color+'"></span><span>'+escapeHtml(seg.label)+'</span><b>'+pct+'%</b></div>';
+    if(!h || !h.at){ el.innerHTML = '<div class="fav-empty">vérification…</div>'; return; }
+    const fmtMs = s => s && s.ms != null ? ` · ${s.ms} ms` : '';
+    const rows = [
+        ['dlstreams.st', h.dlstreams, h.dlstreams ? (h.dlstreams.ok ? 'OK' : 'KO') + fmtMs(h.dlstreams) : '…'],
+        ['API Vavoo', h.vavoo, h.vavoo ? (h.vavoo.ok ? 'OK' : 'KO') + fmtMs(h.vavoo) : '…'],
+        ['EPG', h.epg, h.epg ? (h.epg.ok ? `${h.epg.channels} chaînes` : h.epg.channels ? 'périmé' : 'non chargé')
+            + (h.epg.age != null ? ' · ' + fmtAge(h.epg.age) : '') : '…'],
+        ['Logos', h.logos, h.logos ? `${h.logos.loaded}/${h.logos.total} chargés` : '…'],
+    ];
+    el.innerHTML = rows.map(r => {
+        const st = r[1] && r[1].ok ? 'ok' : 'ko';
+        return `<div class="svc-row"><span class="svc-dot ${st}"></span><span class="svc-name">${r[0]}</span><span class="svc-desc">${r[2]}</span></div>`;
     }).join('');
-    el.innerHTML = '<div class="ov-split">' +
-        '<svg viewBox="0 0 100 100" class="ov-donut">' + arcs +
-        '<text x="50" y="46" text-anchor="middle" class="ov-donut-total">'+total.toLocaleString('fr-FR')+'</text>' +
-        '<text x="50" y="59" text-anchor="middle" class="ov-donut-sub">chaînes</text>' +
-        '</svg>' +
-        '<div class="ov-split-legend">' + legend + '</div></div>';
+    const okN = rows.filter(r => r[1] && r[1].ok).length;
+    $("#svc-total").textContent = `${okN}/${rows.length} opérationnels`;
+}
+async function checkServices(){
+    const btn = $("#svc-check-btn");
+    if(btn){ btn.disabled = true; btn.textContent = "⏳ Vérification…"; }
+    try{
+        await apiFetch('/api/health', {method: 'POST'});
+        await refreshStats();
+        toast('🩺 Services vérifiés', 'success');
+    }catch(e){
+        if (e.message !== 'unauthenticated') toast('❌ Échec de la vérification', 'error');
+    }
+    if(btn){ btn.disabled = false; btn.textContent = "↻ Vérifier maintenant"; }
+}
+
+// En ce moment : lectures live (poll 5s)
+async function loadLive(){
+    try{
+        const r = await apiFetch('/api/live');
+        renderLive(await r.json());
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Live error:", e);
+    }
+}
+function renderLive(list){
+    const el = $("#live-list");
+    if(!el) return;
+    if(!list.length){
+        el.innerHTML = '<div class="fav-empty">aucune lecture en cours — ouvre une chaîne !</div>';
+        return;
+    }
+    el.innerHTML = list.map(t => {
+        const href = t.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(t.id))}` : `${BASE}/hls/${t.id}/index.m3u8`;
+        return `<a class="live-item" href="${href}" target="_blank" title="${escapeHtml(t.name)}">
+            <span class="live-dot"></span>
+            <span class="live-name">${escapeHtml(t.name)}</span>
+            <span class="live-time">${fmtAgo(t.last)}</span>
+        </a>`;
+    }).join('');
+}
+
+// Programmes en cours : mini-EPG des chaînes populaires
+async function loadNow(){
+    try{
+        const r = await apiFetch('/api/now');
+        renderNow(await r.json());
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Now error:", e);
+    }
+}
+function renderNow(list){
+    const el = $("#now-list");
+    if(!el) return;
+    const tot = $("#now-total");
+    if(!list.length){
+        el.innerHTML = '<div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>';
+        if(tot) tot.textContent = '';
+        return;
+    }
+    if(tot) tot.textContent = list.length + ' chaînes guidées';
+    el.innerHTML = list.map(n => {
+        const href = `${BASE}/hls/${n.id}/index.m3u8`;
+        const cur = n.cur || {};
+        const nxt = n.nxt || {};
+        const logo = `<img class="top-logo" src="${BASE}${n.logo}" alt="" loading="lazy" onerror="this.style.display='none'">`;
+        const st = cur.start ? new Date(cur.start * 1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        const en = cur.stop ? new Date(cur.stop * 1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        return `<a class="now-row" href="${href}" target="_blank" title="${escapeHtml(n.name)}">
+            ${logo}
+            <div class="now-info">
+                <div class="now-title">${escapeHtml(n.name)}</div>
+                <div class="now-sub">${escapeHtml(cur.title || '—')}${nxt.title ? ' · puis ' + escapeHtml(nxt.title) : ''}</div>
+            </div>
+            <span class="now-time">${st}–${en}</span>
+        </a>`;
+    }).join('');
 }
 
 async function loadActivity(targetId) {
@@ -3332,8 +3597,10 @@ async function boot(){
     render();
     renderFavs();
     loadLogs();
+    loadLive();
     restartLogPolling();
     setInterval(refreshStats, 30000);
+    setInterval(loadLive, 5000);
     const hp = location.hash.replace('#', '');
     if (hp && hp !== 'dashboard' && document.getElementById('page-' + hp)) navigateTo(hp);
 }
