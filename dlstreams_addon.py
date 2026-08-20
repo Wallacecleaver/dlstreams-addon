@@ -4,6 +4,7 @@ Dashboard avec session persistante, gestion des sources, et navigation SPA.
 """
 from __future__ import annotations
 import base64
+import gzip
 import json
 import os
 import re
@@ -16,13 +17,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import xml.sax
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.9.0"
+_VERSION = "1.10.0"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -137,6 +139,205 @@ _CH_LOGO = {
     "422": "https://static.epg.best/fr/RMCStory.fr.png",
 }
 
+# ============================ REGLAGES ============================
+_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_settings.json")
+_SETTINGS_DEFAULT = {
+    "logos": True,                                   # logos reels des chaines populaires
+    "epg": True,                                     # EPG (programme en cours)
+    "epg_url": "https://xmltvfr.fr/xmltv/xmltv.xml.gz",
+    "genres": {},                                    # overrides: nom chaine (minuscule) -> [genres]
+}
+_settings: dict = dict(_SETTINGS_DEFAULT)
+
+def _settings_save():
+    try:
+        with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(_settings, f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
+
+def _settings_load():
+    global _settings
+    try:
+        if os.path.exists(_SETTINGS_FILE):
+            with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                _s = dict(_SETTINGS_DEFAULT)
+                _s.update({k: v for k, v in data.items() if k in _SETTINGS_DEFAULT})
+                _settings = _s
+    except Exception:
+        pass
+
+# ============================ EPG (programme TV) ============================
+# ids dlstreams -> ids XMLTV (xmltvfr.fr utilise les ids iptv-org, memes que les logos)
+_CH_EPG = {
+    "121": "CanalPlus.fr", "122": "CanalPlusSport.fr", "123": "CanalPlusCinema.fr",
+    "124": "CanalPlusSeries.fr", "125": "CanalPlusFamilyCentre.af",
+    "201": "beINSPORTS1.fr", "202": "beINSPORTS2.fr", "203": "beINSPORTS3.fr",
+    "211": "RMCSport1.fr", "212": "RMCSport2.fr", "213": "RMCSport3.fr", "214": "RMCSport4.fr",
+    "301": "Eurosport1.fr", "302": "Eurosport2.fr",
+    "401": "TF1.fr", "402": "France2.fr", "403": "France3.fr", "404": "France4.fr",
+    "405": "France5.fr", "406": "M6.fr", "407": "Arte.fr", "409": "W9.fr", "410": "TMC.fr",
+    "413": "LCP100.fr", "414": "FranceInfo.fr", "415": "BFMTV.fr", "416": "CNews.fr",
+    "417": "CStar.fr", "418": "Gulli.fr", "419": "TF1SeriesFilms.fr", "420": "LEquipe21.fr",
+    "421": "6ter.fr", "423": "RMCDecouverte.fr", "424": "Cherie25.fr",
+}
+
+_EPG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_epg.json")
+_EPG_TTL = 6 * 3600
+_epg_lock = threading.Lock()
+_epg_data: dict[str, list[dict]] = {}
+_epg_at: float = 0.0
+
+def _xmlts(ts: str) -> float:
+    try:
+        y = int(ts[0:4]); mo = int(ts[4:6]); d = int(ts[6:8])
+        h = int(ts[8:10]); mi = int(ts[10:12]); s = int(ts[12:14])
+        off = ts[15:20] if len(ts) > 14 and " " in ts else ""
+        offs = 0
+        if off and len(off) == 5:
+            oh, om = int(off[1:3]), int(off[3:5])
+            offs = (oh * 60 + om) * 60 * (-1 if off[0] == "-" else 1)
+        import calendar
+        return calendar.timegm((y, mo, d, h, mi, s, 0, 0, 0)) - offs
+    except Exception:
+        return 0
+
+class _EpgHandler(xml.sax.handler.ContentHandler):
+    def __init__(self, want: set[str], lo: float, hi: float):
+        self.want = want
+        self.lo, self.hi = lo, hi
+        self.out: dict[str, list[dict]] = {}
+        self._chan: str | None = None
+        self._prog: list | None = None
+        self._title = ""
+        self._desc = ""
+        self._in_title = False
+        self._in_desc = False
+
+    def startElement(self, name, attrs):
+        if name == "programme":
+            ch = attrs.get("channel", "")
+            if ch in self.want:
+                st = _xmlts(attrs.get("start", ""))
+                sp = _xmlts(attrs.get("stop", ""))
+                if sp > self.lo and st < self.hi:
+                    self._chan = ch
+                    self._prog = [st, sp]
+        elif name == "title":
+            self._in_title = self._chan is not None
+        elif name == "desc":
+            self._in_desc = self._chan is not None
+
+    def characters(self, content):
+        if self._in_title:
+            self._title += content
+        elif self._in_desc:
+            self._desc += content
+
+    def endElement(self, name):
+        if name == "title":
+            self._in_title = False
+        elif name == "desc":
+            self._in_desc = False
+        elif name == "programme":
+            if self._prog is not None:
+                self.out.setdefault(self._chan, []).append({
+                    "start": self._prog[0], "stop": self._prog[1],
+                    "title": " ".join(self._title.split()),
+                    "desc": " ".join(self._desc.split())})
+            self._chan = None
+            self._prog = None
+            self._title = ""
+            self._desc = ""
+
+def _epg_save():
+    try:
+        with open(_EPG_FILE, "w", encoding="utf-8") as f:
+            json.dump({"at": _epg_at, "data": _epg_data}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+def _epg_load():
+    global _epg_at
+    try:
+        if os.path.exists(_EPG_FILE):
+            with open(_EPG_FILE, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            with _epg_lock:
+                _epg_data.clear()
+                _epg_data.update(d.get("data", {}))
+                _epg_at = float(d.get("at", 0.0))
+    except Exception:
+        pass
+
+def _epg_refresh(force: bool = False):
+    global _epg_at
+    if not _settings.get("epg", True):
+        return
+    now = time.time()
+    if not force and (_epg_data and now - _epg_at < _EPG_TTL):
+        return
+    tmp = None
+    try:
+        url = _settings.get("epg_url") or _SETTINGS_DEFAULT["epg_url"]
+        import tempfile
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        body = urllib.request.urlopen(req, timeout=240).read()
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".gz")
+        tmp.write(body)
+        tmp.close()
+        handler = _EpgHandler(set(_CH_EPG.values()), now - 2 * 3600, now + 26 * 3600)
+        if body[:2] == b"\x1f\x8b":
+            f = gzip.open(tmp.name, "rb")
+        else:
+            f = open(tmp.name, "rb")
+        try:
+            xml.sax.parse(f, handler)
+        finally:
+            f.close()
+        with _epg_lock:
+            _epg_data.clear()
+            _epg_data.update(handler.out)
+            _epg_at = time.time()
+        _epg_save()
+        print(f"  epg : {len(_epg_data)} chaines guidees ({len(handler.out)} programmes)")
+    except Exception as e:
+        print(f"  epg : erreur ({type(e).__name__}: {e})")
+    finally:
+        if tmp is not None:
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
+
+def _epg_slot(dl_id) -> tuple[dict | None, dict | None]:
+    xid = _CH_EPG.get(str(dl_id))
+    if not xid:
+        return None, None
+    now = time.time()
+    cur = None
+    nxt = None
+    with _epg_lock:
+        for p in _epg_data.get(xid, []):
+            if p["start"] <= now < p["stop"]:
+                cur = p
+            elif p["start"] > now and (nxt is None or p["start"] < nxt["start"]):
+                nxt = p
+    return cur, nxt
+
+# ============================ CATEGORIES ============================
+_GENRE_CHOICES = ["Sports", "Actualités", "Films & Séries", "Cinéma", "Divertissement",
+                  "Musique", "Documentaire", "Jeunesse", "Télévision"]
+
+def _genres_for(name: str) -> list[str]:
+    key = name.lower()
+    ov = _settings.get("genres", {}).get(key)
+    if ov:
+        return ov
+    return _genre_for(name)
+
 def _detect_lang(name: str) -> str:
     n = name.lower()
     if any(x in n for x in ["france", "français", "french", " fr ", "tf1", "france 2", "france 3", "m6", "canal+", "rmc", "l'équipe", "arte", "bein sports"]):
@@ -156,17 +357,33 @@ def _detect_lang(name: str) -> str:
     return "other"
 
 def _genre_for(name: str) -> list[str]:
-    n = name.lower()
-    if any(k in n for k in ["sport", "foot", "tennis", "racing", "formula", "f1 ", "golf", "cycl", "beinsport", "eurosport", "rmc", "canal+ sport", "ufc", "boxe", "mma"]):
+    n = name.lower().strip()
+    if any(k in n for k in ["sport", "foot", "tennis", "racing", "formula", "f1 racing", "golf", "cycl",
+                            "beinsport", "bein", "eurosport", "rmc sport", "canal+ sport", "ufc", "boxe",
+                            "mma", "wwe", "équipe", "equipe", "olymp", "auto moto"]):
         return ["Sports"]
-    if any(k in n for k in ["news", "info", "bfm", "cnews", "france info", "cnn", "bbc", "sky news", "al jazeera", "rt "]):
+    if any(k in n for k in ["news", "info", "bfm", "cnews", "france info", "cnn", "bbc", "sky news",
+                            "al jazeera", "rt ", "euronews", "lcp", "public senat", "parlement"]):
         return ["Actualités"]
-    if any(k in n for k in ["cinema", "cinéma", "film", "séries", "series", "family", "kids", "gulli", "cartoon", "plus"]):
+    if any(k in n for k in ["kids", "gulli", "cartoon", "piwi", "tiiji", "disney", "nickelodeon",
+                            "boomerang", "canal j", "junior", "télétoon", "télétoon"]):
+        return ["Jeunesse"]
+    if any(k in n for k in ["cinema", "cinéma", "cine+", "ciné+", "ocs", "paramount", "action",
+                            "horror", "polar", "classic", "grand écran", "grand ecran", "premiere"]):
+        return ["Cinéma"]
+    if n in {"tf1", "france 2", "france 3", "france 4", "france 5", "m6", "tmc", "w9", "arte",
+             "c8", "6ter", "canal+ france"}:
+        return ["Télévision"]
+    if any(k in n for k in ["film", "séries", "series", "family", "série club", "téléfilm", "canal+"]):
         return ["Films & Séries"]
-    if any(k in n for k in ["musique", "music", "mtv", "radio", "clip"]):
+    if any(k in n for k in ["musique", "music", "mtv", "radio", "clip", "melody", "nrj hits", "fun tv"]):
         return ["Musique"]
-    if any(k in n for k in ["découverte", "decouverte", "documentaire", "voyage", "histoire", "geo"]):
+    if any(k in n for k in ["découverte", "decouverte", "documentaire", "voyage", "histoire",
+                            "geo", "planète", "planete", "animaux", "nature", "science", "investigation"]):
         return ["Documentaire"]
+    if any(k in n for k in ["divertissement", "télé réalité", "télé-realite", "w9", "tfx",
+                            "chérie", "cherie", "cstar", "nrj 12", "seduction"]):
+        return ["Divertissement"]
     return ["Télévision"]
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
@@ -820,6 +1037,8 @@ _logo_bad: set[str] = set()
 
 def _logo_bytes(src: str, c: dict) -> bytes:
     """Logo reel (proxye) si dispo, sinon poster genere. Jamais de tile cassee."""
+    if not _settings.get("logos", True):
+        return _poster_get(c.get("name") or "TV")
     url = _CH_LOGO.get(str(c.get("id")), "") if src == "dlstreams" else (c.get("logo") or "").strip()
     if url:
         png = _logo_cache.get(url)
@@ -1069,6 +1288,38 @@ class Handler(BaseHTTPRequestHandler):
             threading.Timer(0.5, lambda: os._exit(0)).start()
             return self._send(200, json.dumps({"success": True, "message": "Redémarrage en cours..."}).encode(), "application/json")
 
+        if path == "/api/settings":
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            changed = False
+            for k in ("logos", "epg"):
+                if k in data and isinstance(data[k], bool) and _settings.get(k) != data[k]:
+                    _settings[k] = data[k]
+                    changed = True
+            if isinstance(data.get("epg_url"), str) and data["epg_url"].strip():
+                _settings["epg_url"] = data["epg_url"].strip()
+                changed = True
+            if isinstance(data.get("genres"), dict):
+                _settings["genres"] = {str(k).lower(): [str(g) for g in v]
+                                       for k, v in data["genres"].items()}
+                changed = True
+            if changed:
+                _settings_save()
+            return self._send(200, json.dumps({"success": True, "settings": _settings}).encode(),
+                              "application/json")
+
+        if path == "/api/epg/refresh":
+            if not self._require_auth():
+                return
+            threading.Thread(target=_epg_refresh, args=(True,), daemon=True).start()
+            return self._send(200, json.dumps({"success": True,
+                               "message": "rafraichissement EPG lance"}).encode(),
+                              "application/json")
+
         return self._send(404, b"not found", "text/plain")
 
     def do_GET(self):
@@ -1127,6 +1378,20 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(_plays_map()).encode(), "application/json")
+
+            if path == "/api/settings":
+                if not self._require_auth():
+                    return
+                with _epg_lock:
+                    epg_covered = len(_epg_data)
+                    epg_at = _epg_at
+                return self._send(200, json.dumps({
+                    "settings": _settings,
+                    "epg": {"at": epg_at, "covered": epg_covered, "channels": len(_CH_EPG)},
+                    "genre_choices": _GENRE_CHOICES,
+                    "popular": [{"id": c["id"], "name": c["name"], "genre": _genres_for(c["name"])[0]}
+                                for c in _POPULAR_CHANNELS],
+                    "version": _VERSION}).encode(), "application/json")
 
             if path == "/api/vavoo-channels":
                 if not self._require_auth():
@@ -1224,10 +1489,14 @@ class Handler(BaseHTTPRequestHandler):
                 catid = extra.split("/", 1)[0]
                 params = {}
                 if "/" in extra:
-                    for kv in extra.split("/", 1)[1].split("&"):
-                        if "=" in kv:
-                            k, v = kv.split("=", 1)
-                            params[k] = urllib.parse.unquote_plus(v)
+                    rest = extra.split("/", 1)[1]
+                    if rest.startswith("genre/"):
+                        params["genre"] = urllib.parse.unquote_plus(rest[len("genre/"):])
+                    else:
+                        for kv in rest.split("&"):
+                            if "=" in kv:
+                                k, v = kv.split("=", 1)
+                                params[k] = urllib.parse.unquote_plus(v)
                 
                 lang_filter = qs.get("lang", [None])[0]
                 
@@ -1236,6 +1505,9 @@ class Handler(BaseHTTPRequestHandler):
                 if q:
                     words = q.replace("+", " ").split()
                     chans = [c for c in chans if all(w in c["name"].lower() for w in words)]
+                g = params.get("genre")
+                if g:
+                    chans = [c for c in chans if g in _genres_for(c["name"])]
                 skip = int(params.get("skip") or 0)
                 metas = [self._meta(c, catid) for c in chans[skip:skip + 100]]
                 return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
@@ -1331,7 +1603,10 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, b"not found", "text/plain")
 
     def _manifest(self, lang_filter: str | None = None) -> dict:
-        _extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]
+        _extra = [{"name": "search", "isRequired": False},
+                  {"name": "skip", "isRequired": False},
+                  {"name": "genre", "isRequired": False,
+                   "options": _GENRE_CHOICES}]
         name = "Chaînes live (dlstreams + Vavoo)"
         desc = ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
                 "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
@@ -1351,32 +1626,51 @@ class Handler(BaseHTTPRequestHandler):
             "types": ["tv"],
             "idPrefixes": ["dlstreams:", "vavoo:"],
             "catalogs": [{"type": "tv", "id": "dlstreams", "name": "dlstreams",
-                          "extra": _extra, "extraSupported": ["search", "skip"]},
+                          "extra": _extra, "extraSupported": ["search", "skip", "genre"]},
                          {"type": "tv", "id": "vavoo", "name": "Vavoo",
-                          "extra": _extra, "extraSupported": ["search", "skip"]}],
+                          "extra": _extra, "extraSupported": ["search", "skip", "genre"]}],
         }
 
     def _meta(self, c: dict, source: str) -> dict:
         cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
         base = self._self_base()
-        poster = f"{base}/logo/{source}/{urllib.parse.quote(cid, safe='')}.png"
+        if _settings.get("logos", True):
+            poster = f"{base}/logo/{source}/{urllib.parse.quote(cid, safe='')}.png"
+        else:
+            poster = f"{base}/poster/{urllib.parse.quote(c['name'], safe='')}.png"
         lang = c.get("lang", "fr")
         lang_label = {"fr": "française", "en": "anglaise", "es": "espagnole",
                       "de": "allemande", "it": "italienne", "ar": "arabe",
                       "pt": "portugaise"}.get(lang, lang)
-        genres = _genre_for(c["name"])
+        genres = _genres_for(c["name"])
         desc = (f"Chaîne {c['name']} diffusée en direct, chaîne {lang_label} "
                 f"disponible via {source}. Lecture directe dans Stremio grâce au proxy intégré.")
+        release = "En direct"
+        if source == "dlstreams":
+            cur, nxt = _epg_slot(c["id"])
+            if cur:
+                t0 = time.strftime("%H:%M", time.localtime(cur["start"]))
+                t1 = time.strftime("%H:%M", time.localtime(cur["stop"]))
+                release = f"En direct · {t0}-{t1}"
+                desc = cur["title"] or "Programme en cours"
+                if cur.get("desc"):
+                    desc += f"\n{cur['desc']}"
+                if nxt:
+                    tn = time.strftime("%H:%M", time.localtime(nxt["start"]))
+                    desc += f"\n\nÀ suivre à {tn} : {nxt['title']}"
+                desc += f"\n\nChaîne {c['name']} diffusée en direct via {source}."
         return {"id": f"{source}:{cid}", "type": "tv", "name": c["name"],
                 "poster": poster, "logo": poster, "posterShape": "landscape",
                 "background": poster,
                 "description": desc,
-                "releaseInfo": "En direct",
+                "releaseInfo": release,
                 "genres": genres}
 
 def main():
     _hist_load()
     _sessions_load()
+    _settings_load()
+    _epg_load()
     print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     print(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     print(f"  Configure: http://127.0.0.1:{PORT}/configure")
@@ -1401,6 +1695,7 @@ def main():
         raise SystemExit(f"impossible de lier le port {PORT}")
     threading.Thread(target=_warm_channels, daemon=True).start()
     threading.Thread(target=_warm_logos, daemon=True).start()
+    threading.Thread(target=_epg_refresh, daemon=True).start()
     srv.serve_forever()
 
 def _warm_channels():
@@ -1486,6 +1781,17 @@ DASHBOARD_HTML = r"""<!doctype html>
   .nav-item.active { background:var(--accent-dim); color:var(--accent); }
   .nav-badge { margin-left:auto; background:var(--accent); color:#fff; font-size:10px; font-weight:800; border-radius:20px;
     padding:1px 7px; min-width:16px; text-align:center; }
+  .toggle-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 4px; cursor:pointer;
+    border-bottom:1px solid var(--border); }
+  .toggle-row:last-child { border-bottom:none; }
+  .toggle-title { font-size:14px; font-weight:600; }
+  .toggle-sub { font-size:12px; color:var(--text2); margin-top:2px; }
+  .toggle-row input[type="checkbox"] { width:42px; height:24px; appearance:none; -webkit-appearance:none; background:var(--surface2);
+    border:1px solid var(--border); border-radius:20px; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0; }
+  .toggle-row input[type="checkbox"]::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px;
+    border-radius:50%; background:var(--muted); transition:all .2s; }
+  .toggle-row input[type="checkbox"]:checked { background:var(--accent-dim); }
+  .toggle-row input[type="checkbox"]:checked::after { left:20px; background:var(--accent); }
   .sidebar-bottom { padding:12px 10px; border-top:1px solid var(--border); }
   .btn-logout { width:100%; background:none; border:1px solid var(--border); border-radius:8px; padding:8px; font-size:12px;
     color:var(--muted); cursor:pointer; font-family:var(--font-body); transition:all .2s; }
@@ -1805,6 +2111,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
           <button class="nav-item" data-page="system" onclick="navigateTo('system')">🖥️ Système</button>
+          <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages</button>
           <a class="nav-item" href="/configure" title="Choisir la langue par défaut de l'addon">🎨 Configuration</a>
           <div class="nav-section-label">Raccourcis</div>
           <button class="nav-shortcut" onclick="sidebarAction('scan')" title="Teste la disponibilité de toutes vos chaînes favorites"><span class="sc-ico">🩺</span><span class="sc-txt">Tester mes favoris</span></button>
@@ -2006,6 +2313,59 @@ DASHBOARD_HTML = r"""<!doctype html>
             <div class="card-body">
               <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Redémarre le processus serveur. Sur Render, la plateforme le relance automatiquement.</p>
               <button class="btn-danger" id="restart-btn" onclick="restartServer()">🔁 Redémarrer le serveur</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: REGLAGES -->
+        <div class="page" id="page-settings">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Réglages</div>
+              <div class="page-sub">Logos, EPG et catégories personnalisables</div>
+            </div>
+            <div class="header-actions">
+              <button class="btn-outline-sm" onclick="loadSettings()">↻ Actualiser</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🎨 Affichage</div></div>
+            <div class="card-body">
+              <label class="toggle-row">
+                <div>
+                  <div class="toggle-title">Logos réels des chaînes</div>
+                  <div class="toggle-sub">Vraies logos des chaînes populaires, sinon posters générés</div>
+                </div>
+                <input type="checkbox" id="set-logos" onchange="saveSettings()">
+              </label>
+              <label class="toggle-row">
+                <div>
+                  <div class="toggle-title">EPG — programme en cours</div>
+                  <div class="toggle-sub">Affiche « Maintenant / À suivre » sur les chaînes couvertes</div>
+                </div>
+                <input type="checkbox" id="set-epg" onchange="saveSettings()">
+              </label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">📡 Source EPG (XMLTV)</div></div>
+            <div class="card-body">
+              <input class="add-source-input" id="set-epg-url" type="url" placeholder="URL du fichier XMLTV (.xml ou .xml.gz)">
+              <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
+                <button class="add-source-btn" onclick="saveSettings()">💾 Enregistrer</button>
+                <button class="btn-outline-sm" onclick="refreshEpg()">↻ Rafraîchir l'EPG</button>
+                <span id="epg-status" style="color:var(--text2);font-size:13px">chargement…</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🗂️ Catégories</div></div>
+            <div class="card-body">
+              <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Attribuez une catégorie aux chaînes populaires. Elles alimentent le filtre « genre » de Stremio.</p>
+              <div id="genre-edit" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">chargement…</div>
             </div>
           </div>
         </div>
@@ -2212,7 +2572,8 @@ function navigateTo(page) {
         sources: 'Gérer vos sources personnalisées',
         catalog: 'Explorer toutes les chaînes disponibles',
         logs: 'Journal en direct des requêtes passées sur votre proxy',
-        system: 'Infos serveur, cache et redémarrage'
+        system: 'Infos serveur, cache et redémarrage',
+        settings: 'Logos, EPG et catégories personnalisables'
     };
     document.querySelector('.page.active .page-sub').textContent = subtitles[page] || '';
 
@@ -2220,6 +2581,7 @@ function navigateTo(page) {
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'logs') { loadLogs(); }
     if (page === 'system') { loadSystem(); }
+    if (page === 'settings') { loadSettings(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
     }
@@ -2735,6 +3097,72 @@ function sidebarAction(action){
     else if(action === 'm3u-catalog'){ navigateTo('catalog'); setTimeout(()=>exportCatalogM3U(), 200); }
     else if(action === 'logs-clear'){ navigateTo('logs'); setTimeout(()=>clearLogs(), 200); }
     else if(action === 'restart'){ restartServer(); }
+}
+
+// ===== REGLAGES =====
+let _settings = null;
+
+async function loadSettings(){
+    try{
+        const r = await apiFetch("/api/settings");
+        const d = await r.json();
+        _settings = d.settings;
+        $('#set-logos').checked = !!_settings.logos;
+        $('#set-epg').checked = !!_settings.epg;
+        $('#set-epg-url').value = _settings.epg_url || '';
+        const e = d.epg || {};
+        $('#epg-status').textContent = e.at
+            ? `Dernière MAJ ${new Date(e.at*1000).toLocaleTimeString('fr-FR')} · ${e.covered}/${e.channels} chaînes`
+            : 'EPG pas encore chargé';
+        renderGenreEditor(d);
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur de chargement des réglages','error'); }
+}
+
+function renderGenreEditor(d){
+    const box = $('#genre-edit');
+    box.innerHTML = '';
+    const choices = d.genre_choices || [];
+    const overrides = (_settings && _settings.genres) || {};
+    const popular = d.popular || [];
+    if(!popular.length){ box.innerHTML = '<div class="fav-empty">aucune chaîne</div>'; return; }
+    popular.forEach(c => {
+        const key = c.name.toLowerCase();
+        const cur = (overrides[key] && overrides[key][0]) || c.genre || '';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;justify-content:space-between;font-size:13px;min-width:0';
+        row.innerHTML =
+            `<span style="color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.name)}</span>` +
+            `<select style="max-width:160px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 6px" ` +
+            `onchange="setGenre('${key.replace(/[\\']/g, "\\'")}', this.value)">` +
+            choices.map(g => `<option value="${escapeHtml(g)}" ${g===cur?'selected':''}>${escapeHtml(g)}</option>`).join('') +
+            `</select>`;
+        box.appendChild(row);
+    });
+}
+
+async function setGenre(key, value){
+    if(!_settings) return;
+    const g = Object.assign({}, _settings.genres || {});
+    g[key] = [value];
+    _settings.genres = g;
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({genres:g})});
+    if(r.ok) toast('Catégorie enregistrée','success'); else toast('Erreur d\'enregistrement','error');
+}
+
+async function saveSettings(){
+    const body = {logos: $('#set-logos').checked, epg: $('#set-epg').checked, epg_url: $('#set-epg-url').value.trim()};
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if(r.ok){ toast('Réglages enregistrés','success'); } else toast('Erreur d\'enregistrement','error');
+}
+
+async function refreshEpg(){
+    const st = $('#epg-status');
+    st.textContent = 'Rafraîchissement en cours…';
+    try{
+        const r = await apiFetch("/api/epg/refresh", {method:'POST'});
+        if(r.ok){ toast('Rafraîchissement EPG lancé','success'); setTimeout(loadSettings, 4000); }
+        else toast('Erreur','error');
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur','error'); }
 }
 
 // Langues sidebar : boutons dynamiques avec compteurs
