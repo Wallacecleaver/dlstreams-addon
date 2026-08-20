@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.12.4"
+_VERSION = "1.12.5"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -2111,13 +2111,21 @@ DASHBOARD_HTML = r"""<!doctype html>
   .player-body { padding:20px; }
   .player-frame { width:100%; aspect-ratio:16/9; background:#000; border-radius:8px; border:none; }
 
-  /* LOGS — terminal live-tail */
-  .logs-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  /* LOGS — cartes propres */
+  .logs-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .logs-stats { display:flex; align-items:center; gap:12px; margin-right:auto; }
+  .log-stat { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .log-stat b { font-size:13px; color:var(--text); }
+  .log-stat.ok b { color:var(--green); }
+  .log-stat.warn b { color:var(--warn); }
+  .log-stat.err b { color:var(--error); }
   .logs-group { display:flex; align-items:center; gap:6px; }
   .logs-group label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:700; }
   .logs-select, .logs-search input { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:7px 10px;
     font-size:12px; font-weight:600; color:var(--text); font-family:var(--font-body); cursor:pointer; }
-  .logs-search input { cursor:text; min-width:160px; font-weight:500; }
+  .logs-search { position:relative; }
+  .logs-search .search-ico { position:absolute; right:10px; top:50%; transform:translateY(-50%); opacity:.5; pointer-events:none; }
+  .logs-search input { cursor:text; min-width:200px; font-weight:500; padding-right:32px; }
   .logs-search input:focus, .logs-select:focus { outline:none; border-color:var(--accent); }
   .logs-pausebtn { display:flex; align-items:center; gap:6px; background:var(--surface2); border:1px solid var(--border); border-radius:7px;
     padding:7px 12px; font-size:12px; font-weight:700; color:var(--text2); cursor:pointer; font-family:var(--font-body); transition:all .15s; }
@@ -2127,27 +2135,28 @@ DASHBOARD_HTML = r"""<!doctype html>
   .logs-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:logsPulse 1.6s infinite; flex-shrink:0; }
   .logs-dot.paused { background:var(--muted); animation:none; }
   @keyframes logsPulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-  .logs-term { height:520px; overflow-y:auto; background:var(--bg); font-family:var(--font-mono);
-    font-size:13px; line-height:1.7; border-radius:12px; }
-  .logs-term::-webkit-scrollbar { width:8px; }
-  .logs-term::-webkit-scrollbar-thumb { background:var(--border); border-radius:8px; }
-  .log-row { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; padding:6px 16px; border-bottom:1px solid var(--border); border-left:3px solid transparent; }
-  .log-row:hover { background:var(--card-hover); }
-  .log-row.row-warn { border-left-color:#f59e0b; background:rgba(245,158,11,0.04); }
-  .log-row.row-err { border-left-color:var(--accent); background:rgba(230,57,70,0.05); }
-  .log-time { color:var(--muted); flex-shrink:0; font-size:12px; }
-  .log-method { font-weight:800; flex-shrink:0; min-width:42px; text-align:center; font-size:11px; padding:1px 6px; border-radius:4px; }
-  .log-method.GET { color:var(--info); background:rgba(96,165,250,.12); }
-  .log-method.POST { color:var(--warn); background:rgba(245,158,11,.12); }
-  .log-code { min-width:30px; text-align:right; font-weight:700; flex-shrink:0; }
-  .log-code.ok { color:var(--green); }
-  .log-code.warn { color:var(--warn); }
-  .log-code.err { color:var(--error); }
-  .log-ip { color:var(--muted); flex-shrink:0; }
-  .log-path { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
-  .logs-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;
-    color:var(--muted); font-family:var(--font-body); gap:8px; }
-  .logs-empty .icon { font-size:32px; opacity:.4; }
+  .logs-list { max-height:520px; overflow-y:auto; font-family:var(--font-mono); }
+  .logs-list::-webkit-scrollbar { width:8px; }
+  .logs-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:8px; }
+  .log-entry { display:flex; align-items:center; gap:10px; padding:8px 16px; border-bottom:1px solid var(--border); transition:background .15s; }
+  .log-entry:last-child { border-bottom:none; }
+  .log-entry:hover { background:var(--card-hover); }
+  .log-entry.warn { background:rgba(245,158,11,0.03); }
+  .log-entry.err { background:rgba(230,57,70,0.04); }
+  .log-time { font-size:11px; color:var(--muted); white-space:nowrap; flex-shrink:0; }
+  .log-method { display:inline-flex; align-items:center; justify-content:center; min-width:52px; height:22px; border-radius:4px; font-size:10px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; }
+  .log-method.get { background:rgba(72,187,120,.15); color:var(--green); }
+  .log-method.post { background:rgba(59,130,246,.15); color:#3b82f6; }
+  .log-method.delete { background:rgba(239,68,68,.15); color:var(--error); }
+  .log-code { display:inline-flex; align-items:center; justify-content:center; min-width:40px; height:22px; border-radius:4px; font-size:10px; font-weight:800; }
+  .log-code.ok { background:rgba(72,187,120,.15); color:var(--green); }
+  .log-code.warn { background:rgba(245,158,11,.15); color:var(--warn); }
+  .log-code.err { background:rgba(239,68,68,.15); color:var(--error); }
+  .log-ip { font-size:11px; color:var(--text2); font-family:var(--font-mono); flex-shrink:0; }
+  .log-path { font-size:11px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; cursor:pointer; }
+  .log-path:hover { color:var(--accent); }
+  .logs-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; color:var(--muted); text-align:center; }
+  .logs-empty .icon { font-size:36px; opacity:.4; margin-bottom:10px; }
 
   .update-time { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; white-space:nowrap; font-weight:600; }
   .update-time .spinner { width:13px; height:13px; border:2px solid var(--border);
@@ -2463,12 +2472,22 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div class="page-header">
             <div>
               <div class="page-title">Logs</div>
-              <div class="page-sub">Journal en direct des requêtes passées sur votre proxy (300 dernières entrées)</div>
+              <div class="page-sub">Journal en direct des requêtes — 300 dernières entrées</div>
             </div>
           </div>
 
           <div class="card">
             <div class="card-head logs-toolbar">
+              <div class="logs-stats" id="logs-stats">
+                <span class="log-stat" id="stat-total"><b>0</b> total</span>
+                <span class="log-stat ok" id="stat-2xx"><b>0</b> 2xx</span>
+                <span class="log-stat warn" id="stat-4xx"><b>0</b> 4xx</span>
+                <span class="log-stat err" id="stat-5xx"><b>0</b> 5xx</span>
+              </div>
+              <div class="logs-group logs-search">
+                <input type="search" id="logs-search" placeholder="Filtrer chemin, IP, méthode…" oninput="renderLogs()">
+                <span class="search-ico">🔍</span>
+              </div>
               <div class="logs-group">
                 <label>Méthode</label>
                 <select class="logs-select" id="logs-method" onchange="renderLogs()">
@@ -2478,11 +2497,8 @@ DASHBOARD_HTML = r"""<!doctype html>
                   <option value="DELETE">DELETE</option>
                 </select>
               </div>
-              <div class="logs-group logs-search">
-                <input type="text" id="logs-search" placeholder="Rechercher une route ou une IP..." oninput="renderLogs()">
-              </div>
               <div class="logs-group">
-                <label>Rafraîchissement</label>
+                <label>Auto-refresh</label>
                 <select class="logs-select" id="logs-interval" onchange="restartLogPolling()">
                   <option value="2000">2s</option>
                   <option value="5000" selected>5s</option>
@@ -2498,8 +2514,10 @@ DASHBOARD_HTML = r"""<!doctype html>
                 <span id="logs-statustext">Live</span>
               </div>
             </div>
-            <div class="logs-term" id="logs-term">
-              <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs...</p></div>
+            <div class="card-body" style="padding:0">
+              <div class="logs-list" id="logs-list">
+                <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs…</p></div>
+              </div>
             </div>
           </div>
         </div>
@@ -3554,33 +3572,54 @@ function updateLogsBadge() {
     else badge.style.display = 'none';
 }
 
+function updateLogsStats() {
+    const total = allLogs.length;
+    const c2 = allLogs.filter(l => l.code >= 200 && l.code < 300).length;
+    const c4 = allLogs.filter(l => l.code >= 400 && l.code < 500).length;
+    const c5 = allLogs.filter(l => l.code >= 500).length;
+    const eTotal = document.getElementById('stat-total');
+    const e2xx = document.getElementById('stat-2xx');
+    const e4xx = document.getElementById('stat-4xx');
+    const e5xx = document.getElementById('stat-5xx');
+    if (eTotal) eTotal.querySelector('b').textContent = total;
+    if (e2xx) e2xx.querySelector('b').textContent = c2;
+    if (e4xx) e4xx.querySelector('b').textContent = c4;
+    if (e5xx) e5xx.querySelector('b').textContent = c5;
+}
+
 function renderLogs() {
     const methodFilter = document.getElementById('logs-method').value;
     const search = document.getElementById('logs-search').value.trim().toLowerCase();
 
-    let filtered = [...allLogs].reverse(); // du plus ancien au plus récent, défilement vers le bas
+    let filtered = [...allLogs].reverse();
     if (methodFilter) filtered = filtered.filter(l => l.method === methodFilter);
     if (search) filtered = filtered.filter(l =>
-        String(l.path||'').toLowerCase().includes(search) || String(l.ip||'').toLowerCase().includes(search));
+        String(l.path||'').toLowerCase().includes(search)
+        || String(l.ip||'').toLowerCase().includes(search)
+        || String(l.method||'').toLowerCase().includes(search));
 
-    const term = document.getElementById('logs-term');
+    updateLogsStats();
+
+    const list = document.getElementById('logs-list');
     if (!filtered.length) {
-        term.innerHTML = '<div class="logs-empty"><div class="icon">📋</div><p>Aucun log ne correspond</p></div>';
+        list.innerHTML = '<div class="logs-empty"><div class="icon">📋</div><p>Aucun log ne correspond</p></div>';
         return;
     }
-    const wasAtBottom = term.scrollTop + term.clientHeight >= term.scrollHeight - 40;
-    term.innerHTML = filtered.slice(0, 300).map(l => {
-        const cls = l.code >= 500 ? 'row-err' : (l.code >= 400 ? 'row-warn' : '');
+    const wasAtBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 40;
+    list.innerHTML = filtered.slice(0, 300).map(l => {
+        const warn = l.code >= 400 && l.code < 500;
+        const err = l.code >= 500;
+        const methodCls = String(l.method||'').toLowerCase();
         const codeCls = l.code >= 500 ? 'err' : (l.code >= 400 ? 'warn' : 'ok');
-        return `<div class="log-row ${cls}">
+        return `<div class="log-entry ${warn?'warn':''} ${err?'err':''}">
             <span class="log-time">${escapeHtml(l.t)}</span>
-            <span class="log-method ${escapeHtml(l.method)}">${escapeHtml(l.method)}</span>
+            <span class="log-method ${methodCls}">${escapeHtml(l.method)}</span>
             <span class="log-code ${codeCls}">${l.code}</span>
             <span class="log-ip">${escapeHtml(l.ip)}</span>
-            <span class="log-path">${escapeHtml(l.path)}</span>
+            <span class="log-path" title="${escapeHtml(l.path)}">${escapeHtml(l.path)}</span>
         </div>`;
     }).join('');
-    if (wasAtBottom) term.scrollTop = term.scrollHeight;
+    if (wasAtBottom) list.scrollTop = list.scrollHeight;
 }
 
 function exportLogs() {
