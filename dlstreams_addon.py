@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.12.0"
+_VERSION = "1.12.1"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -2591,8 +2591,8 @@ DASHBOARD_HTML = r"""<!doctype html>
             </div>
             <div class="catalog-subbar">
               <select id="lang-filter">
-                <option value="all">🌍 Toutes langues</option>
-                <option value="fr" selected>🇫🇷 Français</option>
+                <option value="all" selected>🌍 Toutes langues</option>
+                <option value="fr">🇫🇷 Français</option>
                 <option value="en">🇬🇧 English</option>
                 <option value="es">🇪🇸 Español</option>
                 <option value="de">🇩🇪 Deutsch</option>
@@ -3103,7 +3103,9 @@ async function refreshAll() {
 }
 
 let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
-let LANG_FILTER = localStorage.getItem("dl_lang") || "fr";
+let LANG_FILTER = localStorage.getItem("dl_lang") || "all";
+const _LANG_FLAGS = {fr:"🇫🇷",en:"🇬🇧",es:"🇪🇸",de:"🇩🇪",it:"🇮🇹",ar:"🇸🇦",pt:"🇵🇹"};
+function langFlag(l){ return _LANG_FLAGS[l] || "🌐"; }
 let SORT = localStorage.getItem("dl_sort") || "name";
 let PLAYS = {};
 
@@ -3122,7 +3124,7 @@ function setCatalogSort(){
 }
 
 async function loadCatalog(src){
-    const url = src==="vavoo" ? "/api/vavoo-channels" : `/api/channels?lang=${LANG_FILTER}`;
+    const url = src==="vavoo" ? "/api/vavoo-channels" : "/api/channels";
     try{
         const r = await apiFetch(url);
         ALL[src] = await r.json();
@@ -3169,7 +3171,10 @@ function render(){
             ? `${BASE}/logo/vavoo/${encodeURIComponent(encodedId)}.png`
             : `${BASE}/logo/dlstreams/${c.id}.png`;
         const plays = PLAYS[key] || 0;
-        const meta = plays ? plays + ' lecture' + (plays>1?'s':'') : (CURRENT==="vavoo" ? 'Vavoo' : '#' + c.id);
+        const flag = langFlag(c.lang);
+        const meta = plays
+            ? `${flag} · ${plays} lecture${plays>1?'s':''}`
+            : `${flag} · ${CURRENT==="vavoo" ? 'Vavoo' : '#' + c.id}`;
         return `<a class="chan-card" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
             <div class="chan-tile">
                 <img class="chan-logo" src="${logoUrl}" alt="" loading="lazy">
@@ -3495,7 +3500,6 @@ $("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTi
 $("#lang-filter").addEventListener("change", (e) => {
     LANG_FILTER = e.target.value;
     localStorage.setItem("dl_lang", e.target.value);
-    loadCatalog(CURRENT);
     render();
 });
 if($("#lang-filter")) $("#lang-filter").value = LANG_FILTER;
@@ -3504,8 +3508,6 @@ document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
     b.classList.add("active");
     CURRENT = b.dataset.src;
-    const lf = $("#lang-filter");
-    if(lf) lf.disabled = CURRENT === "vavoo";
     if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
     render();
 }));
