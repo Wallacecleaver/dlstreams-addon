@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.11.1"
+_VERSION = "1.12.0"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -1989,34 +1989,57 @@ DASHBOARD_HTML = r"""<!doctype html>
   .search-bar select:disabled { opacity:.45; cursor:not-allowed; }
   .search-bar select { background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:9px 12px;
     color:var(--text); cursor:pointer; font-family:var(--font-body); font-size:13px; }
-  .tabs { display:flex; gap:6px; }
-  .tab { padding:8px 14px; border-radius:8px; border:1px solid var(--border);
-    background:transparent; color:var(--text2); cursor:pointer; transition:all .15s; font-size:12px; font-weight:700; font-family:var(--font-body); }
-  .tab:hover { color:var(--text); background:var(--surface2); }
-  .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  /* Sélecteur de source (segmented) */
+  .tabs { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:3px; }
+  .tab { border:none; background:transparent; color:var(--muted); font-size:12px; font-weight:800;
+    padding:7px 16px; border-radius:8px; cursor:pointer; font-family:var(--font-body); transition:all .15s; letter-spacing:.2px; }
+  .tab:hover { color:var(--text); }
+  .tab.active { background:var(--accent); color:#fff; box-shadow:0 2px 10px rgba(229,62,62,.35); }
 
-  .channel-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
-  .list-count { font-size:12px; color:var(--muted); margin-bottom:12px; font-weight:600; }
-  .channel-item { display:flex; align-items:center; gap:10px; padding:11px 12px;
-    border:1px solid var(--border); border-radius:10px;
-    background:var(--surface2); cursor:pointer; transition:all .15s;
-    text-decoration:none; color:var(--text); }
-  .channel-item:hover { border-color:var(--accent); transform:translateY(-1px); background:var(--card-hover); }
-  .channel-item .logo { width:28px; height:28px; border-radius:6px; object-fit:cover; background:#000; flex-shrink:0; }
-  .channel-item .name { flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .channel-item .id { color:var(--muted); font-size:11px; font-family:var(--font-mono); }
-  .fav-star { font-size:16px; color:var(--text2); cursor:pointer; transition:transform .2s,color .2s; user-select:none; padding:2px 6px; }
-  .fav-star:hover { transform:scale(1.25); color:var(--warn); }
-  .fav-star.active { color:var(--warn); text-shadow:0 0 12px rgba(245,158,11,.6); }
-  .check-btn { display:inline-flex; align-items:center; gap:5px;
-    padding:4px 10px; border:1px solid var(--border);
-    border-radius:7px; background:transparent; color:var(--text2);
-    font-size:11px; font-weight:700; cursor:pointer; transition:all .2s; white-space:nowrap; font-family:var(--font-body); }
-  .check-btn:hover { border-color:var(--accent); color:var(--text); }
-  .check-btn.ok { border-color:var(--green); color:var(--green); background:rgba(72,187,120,.08); }
-  .check-btn.ko { border-color:var(--error); color:var(--error); background:rgba(239,68,68,.08); }
-  .check-btn.busy { pointer-events:none; opacity:.6; }
-  .mini-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
+  /* Barre de recherche catalogue */
+  .catalog-search { position:relative; flex:1; min-width:220px; }
+  .catalog-search .search-ico { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.55; pointer-events:none; }
+  .catalog-search input[type="search"] { width:100%; background:var(--input-bg); border:1px solid var(--border);
+    border-radius:10px; padding:10px 14px 10px 34px; color:var(--text); font-size:13px; font-family:var(--font-body); }
+  .catalog-search input:focus { outline:none; border-color:var(--accent); }
+  .catalog-subbar { display:flex; align-items:center; gap:10px; padding:10px 20px; border-bottom:1px solid var(--border);
+    flex-wrap:wrap; background:linear-gradient(180deg, rgba(229,62,62,0.04), rgba(229,62,62,0)); }
+  .catalog-subbar select { background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px;
+    color:var(--text); cursor:pointer; font-family:var(--font-body); font-size:12px; font-weight:600; }
+  .catalog-subbar select:focus { outline:none; border-color:var(--accent); }
+  .catalog-subbar select:disabled { opacity:.45; cursor:not-allowed; }
+
+  .channel-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; }
+  .list-count { font-size:12px; color:var(--muted); font-weight:600; }
+
+  /* Cartes chaînes (vignette poster/logo + nom) */
+  .chan-card { display:block; border-radius:14px; border:1px solid var(--border); background:var(--surface);
+    overflow:hidden; text-decoration:none; color:var(--text); cursor:pointer;
+    transition:transform .18s cubic-bezier(.22,1,.36,1), border-color .18s, box-shadow .18s; }
+  .chan-card:hover { transform:translateY(-4px); border-color:rgba(229,62,62,.45); box-shadow:0 12px 30px rgba(0,0,0,.35); }
+  .chan-tile { position:relative; aspect-ratio:16/9;
+    background:radial-gradient(120% 140% at 20% 0%, #1d1d21 0%, var(--surface2) 60%, var(--surface) 100%);
+    overflow:hidden; }
+  .chan-logo { width:100%; height:100%; object-fit:contain; transition:transform .25s cubic-bezier(.22,1,.36,1); }
+  .chan-card:hover .chan-logo { transform:scale(1.06); }
+  .chan-play { position:absolute; inset:0; display:grid; place-items:center; background:rgba(10,10,11,0);
+    opacity:0; transition:opacity .18s, background .18s; }
+  .chan-card:hover .chan-play { opacity:1; background:rgba(10,10,11,0.55); }
+  .play-badge { width:46px; height:46px; border-radius:50%; background:var(--accent); color:#fff; display:grid;
+    place-items:center; font-size:16px; box-shadow:0 8px 24px rgba(229,62,62,.5); transform:scale(.8); transition:transform .18s; }
+  .chan-card:hover .play-badge { transform:scale(1); }
+  .chan-fav { position:absolute; top:8px; right:8px; font-size:15px; color:rgba(255,255,255,.5); cursor:pointer;
+    background:rgba(0,0,0,.45); border-radius:8px; padding:3px 8px; line-height:1; transition:all .18s; z-index:2; }
+  .chan-fav:hover { color:#f59e0b; transform:scale(1.12); }
+  .chan-fav.active { color:#f59e0b; text-shadow:0 0 10px rgba(245,158,11,.7); }
+  .chan-check { position:absolute; top:8px; left:8px; font-size:10px; font-weight:800; padding:3px 8px; border-radius:8px;
+    background:rgba(0,0,0,.5); color:#aaa; cursor:pointer; z-index:2; font-family:var(--font-mono); transition:all .18s; letter-spacing:.3px; }
+  .chan-check.ok { color:#48bb78; }
+  .chan-check.ko { color:#ef4444; }
+  .chan-check.busy { opacity:.6; pointer-events:none; }
+  .chan-body { padding:11px 12px 13px; }
+  .chan-name { font-size:13px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chan-meta { font-size:11px; color:var(--muted); margin-top:3px; font-family:var(--font-mono); }
   .fav-empty { grid-column:1/-1; text-align:center; padding:26px; color:var(--muted); font-size:13px; }
   .fav-empty a { color:var(--accent); }
 
@@ -2556,34 +2579,38 @@ DASHBOARD_HTML = r"""<!doctype html>
           </div>
 
           <div class="card">
-            <div class="card-head">
-              <div class="search-bar" style="flex:1">
-                <input type="search" id="q" placeholder="Rechercher une chaîne (ex : beIN, Canal+, RMC Sport…)">
-                <select id="lang-filter">
-                  <option value="all">🌍 Toutes langues</option>
-                  <option value="fr" selected>🇫🇷 Français</option>
-                  <option value="en">🇬🇧 English</option>
-                  <option value="es">🇪🇸 Español</option>
-                  <option value="de">🇩🇪 Deutsch</option>
-                  <option value="it">🇮🇹 Italiano</option>
-                  <option value="ar">🇸🇦 Arabe</option>
-                  <option value="pt">🇵🇹 Português</option>
-                  <option value="other">📺 Autres</option>
-                </select>
-                <select id="catalog-sort" onchange="setCatalogSort()">
-                  <option value="name">Tri : Nom</option>
-                  <option value="plays">Tri : Lectures</option>
-                </select>
-                <div class="tabs">
-                  <button class="tab active" data-src="dlstreams">dlstreams</button>
-                  <button class="tab" data-src="vavoo">Vavoo</button>
-                </div>
-                <button class="btn-outline-sm" onclick="exportCatalogM3U()">⬇️ M3U</button>
+            <div class="card-head" style="gap:12px">
+              <div class="catalog-search">
+                <span class="search-ico">🔍</span>
+                <input type="search" id="q" placeholder="Rechercher une chaîne…">
+              </div>
+              <div class="tabs">
+                <button class="tab active" data-src="dlstreams">dlstreams</button>
+                <button class="tab" data-src="vavoo">Vavoo</button>
               </div>
             </div>
+            <div class="catalog-subbar">
+              <select id="lang-filter">
+                <option value="all">🌍 Toutes langues</option>
+                <option value="fr" selected>🇫🇷 Français</option>
+                <option value="en">🇬🇧 English</option>
+                <option value="es">🇪🇸 Español</option>
+                <option value="de">🇩🇪 Deutsch</option>
+                <option value="it">🇮🇹 Italiano</option>
+                <option value="ar">🇸🇦 Arabe</option>
+                <option value="pt">🇵🇹 Português</option>
+                <option value="other">📺 Autres</option>
+              </select>
+              <select id="catalog-sort" onchange="setCatalogSort()">
+                <option value="name">Tri : Nom</option>
+                <option value="plays">Tri : Lectures</option>
+              </select>
+              <span class="list-count" id="catalog-count"></span>
+              <span style="flex:1"></span>
+              <button class="btn-outline-sm" onclick="exportCatalogM3U()">⬇️ M3U</button>
+            </div>
             <div class="card-body">
-              <div class="list-count" id="catalog-count"></div>
-              <div class="channel-list" id="list"><div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">chargement…</div></div>
+              <div class="channel-list" id="list"><div class="fav-empty">chargement…</div></div>
             </div>
           </div>
         </div>
@@ -3129,7 +3156,7 @@ function render(){
 
     const list = $("#list");
     if(!items.length){
-        list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">aucun résultat</div>';
+        list.innerHTML = '<div class="fav-empty">aucun résultat — essaie un autre filtre</div>';
         return;
     }
     list.innerHTML = items.map(c => {
@@ -3137,14 +3164,23 @@ function render(){
         const href = CURRENT==="vavoo"
             ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}`
             : `${BASE}/hls/${c.id}/index.m3u8`;
-        const logo = c.logo ? `<img class="logo" src="${escapeHtml(c.logo)}" alt="" onerror="this.style.display='none'">` : "";
         const key = (CURRENT==="vavoo"?"vavoo:":"dlstreams:")+c.id;
-        return `<a class="channel-item" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
-            ${logo}
-            <div class="name">${escapeHtml(c.name)}</div>
-            <div class="id">${CURRENT==="vavoo"?"vavoo":"#"+c.id}</div>
-            <span class="check-btn ${checkCls(key)}" onclick="event.preventDefault();event.stopPropagation();checkStream('${escapeHtml(key)}')">${checkLabel(key)}</span>
-            <span class="fav-star ${isFav(key)?"active":""}" onclick="event.preventDefault();event.stopPropagation();toggleFavKey('${escapeHtml(key)}')">★</span>
+        const logoUrl = CURRENT==="vavoo"
+            ? `${BASE}/logo/vavoo/${encodeURIComponent(encodedId)}.png`
+            : `${BASE}/logo/dlstreams/${c.id}.png`;
+        const plays = PLAYS[key] || 0;
+        const meta = plays ? plays + ' lecture' + (plays>1?'s':'') : (CURRENT==="vavoo" ? 'Vavoo' : '#' + c.id);
+        return `<a class="chan-card" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
+            <div class="chan-tile">
+                <img class="chan-logo" src="${logoUrl}" alt="" loading="lazy">
+                <span class="chan-check ${checkCls(key)}" onclick="event.preventDefault();event.stopPropagation();checkStream('${escapeHtml(key)}')">${checkLabel(key)}</span>
+                <span class="chan-fav ${isFav(key)?"active":""}" onclick="event.preventDefault();event.stopPropagation();toggleFavKey('${escapeHtml(key)}')">★</span>
+                <span class="chan-play"><span class="play-badge">▶</span></span>
+            </div>
+            <div class="chan-body">
+                <div class="chan-name">${escapeHtml(c.name)}</div>
+                <div class="chan-meta">${escapeHtml(meta)}</div>
+            </div>
         </a>`;
     }).join("");
 }
@@ -3407,11 +3443,11 @@ $("#player-close").addEventListener("click", closePlayer);
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") closePlayer(); });
 $("#player-modal").addEventListener("click", e=>{ if(e.target === e.currentTarget) closePlayer(); });
 document.addEventListener("click", (e)=>{
-    if(e.target.closest(".channel-item") && e.target.closest(".channel-item").dataset.play){
+    const card = e.target.closest(".chan-card, .channel-item");
+    if(card && card.dataset.play){
         e.preventDefault();
-        const item = e.target.closest(".channel-item");
-        const name = item.querySelector(".name").textContent;
-        openPlayer(item.dataset.play, name);
+        const name = (card.querySelector(".chan-name") || card.querySelector(".name")).textContent;
+        openPlayer(card.dataset.play, name);
     }
 });
 document.addEventListener("click", (e)=>{
