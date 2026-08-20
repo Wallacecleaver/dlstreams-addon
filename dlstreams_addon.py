@@ -1126,7 +1126,7 @@ DASHBOARD_HTML = r"""<!doctype html>
   .logs-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:logsPulse 1.6s infinite; flex-shrink:0; }
   .logs-dot.paused { background:var(--muted); animation:none; }
   @keyframes logsPulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-  .logs-term { height:360px; overflow-y:auto; background:var(--bg); font-family:var(--font-mono);
+  .logs-term { height:520px; overflow-y:auto; background:var(--bg); font-family:var(--font-mono);
     font-size:13px; line-height:1.7; border-radius:12px; }
   .logs-term::-webkit-scrollbar { width:8px; }
   .logs-term::-webkit-scrollbar-thumb { background:var(--border); border-radius:8px; }
@@ -1214,6 +1214,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">📊 Vue d'ensemble</button>
           <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
+          <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
           <div class="nav-section-label">Liens</div>
           <a href="/configure" class="nav-item">🎨 Configuration</a>
         </div>
@@ -1301,6 +1302,44 @@ DASHBOARD_HTML = r"""<!doctype html>
           </div>
 
           <div class="card">
+            <div class="card-head"><div class="card-title">📱 Accès rapide</div></div>
+            <div class="card-body">
+              <div class="access-grid">
+                <div class="access-card">
+                  <div class="label">Stremio — installer l'addon</div>
+                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">Addons → « Install via URL »</div>
+                  <a id="manifest" href="#">—</a>
+                  <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
+                </div>
+                <div class="access-card">
+                  <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
+                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">Ouvre un flux par son id :</div>
+                  <code id="vlc">—</code>
+                  <button class="copy-btn" data-copy="vlc">📋 copier</button>
+                </div>
+                <div class="access-card">
+                  <div class="label">Endpoints de l'API</div>
+                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">
+                    <div class="api-row"><code>/manifest.json</code> — Stremio</div>
+                    <div class="api-row"><code>/api/channels</code> — annuaire</div>
+                    <div class="api-row"><code>/configure</code> — config langue</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: LOGS -->
+        <div class="page" id="page-logs">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Logs</div>
+              <div class="page-sub">Journal en direct des requêtes passées sur votre proxy (300 dernières entrées)</div>
+            </div>
+          </div>
+
+          <div class="card">
             <div class="card-head logs-toolbar">
               <div class="logs-group">
                 <label>Méthode</label>
@@ -1332,34 +1371,6 @@ DASHBOARD_HTML = r"""<!doctype html>
             </div>
             <div class="logs-term" id="logs-term">
               <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs...</p></div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">📱 Accès rapide</div></div>
-            <div class="card-body">
-              <div class="access-grid">
-                <div class="access-card">
-                  <div class="label">Stremio — installer l'addon</div>
-                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">Addons → « Install via URL »</div>
-                  <a id="manifest" href="#">—</a>
-                  <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
-                </div>
-                <div class="access-card">
-                  <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
-                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">Ouvre un flux par son id :</div>
-                  <code id="vlc">—</code>
-                  <button class="copy-btn" data-copy="vlc">📋 copier</button>
-                </div>
-                <div class="access-card">
-                  <div class="label">Endpoints de l'API</div>
-                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">
-                    <div class="api-row"><code>/manifest.json</code> — Stremio</div>
-                    <div class="api-row"><code>/api/channels</code> — annuaire</div>
-                    <div class="api-row"><code>/configure</code> — config langue</div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1555,7 +1566,8 @@ function navigateTo(page) {
     const titles = {
         dashboard: ['Vue d\'ensemble', 'Statistiques de votre proxy de chaînes'],
         sources: ['Sources', 'Gérer vos sources personnalisées'],
-        catalog: ['Catalogue', 'Explorer toutes les chaînes disponibles']
+        catalog: ['Catalogue', 'Explorer toutes les chaînes disponibles'],
+        logs: ['Logs', 'Journal en direct des requêtes passées sur votre proxy']
     };
 
     $('#pageTitle') && (document.querySelector('.page.active .page-title').textContent = titles[page][0]);
@@ -1563,6 +1575,7 @@ function navigateTo(page) {
 
     if (page === 'dashboard') { renderFavs(); }
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
+    if (page === 'logs') { loadLogs(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams');
         render();
@@ -2010,7 +2023,16 @@ async function loadLogs() {
         if (!res.ok) { return; }
         allLogs = await res.json();
         renderLogs();
+        updateLogsBadge();
     } catch (e) { /* silencieux */ }
+}
+
+function updateLogsBadge() {
+    const badge = document.getElementById('logs-badge');
+    if (!badge) return;
+    const errs = allLogs.filter(l => l.code >= 400).length;
+    if (errs) { badge.style.display = 'inline-block'; badge.textContent = errs; }
+    else badge.style.display = 'none';
 }
 
 function renderLogs() {
