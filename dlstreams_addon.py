@@ -1265,21 +1265,6 @@ DASHBOARD_HTML = r"""<!doctype html>
   .alert-success { background:rgba(72,187,120,0.12); border:1px solid var(--green); color:var(--green); }
   .alert-error { background:rgba(239,68,68,0.12); border:1px solid var(--error); color:var(--error); }
 
-  .access-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; }
-  .access-card { background:var(--surface2); border:1px solid var(--border);
-    border-radius:12px; padding:16px; }
-  .access-card .label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; font-weight:700; }
-  .access-card a { color:var(--accent); text-decoration:none; word-break:break-all; font-size:13px; font-family:var(--font-mono); }
-  .access-card a:hover { color:var(--text); }
-  .copy-btn { display:inline-flex; align-items:center; gap:6px;
-    margin-top:8px; padding:6px 12px; border:1px solid var(--border);
-    border-radius:8px; background:transparent; color:var(--text2);
-    font-size:12px; cursor:pointer; transition:all .2s; font-family:var(--font-body); }
-  .copy-btn:hover { color:var(--text); border-color:var(--accent); }
-  .access-card code { color:var(--accent); word-break:break-all; font-size:12px; font-family:var(--font-mono); }
-  .access-card .api-row { font-size:12px; color:var(--text2); padding:2px 0; }
-  .access-card .api-row code { color:var(--text); }
-
   .player-modal { position:fixed; top:0; left:0; right:0; bottom:0;
     background:rgba(0,0,0,0.95); z-index:1000;
     display:none; align-items:center; justify-content:center; padding:20px; }
@@ -1456,6 +1441,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
           <button class="nav-item" data-page="system" onclick="navigateTo('system')">🖥️ Système</button>
+          <a class="nav-item" href="/configure" title="Choisir la langue par défaut de l'addon">🎨 Configuration</a>
           <div class="nav-section-label">Raccourcis</div>
           <button class="nav-shortcut" onclick="sidebarAction('scan')" title="Teste la disponibilité de toutes vos chaînes favorites"><span class="sc-ico">🩺</span><span class="sc-txt">Tester mes favoris</span></button>
           <button class="nav-shortcut" onclick="sidebarAction('m3u-favs')" title="Télécharge une playlist de vos favoris"><span class="sc-ico">⬇️</span><span class="sc-txt">Export favoris M3U</span></button>
@@ -1464,10 +1450,6 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-shortcut" onclick="sidebarAction('restart')" title="Redémarre le processus serveur"><span class="sc-ico">🔁</span><span class="sc-txt">Redémarrer</span></button>
           <div class="nav-section-label">Langues</div>
           <div id="lang-list"><button class="nav-shortcut" disabled style="opacity:.5;cursor:default"><span class="sc-txt">chargement…</span></button></div>
-          <div class="nav-section-label">Liens</div>
-          <button class="nav-shortcut" onclick="copyText(BASE+'/manifest.json')" title="Copie l'URL d'installation pour Stremio"><span class="sc-ico">📋</span><span class="sc-txt">URL Stremio</span></button>
-          <button class="nav-shortcut" onclick="copyText(BASE+'/hls/121/index.m3u8')" title="Copie l'URL de lecture directe (VLC / mpv)"><span class="sc-ico">🎬</span><span class="sc-txt">URL VLC / mpv</span></button>
-          <a class="nav-shortcut" href="/configure" title="Choisir la langue par défaut de l'addon"><span class="sc-ico">🎨</span><span class="sc-txt">Configuration</span></a>
         </div>
         <div class="sidebar-bottom">
           <button class="btn-logout" onclick="logout()">Déconnexion</button>
@@ -1569,34 +1551,6 @@ DASHBOARD_HTML = r"""<!doctype html>
             <div class="card-body">
               <div class="mini-grid" id="fav-list">
                 <div class="fav-empty">Aucun favori — va dans le <a href="#" onclick="navigateTo('catalog');return false">Catalogue</a> et clique sur ★ pour épingler une chaîne</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">📱 Accès rapide</div></div>
-            <div class="card-body">
-              <div class="access-grid">
-                <div class="access-card">
-                  <div class="label">Stremio — installer l'addon</div>
-                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">Addons → « Install via URL »</div>
-                  <a id="manifest" href="#">—</a>
-                  <button class="copy-btn" data-copy="manifest">📋 copier l'URL</button>
-                </div>
-                <div class="access-card">
-                  <div class="label">VLC / mpv / ffmpeg — lecture directe</div>
-                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">Ouvre un flux par son id :</div>
-                  <code id="vlc">—</code>
-                  <button class="copy-btn" data-copy="vlc">📋 copier</button>
-                </div>
-                <div class="access-card">
-                  <div class="label">Endpoints de l'API</div>
-                  <div style="margin-top:6px;font-size:12px;color:var(--text2)">
-                    <div class="api-row"><code>/manifest.json</code> — Stremio</div>
-                    <div class="api-row"><code>/api/channels</code> — annuaire</div>
-                    <div class="api-row"><code>/configure</code> — config langue</div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -2359,9 +2313,6 @@ function goLang(lang){
     navigateTo('catalog');
     if (CURRENT !== "vavoo") loadCatalog(CURRENT).then(render);
 }
-function copyText(text){
-    navigator.clipboard.writeText(text).then(()=>toast('✅ Copié dans le presse-papier', 'success')).catch(()=>toast('❌ Copie impossible', 'error'));
-}
 
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -2453,23 +2404,6 @@ document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()
     if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
     render();
 }));
-document.querySelectorAll(".copy-btn").forEach(b=>b.addEventListener("click",()=>{
-    const el = $("#"+b.dataset.copy);
-    const txt = el.href || el.textContent;
-    navigator.clipboard.writeText(txt).then(()=>{
-        toast('✅ URL copiée', 'success');
-        const old = b.textContent;
-        b.textContent = "✓ copié";
-        setTimeout(()=>b.textContent=old,1200);
-    });
-}));
-
-function initLinks(){
-    const m = `${BASE}/manifest.json`;
-    $("#manifest").href = m;
-    $("#manifest").textContent = m;
-    $("#vlc").textContent = `${BASE}/hls/121/index.m3u8`;
-}
 
 // ---- LOGS live (terminal) ----
 let allLogs = [];
@@ -2633,7 +2567,6 @@ async function boot(){
     await Promise.all([refreshStats(), loadCatalog("dlstreams")]);
     render();
     renderFavs();
-    initLinks();
     loadLogs();
     restartLogPolling();
     setInterval(refreshStats, 30000);
