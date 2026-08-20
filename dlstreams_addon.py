@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.12.2"
+_VERSION = "1.12.3"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -1132,7 +1132,8 @@ def _now_playing() -> list[dict]:
             "id": c["id"],
             "name": c["name"],
             "logo": f"/logo/dlstreams/{c['id']}.png",
-            "cur": {"title": cur.get("title", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
+            "now": int(time.time()),
+            "cur": {"title": cur.get("title", ""), "desc": cur.get("desc", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
             "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
         })
     return out
@@ -2215,14 +2216,27 @@ DASHBOARD_HTML = r"""<!doctype html>
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
   /* Programmes en cours (mini-EPG) */
-  .now-row { display:flex; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid var(--border);
-    text-decoration:none; color:var(--text); }
-  .now-row:last-child { border-bottom:none; }
-  .now-row:hover { background:var(--card-hover); }
-  .now-info { flex:1; min-width:0; }
-  .now-title { font-size:13px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .now-sub { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .now-time { font-size:11px; color:var(--muted); font-family:var(--font-mono); flex-shrink:0; }
+  .now-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+  .now-card { display:flex; flex-direction:column; background:var(--surface2); border:1px solid var(--border);
+    border-radius:12px; overflow:hidden; text-decoration:none; color:var(--text); transition:all .18s; }
+  .now-card:hover { transform:translateY(-2px); border-color:var(--accent); box-shadow:0 10px 26px rgba(0,0,0,.35); }
+  .now-tile { position:relative; aspect-ratio:16/9; background:var(--surface3); display:grid; place-items:center; overflow:hidden; }
+  .now-logo { width:62%; max-height:62%; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+  .now-live { position:absolute; top:8px; left:8px; display:flex; align-items:center; gap:5px; font-size:9px; font-weight:800;
+    color:#fff; background:rgba(229,62,62,.92); padding:3px 9px; border-radius:999px; letter-spacing:.4px; }
+  .now-live i { width:6px; height:6px; border-radius:50%; background:#fff; animation:pulse 1.4s infinite; }
+  .now-body { padding:11px 13px 13px; display:flex; flex-direction:column; gap:5px; flex:1; }
+  .now-ch { font-size:11px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:.5px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .now-prog-title { font-size:13px; font-weight:700; color:var(--text); line-height:1.3;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .now-prog-desc { font-size:11px; color:var(--muted); line-height:1.35;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .now-bar { height:4px; border-radius:999px; background:var(--surface3); overflow:hidden; margin-top:2px; }
+  .now-fill { height:100%; border-radius:999px; background:var(--accent); transition:width .4s; }
+  .now-ends { font-size:10px; color:var(--muted); font-family:var(--font-mono); }
+  .now-next { font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .now-next b { color:var(--accent); font-weight:700; }
 
   /* Page Système */
   .sys-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
@@ -2412,13 +2426,17 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div class="page-header">
             <div>
               <div class="page-title">Programmes</div>
-              <div class="page-sub">Programme en cours des chaînes populaires</div>
+              <div class="page-sub">Ce qui passe en ce moment sur les chaînes populaires</div>
             </div>
           </div>
           <div class="card">
-            <div class="card-head">
-              <div class="card-title">📺 En ce moment</div>
-              <span class="card-desc" id="now-total"></span>
+            <div class="card-head" style="gap:12px">
+              <div class="catalog-search">
+                <span class="search-ico">🔍</span>
+                <input type="search" id="now-q" placeholder="Rechercher une chaîne ou un programme…" oninput="renderNow()">
+              </div>
+              <span class="card-desc" id="now-total" style="white-space:nowrap"></span>
+              <button class="btn-outline-sm" onclick="loadNow(true)" title="Rafraîchir les programmes">↻</button>
             </div>
             <div class="card-body" id="now-list" style="padding-top:8px">
               <div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>
@@ -2986,40 +3004,68 @@ function renderLive(list){
 }
 
 // Programmes en cours : mini-EPG des chaînes populaires
-async function loadNow(){
+let _NOW_CACHE = [];
+async function loadNow(force){
     try{
+        if(force){
+            const el = $("#now-list");
+            if(el && !el.innerHTML.includes('chargement')) el.innerHTML = '<div class="fav-empty">chargement…</div>';
+        }
         const r = await apiFetch('/api/now');
-        renderNow(await r.json());
+        _NOW_CACHE = await r.json();
+        renderNow();
     }catch(e){
         if (e.message !== 'unauthenticated') console.error("Now error:", e);
     }
 }
-function renderNow(list){
+function renderNow(){
     const el = $("#now-list");
     if(!el) return;
     const tot = $("#now-total");
-    if(!list.length){
+    const q = ($("#now-q").value || "").toLowerCase().trim();
+    let list = _NOW_CACHE;
+    if(!list || !list.length){
         el.innerHTML = '<div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>';
         if(tot) tot.textContent = '';
         return;
     }
-    if(tot) tot.textContent = list.length + ' chaînes guidées';
-    el.innerHTML = list.map(n => {
+    if(q) list = list.filter(n => (n.name||"").toLowerCase().includes(q)
+        || ((n.cur&&n.cur.title)||"").toLowerCase().includes(q)
+        || ((n.nxt&&n.nxt.title)||"").toLowerCase().includes(q));
+    if(!list.length){
+        el.innerHTML = '<div class="fav-empty">aucun résultat — essaie un autre filtre</div>';
+        if(tot) tot.textContent = '0 chaîne';
+        return;
+    }
+    if(tot) tot.textContent = list.length + (list.length>1 ? ' chaînes guidées' : ' chaîne guidée');
+    el.innerHTML = '<div class="now-grid">' + list.map(n => {
         const href = `${BASE}/hls/${n.id}/index.m3u8`;
         const cur = n.cur || {};
         const nxt = n.nxt || {};
-        const logo = `<img class="top-logo" src="${BASE}${n.logo}" alt="" loading="lazy" onerror="this.style.display='none'">`;
-        const st = cur.start ? new Date(cur.start * 1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
-        const en = cur.stop ? new Date(cur.stop * 1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
-        return `<a class="now-row" href="${href}" target="_blank" title="${escapeHtml(n.name)}">
-            ${logo}
-            <div class="now-info">
-                <div class="now-title">${escapeHtml(n.name)}</div>
-                <div class="now-sub">${escapeHtml(cur.title || '—')}${nxt.title ? ' · puis ' + escapeHtml(nxt.title) : ''}</div>
+        const now = n.now || Math.floor(Date.now()/1000);
+        const st = cur.start ? new Date(cur.start*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        const en = cur.stop ? new Date(cur.stop*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        let pct = 0, rem = 0;
+        if(cur.start && cur.stop && cur.stop>cur.start){
+            pct = Math.min(100, Math.max(0, Math.round((now-cur.start)/(cur.stop-cur.start)*100)));
+            rem = Math.max(0, Math.round((cur.stop-now)/60));
+        }
+        const nxT = nxt.start ? new Date(nxt.start*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        return `<a class="now-card" href="${href}" target="_blank" title="${escapeHtml(n.name)} — ${escapeHtml(cur.title||'')}">
+            <div class="now-tile">
+                <img class="now-logo" src="${BASE}${n.logo}" alt="" loading="lazy" onerror="this.style.display='none'">
+                <span class="now-live"><i></i> EN DIRECT</span>
             </div>
-            <span class="now-time">${st}–${en}</span>
+            <div class="now-body">
+                <div class="now-ch">${escapeHtml(n.name)}</div>
+                <div class="now-prog-title">${escapeHtml(cur.title || '—')}</div>
+                ${cur.desc ? `<div class="now-prog-desc">${escapeHtml(cur.desc)}</div>` : ''}
+                <div class="now-bar"><div class="now-fill" style="width:${pct}%"></div></div>
+                <div class="now-ends">${st}–${en} · ${rem} min restantes</div>
+                ${nxt.title ? `<div class="now-next">Suivant · <b>${escapeHtml(nxt.title)}</b>${nxT ? ' ('+nxT+')' : ''}</div>` : ''}
+            </div>
         </a>`;
-    }).join('');
+    }).join('') + '</div>';
 }
 
 async function loadActivity(targetId) {
