@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.13.3"
+_VERSION = "1.13.4"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -3883,16 +3883,25 @@ function openTvModal(id, src){
     $('#tv-modal-src').value = c.src;
     $('#tv-modal-id-input').value = c.id;
     $('#tv-modal-src-input').value = c.src;
-    $('#tv-modal-name').value = c.override_name || '';
-    $('#tv-modal-orig-name').textContent = c.override_name ? `Original: ${c.name}` : '';
-    $('#tv-modal-logo').value = c.override_logo || '';
-    $('#tv-modal-logo-preview').src = c.override_logo || '';
-    $('#tv-modal-logo-preview').style.display = c.override_logo ? 'block' : 'none';
-    $('#tv-modal-orig-logo').textContent = c.override_logo ? '' : `Auto: /logo/${c.src}/${c.id}.png`;
-    $('#tv-modal-stream').value = c.override_stream || '';
-    $('#tv-modal-orig-stream').textContent = c.override_stream ? '' : `Auto: /hls/${c.id}/index.m3u8`;
-    $('#tv-modal-epg').value = c.override_epg || '';
-    $('#tv-modal-orig-epg').textContent = c.override_epg ? '' : `Auto: ${window._EPG_MAP[c.id] || '—'}`;
+    
+    // Pre-fill with override or auto value
+    const nameVal = c.override_name || c.name;
+    $('#tv-modal-name').value = nameVal;
+    $('#tv-modal-orig-name').textContent = c.override_name ? `Original: ${c.name}` : 'Auto (nom d\'origine)';
+    
+    const logoVal = c.override_logo || c.auto_logo;
+    $('#tv-modal-logo').value = logoVal;
+    $('#tv-modal-logo-preview').src = logoVal;
+    $('#tv-modal-logo-preview').style.display = logoVal ? 'block' : 'none';
+    $('#tv-modal-orig-logo').textContent = c.override_logo ? `Override` : `Auto: ${c.auto_logo}`;
+    
+    const streamVal = c.override_stream || c.auto_stream;
+    $('#tv-modal-stream').value = streamVal;
+    $('#tv-modal-orig-stream').textContent = c.override_stream ? `Override` : `Auto: ${c.auto_stream}`;
+    
+    const epgVal = c.override_epg || c.auto_epg;
+    $('#tv-modal-epg').value = epgVal;
+    $('#tv-modal-orig-epg').textContent = c.override_epg ? `Override` : `Auto: ${c.auto_epg || '—'}`;
 
     document.getElementById('tv-ch-modal').style.display = 'flex';
     $('#tv-modal-name').focus();
@@ -3914,6 +3923,9 @@ async function loadTvChannels(){
         _TV_CHANNELS = [];
         [...(ALL.dlstreams||[]), ...(ALL.vavoo||[])].forEach(c => {
             const id = c.id;
+            const autoLogo = `/logo/dlstreams/${id}.png`;
+            const autoStream = `/hls/${id}/index.m3u8`;
+            const autoEpg = window._EPG_MAP[id] || '';
             _TV_CHANNELS.push({
                 id,
                 src: 'dlstreams',
@@ -3923,11 +3935,16 @@ async function loadTvChannels(){
                 override_logo: s.channel_logos?.[id],
                 override_stream: s.channel_streams?.[id],
                 override_epg: s.channel_epg?.[id],
-                epg_id: window._EPG_MAP[c.id],
+                auto_logo: autoLogo,
+                auto_stream: autoStream,
+                auto_epg: autoEpg,
             });
         });
         [...(ALL.vavoo||[])].forEach(c => {
             if (!_TV_CHANNELS.some(x => x.id === c.id && x.src === 'vavoo')) {
+                const autoLogo = `/logo/vavoo/${b64u(c.id)}.png`;
+                const autoStream = `/vhls?v=${b64u(c.id)}`;
+                const autoEpg = window._EPG_MAP[c.id] || '';
                 _TV_CHANNELS.push({
                     id: c.id,
                     src: 'vavoo',
@@ -3937,7 +3954,9 @@ async function loadTvChannels(){
                     override_logo: s.channel_logos?.[c.id],
                     override_stream: s.channel_streams?.[c.id],
                     override_epg: s.channel_epg?.[c.id],
-                    epg_id: window._EPG_MAP[c.id],
+                    auto_logo: autoLogo,
+                    auto_stream: autoStream,
+                    auto_epg: autoEpg,
                 });
             }
         });
