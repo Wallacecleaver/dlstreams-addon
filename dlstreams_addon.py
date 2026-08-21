@@ -3127,8 +3127,16 @@ function navigateTo(page) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
-        $(`#page-${page}`).classList.add('active');
-        document.querySelector(`[data-page="${page}"]`).classList.add('active');
+        const pageEl = $(`#page-${page}`);
+        const navEl = document.querySelector(`[data-page="${page}"]`);
+        
+        pageEl.classList.add('active');
+        navEl?.classList.add('active');
+        
+        // Force page visibility as fallback
+        pageEl.style.display = 'block';
+        pageEl.style.visibility = 'visible';
+        pageEl.style.opacity = '1';
 
         const subtitles = {
             dashboard: 'Statistiques de votre proxy de chaînes',
@@ -3139,7 +3147,8 @@ function navigateTo(page) {
             programs: 'Programme en cours des chaînes populaires',
             channels: 'Gestion complète : nom, logo, flux, EPG'
         };
-        document.querySelector('.page.active .page-sub').textContent = subtitles[page] || '';
+        const subEl = document.querySelector('.page.active .page-sub');
+        if (subEl) subEl.textContent = subtitles[page] || '';
 
         if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
         if (page === 'logs') { loadLogs(); }
@@ -3148,12 +3157,32 @@ function navigateTo(page) {
         if (page === 'programs') { loadNow(); }
         if (page === 'catalog') {
             console.log('navigateTo: catalog page, ALL.dlstreams.length=', ALL?.dlstreams?.length);
-            if (!ALL.dlstreams.length) { loadCatalog('dlstreams').then(render).catch(e => toast('Erreur chargement catalogue: ' + e.message, 'error')); } else { try { console.log('Calling render()'); render(); } catch(e) { console.error('Erreur render:', e); toast('Erreur render: ' + e.message, 'error'); } }
+            if (!ALL.dlstreams.length) { 
+                loadCatalog('dlstreams').then(render).catch(e => toast('Erreur chargement catalogue: ' + e.message, 'error')); 
+            } else { 
+                try { 
+                    console.log('Calling render()'); 
+                    render(); 
+                } catch(e) { 
+                    console.error('Erreur render:', e); 
+                    toast('Erreur render: ' + e.message, 'error'); 
+                } 
+            }
         }
     } catch(err) {
         console.error('navigateTo error:', err);
         toast('Erreur navigation: ' + err.message, 'error');
     }
+    
+    // Fallback: ensure page is visible after a short delay
+    setTimeout(() => {
+        const activePage = document.querySelector('.page.active');
+        if (activePage) {
+            activePage.style.display = 'block';
+            activePage.style.visibility = 'visible';
+            activePage.style.opacity = '1';
+        }
+    }, 100);
 }
 window.addEventListener('hashchange', () => {
     const p = location.hash.replace('#', '');
@@ -3596,7 +3625,7 @@ async function loadCatalog(src){
 
 function render(){
     try {
-        console.log('render() called, CURRENT=', CURRENT, 'ALL.dlstreams.length=', ALL?.dlstreams?.length);
+        console.log('render() called, CURRENT=', CURRENT, 'ALL.dlstreams.length=', ALL?.dlstreams?.length, 'list element:', document.getElementById('list'));
         const q = $("#q").value.toLowerCase().trim();
     const words = q ? q.split(/\s+/) : [];
     const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
@@ -3622,8 +3651,17 @@ function render(){
     const list = $("#list");
     if(!list){
         console.error('render(): #list element not found');
-        return;
+        // Try to find it again
+        const list2 = document.getElementById('list');
+        if(!list2){
+            console.error('render(): #list element still not found after document.getElementById');
+            return;
+        }
+        list = list2;
     }
+    // Ensure list is visible
+    list.style.display = 'block';
+    list.style.visibility = 'visible';
     if(!items.length){
         list.innerHTML = '<div class="fav-empty">aucun résultat — essaie un autre filtre</div>';
         return;
