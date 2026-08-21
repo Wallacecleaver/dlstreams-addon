@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import gzip
 import json
+import logging
 import os
 import re
 import secrets
@@ -22,6 +23,14 @@ import zlib
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# Logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+    datefmt='%H:%M:%S'
+)
+log = logging.getLogger(__name__)
 
 PORT = int(os.environ.get("PORT", "8781"))
 _VERSION = "1.13.4"
@@ -181,7 +190,7 @@ def _settings_save():
     try:
         with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(_settings, f, ensure_ascii=False, indent=1)
-    except Exception:
+    except Exception as e:
         pass
 
 def _settings_load():
@@ -200,7 +209,7 @@ def _settings_load():
                         else:
                             _s[k] = v
                 _settings = _s
-    except Exception:
+    except Exception as e:
         pass
 
 # ============================ EPG (programme TV) ============================
@@ -235,7 +244,7 @@ def _xmlts(ts: str) -> float:
             offs = (oh * 60 + om) * 60 * (-1 if off[0] == "-" else 1)
         import calendar
         return calendar.timegm((y, mo, d, h, mi, s, 0, 0, 0)) - offs
-    except Exception:
+    except Exception as e:
         return 0
 
 class _EpgHandler(xml.sax.handler.ContentHandler):
@@ -290,7 +299,7 @@ def _epg_save():
     try:
         with open(_EPG_FILE, "w", encoding="utf-8") as f:
             json.dump({"at": _epg_at, "data": _epg_data}, f, ensure_ascii=False)
-    except Exception:
+    except Exception as e:
         pass
 
 def _epg_load():
@@ -303,7 +312,7 @@ def _epg_load():
                 _epg_data.clear()
                 _epg_data.update(d.get("data", {}))
                 _epg_at = float(d.get("at", 0.0))
-    except Exception:
+    except Exception as e:
         pass
 
 def _epg_refresh(force: bool = False):
@@ -336,14 +345,14 @@ def _epg_refresh(force: bool = False):
             _epg_data.update(handler.out)
             _epg_at = time.time()
         _epg_save()
-        print(f"  epg : {len(_epg_data)} chaines guidees ({len(handler.out)} programmes)")
+        log.info(f"epg: {len(_epg_data)} chaines guidees ({len(handler.out)} programmes)")
     except Exception as e:
-        print(f"  epg : erreur ({type(e).__name__}: {e})")
+        log.error(f"epg: erreur ({type(e).__name__}: {e})")
     finally:
         if tmp is not None:
             try:
                 os.unlink(tmp.name)
-            except Exception:
+            except Exception as e:
                 pass
 
 def _epg_slot(dl_id) -> tuple[dict | None, dict | None]:
@@ -478,7 +487,7 @@ def _sessions_load():
             now = time.time()
             _sessions = {k: float(v) for k, v in data.items()
                          if isinstance(v, (int, float)) and (now - float(v)) < _SESSION_TTL}
-    except Exception:
+    except Exception as e:
         pass
 
 def _sessions_save():
@@ -486,7 +495,7 @@ def _sessions_save():
     try:
         with open(_SESSION_FILE, "w", encoding="utf-8") as f:
             json.dump(_sessions, f)
-    except Exception:
+    except Exception as e:
         pass
 
 def _hist_load():
@@ -505,7 +514,7 @@ def _hist_load():
             else:
                 _hist = [[int(m), int(c)] for m, c in data
                          if isinstance(m, (int, float)) and isinstance(c, (int, float)) and m >= keep_from]
-    except Exception:
+    except Exception as e:
         pass
 
 def _hist_save():
@@ -513,7 +522,7 @@ def _hist_save():
     try:
         with open(_HIST_FILE, "w", encoding="utf-8") as f:
             json.dump({"req": _hist, "err": _hist_err}, f)
-    except Exception:
+    except Exception as e:
         pass
 
 def _track_play(src: str, cid: str):
@@ -579,7 +588,7 @@ def _system_info() -> dict:
     try:
         u = shutil.disk_usage(os.getcwd())
         usage = {"total": u.total, "used": u.used, "free": u.free}
-    except Exception:
+    except Exception as e:
         pass
     mem: dict = {}
     try:
@@ -588,11 +597,11 @@ def _system_info() -> dict:
         proc = psutil.Process(os.getpid())
         mem = {"total": vm.total, "used": vm.used, "percent": vm.percent,
                "rss": proc.memory_info().rss, "cpu": proc.cpu_percent(interval=0.2)}
-    except Exception:
+    except Exception as e:
         try:
             import resource
             mem = {"rss": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024}
-        except Exception:
+        except Exception as e:
             pass
     def _age(cache) -> int | None:
         at = cache.get("at") or 0
@@ -633,7 +642,7 @@ def channels(lang_filter: str | None = None) -> list[dict]:
             for idv, name in p.items:
                 if idv not in seen:
                     seen[idv] = {"id": idv, "name": name, "lang": _detect_lang(name)}
-        except Exception:
+        except Exception as e:
             pass
 
         _ch_cache.update(at=now, list=list(seen.values()))
@@ -697,7 +706,7 @@ def _txt(url: str, referer: str = SITE + "/") -> str:
 def players(cid: str) -> list[tuple[str, str]]:
     try:
         w = _txt(f"{SITE}/watch.php?id={cid}")
-    except Exception:
+    except Exception as e:
         w = ""
     pairs = re.findall(r'data-url="([^"]+)"[^>]*title="([^"]*)"', w)
     out = [(title.strip() or f"Player {i + 1}", url)
@@ -744,7 +753,7 @@ def _find_m3u8(html: str) -> str | None:
         b = seg[:seg.find("'")]
         try:
             dec = base64.b64decode(b + "=" * (-len(b) % 4)).decode("utf-8", "replace")
-        except Exception:
+        except Exception as e:
             dec = ""
         if ".m3u8" in dec:
             return dec
@@ -771,7 +780,7 @@ def resolve(cid: str) -> tuple[str, str]:
     for _label, url in players(cid):
         try:
             return resolve_player(url)
-        except Exception:
+        except Exception as e:
             continue
     raise ValueError("aucun player ne resout")
 
@@ -782,7 +791,7 @@ def working_players(cid: str) -> list[tuple[int, str]]:
         try:
             resolve_player(url)
             return (i, label)
-        except Exception:
+        except Exception as e:
             return None
     with ThreadPoolExecutor(max_workers=8) as ex:
         return [x for x in ex.map(_chk, enumerate(pls)) if x]
@@ -826,7 +835,7 @@ def _vavoo_signature(force: bool = False) -> str:
     for host in _VAVOO_PINGS:
         try:
             d = _post_json(host, _vavoo_ping_body(), {"user-agent": _VAVOO_UA}, timeout=15)
-        except Exception:
+        except Exception as e:
             continue
         v = (d or {}).get("addonSig")
         if v:
@@ -848,7 +857,7 @@ def _vavoo_post(action: str, body: dict):
                     _vavoo_signature(force=True)
                     continue
                 break
-            except Exception:
+            except Exception as e:
                 break
             _vavoo_base["url"] = base
             return d
@@ -1138,14 +1147,14 @@ def _health_refresh(force: bool = False):
         try:
             _get(SITE + "/", timeout=8)
             return {"ok": True, "ms": int((time.time() - t0) * 1000)}
-        except Exception:
+        except Exception as e:
             return {"ok": False, "ms": int((time.time() - t0) * 1000)}
     def _vv():
         t0 = time.time()
         try:
             _post_json(_VAVOO_PINGS[0], _vavoo_ping_body(), {"user-agent": _VAVOO_UA}, timeout=8)
             return {"ok": True, "ms": int((time.time() - t0) * 1000)}
-        except Exception:
+        except Exception as e:
             return {"ok": False, "ms": int((time.time() - t0) * 1000)}
     with ThreadPoolExecutor(max_workers=2) as ex:
         dl = ex.submit(_dl).result()
@@ -1199,7 +1208,7 @@ def _logo_bytes(src: str, c: dict) -> bytes:
                     png = r.read()
                 if png[:3] not in (b"\xff\xd8\xff", b"\x89PN"):
                     raise ValueError("pas une image")
-            except Exception:
+            except Exception as e:
                 png = None
                 _logo_bad.add(url)
             if png is not None:
@@ -1220,7 +1229,7 @@ def _warm_logos():
                     b = r.read()
                 if b[:3] in (b"\xff\xd8\xff", b"\x89PN") and len(_logo_cache) < 400:
                     _logo_cache[url] = b
-        except Exception:
+        except Exception as e:
             _logo_bad.add(url)
 
 class Handler(BaseHTTPRequestHandler):
@@ -1333,7 +1342,7 @@ class Handler(BaseHTTPRequestHandler):
                                   "application/json")
             try:
                 data = json.loads(body) if body else {}
-            except Exception:
+            except Exception as e:
                 data = {}
             password = str(data.get("password", ""))
             if secrets.compare_digest(password, DASHBOARD_PASSWORD):
@@ -1397,7 +1406,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(items, list):
                     return self._send(400, json.dumps({"ok": False, "error": "items requis"}).encode(), "application/json")
                 items = [{"src": str(x.get("src", "dlstreams")), "id": str(x.get("id", ""))} for x in items[:200]]
-            except Exception:
+            except Exception as e:
                 return self._send(400, json.dumps({"ok": False, "error": "body invalide"}).encode(), "application/json")
             if not items:
                 return self._send(400, json.dumps({"ok": False, "error": "liste vide"}).encode(), "application/json")
@@ -1440,7 +1449,7 @@ class Handler(BaseHTTPRequestHandler):
                     subprocess.Popen([_sys.executable, os.path.abspath(__file__)],
                                      cwd=os.path.dirname(os.path.abspath(__file__)),
                                      close_fds=True, creationflags=flags)
-            except Exception:
+            except Exception as e:
                 pass
             threading.Timer(0.5, lambda: os._exit(0)).start()
             return self._send(200, json.dumps({"success": True, "message": "Redémarrage en cours..."}).encode(), "application/json")
@@ -1450,7 +1459,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 data = json.loads(body) if body else {}
-            except Exception:
+            except Exception as e:
                 data = {}
             changed = False
             for k in ("logos", "epg"):
@@ -1984,19 +1993,19 @@ def main():
     _sessions_load()
     _settings_load()
     _epg_load()
-    print(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
-    print(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
-    print(f"  Configure: http://127.0.0.1:{PORT}/configure")
-    print(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json?lang=fr")
-    print(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
+    log.info(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
+    log.info(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
+    log.info(f"  Configure: http://127.0.0.1:{PORT}/configure")
+    log.info(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json?lang=fr")
+    log.info(f"  VLC/mpv  : http://127.0.0.1:{PORT}/hls/121/index.m3u8")
     if _PASSWORD_GENERATED:
-        print("  " + "=" * 62)
-        print(f"  Mot de passe dashboard (genere automatiquement) : {DASHBOARD_PASSWORD}")
-        print("  Il changera au prochain redemarrage. Definis la variable")
-        print("  d'environnement DASHBOARD_PASSWORD sur Render pour en garder un stable.")
-        print("  " + "=" * 62)
+        log.info("=" * 62)
+        log.info(f"Mot de passe dashboard (genere automatiquement): {DASHBOARD_PASSWORD}")
+        log.info("Il changera au prochain redemarrage. Definis la variable DASHBOARD_PASSWORD sur Render pour en garder un stable.")
+        log.info("d'environnement DASHBOARD_PASSWORD sur Render pour en garder un stable.")
+        log.info("=" * 62)
     else:
-        print("  Mot de passe dashboard : defini via DASHBOARD_PASSWORD")
+        log.info("Mot de passe dashboard : defini via DASHBOARD_PASSWORD")
     srv = None
     for _ in range(10):
         try:
@@ -2017,9 +2026,9 @@ def _warm_channels():
     (health check Render immédiat), le cache se remplit sans bloquer le boot."""
     try:
         n = len(channels())
-        print(f"  annuaire : {n} chaines chargees (dont {len(_POPULAR_CHANNELS)} populaires)")
+        log.info(f"annuaire: {n} chaines chargees (dont {len(_POPULAR_CHANNELS)} populaires)")
     except Exception as e:
-        print(f"  annuaire : erreur de chargement ({e})")
+        log.error(f"annuaire: erreur de chargement ({e})")
 
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="fr">
@@ -3025,11 +3034,11 @@ DASHBOARD_HTML = r"""<!doctype html>
 const BASE = location.origin;
 const $ = s => document.querySelector(s);
 const fmtDur = s => {
-    if (s==null) return "—";
+    if (s === null) return "—";
     const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
     return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");
 };
-const fmtAge = s => s==null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
+const fmtAge = s => s === null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
 
 // Theme clair/sombre, persisté en localStorage
 function applyTheme(t){
@@ -3197,7 +3206,7 @@ function animateNumber(el, target) {
 }
 
 function setCacheBadge(el, age){
-    if(age == null){ el.innerHTML = '<span class="cache-badge old"><span class="dot"></span>pas encore chargé</span>'; return; }
+    if(age === null){ el.innerHTML = '<span class="cache-badge old"><span class="dot"></span>pas encore chargé</span>'; return; }
     let cls = "ok", label = "il y a " + fmtAge(age);
     if(age > 3600){ cls = "old"; label = "périmé (" + fmtAge(age) + ")"; }
     else if(age > 600){ cls = "stale"; }
@@ -4290,10 +4299,6 @@ function closeCustomChannelModal(){
     _editingCustomId = null;
 }
 
-function testStremioStream(url){
-    window.open(url, '_blank');
-}
-
 async function refreshEpg(){
     const st = $('#epg-status');
     st.textContent = 'Rafraîchissement en cours…';
@@ -4533,7 +4538,7 @@ async function clearLogs() {
 
 // ---- PAGE SYSTEME ----
 function fmtBytes(b){
-    if(b==null) return "—";
+    if(b === null) return "—";
     if(b >= 1073741824) return (b/1073741824).toFixed(1) + " Go";
     if(b >= 1048576) return (b/1048576).toFixed(1) + " Mo";
     if(b >= 1024) return (b/1024).toFixed(1) + " Ko";
