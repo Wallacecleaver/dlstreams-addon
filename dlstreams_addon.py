@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.13.2"
+_VERSION = "1.13.3"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -1549,6 +1549,7 @@ class Handler(BaseHTTPRequestHandler):
                     "genre_choices": _GENRE_CHOICES,
                     "popular": [{"id": c["id"], "name": c["name"], "genre": _genres_for(c["name"])[0]}
                                 for c in _POPULAR_CHANNELS],
+                    "epg_map": _CH_EPG,
                     "version": _VERSION}).encode(), "application/json")
 
             if path == "/api/vavoo-channels":
@@ -3891,7 +3892,7 @@ function openTvModal(id, src){
     $('#tv-modal-stream').value = c.override_stream || '';
     $('#tv-modal-orig-stream').textContent = c.override_stream ? '' : `Auto: /hls/${c.id}/index.m3u8`;
     $('#tv-modal-epg').value = c.override_epg || '';
-    $('#tv-modal-orig-epg').textContent = c.override_epg ? '' : `Auto: ${_CH_EPG[c.id] || '—'}`;
+    $('#tv-modal-orig-epg').textContent = c.override_epg ? '' : `Auto: ${window._EPG_MAP[c.id] || '—'}`;
 
     document.getElementById('tv-ch-modal').style.display = 'flex';
     $('#tv-modal-name').focus();
@@ -3905,7 +3906,9 @@ async function loadTvChannels(){
         if(!ALL.vavoo.length) await loadCatalog('vavoo');
 
         const r = await apiFetch("/api/settings");
+        if(!r.ok) throw new Error('Settings API failed: ' + r.status);
         const d = await r.json();
+        window._EPG_MAP = d.epg_map || {};
         const s = d.settings.stremio || {};
 
         _TV_CHANNELS = [];
@@ -3920,7 +3923,7 @@ async function loadTvChannels(){
                 override_logo: s.channel_logos?.[id],
                 override_stream: s.channel_streams?.[id],
                 override_epg: s.channel_epg?.[id],
-                epg_id: _CH_EPG[c.id],
+                epg_id: window._EPG_MAP[c.id],
             });
         });
         [...(ALL.vavoo||[])].forEach(c => {
@@ -3934,12 +3937,12 @@ async function loadTvChannels(){
                     override_logo: s.channel_logos?.[c.id],
                     override_stream: s.channel_streams?.[c.id],
                     override_epg: s.channel_epg?.[c.id],
-                    epg_id: _CH_EPG[c.id],
+                    epg_id: window._EPG_MAP[c.id],
                 });
             }
         });
         renderTvChannels();
-    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement chaînes','error'); }
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement chaînes: ' + err.message,'error'); }
 }
 
 function renderTvChannels(){
