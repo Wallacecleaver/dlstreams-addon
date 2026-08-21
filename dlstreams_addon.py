@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.12.6"
+_VERSION = "1.12.7"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -2135,25 +2135,25 @@ DASHBOARD_HTML = r"""<!doctype html>
   .logs-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:logsPulse 1.6s infinite; flex-shrink:0; }
   .logs-dot.paused { background:var(--muted); animation:none; }
   @keyframes logsPulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-  .logs-list { max-height:520px; overflow-y:auto; font-family:var(--font-mono); }
+  .logs-list { max-height:520px; overflow-y:auto; font-family:var(--font-mono); font-size:13px; }
   .logs-list::-webkit-scrollbar { width:8px; }
   .logs-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:8px; }
-  .log-entry { display:flex; align-items:center; gap:10px; padding:8px 16px; border-bottom:1px solid var(--border); transition:background .15s; }
+  .log-entry { display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--border); transition:background .15s; }
   .log-entry:last-child { border-bottom:none; }
   .log-entry:hover { background:var(--card-hover); }
   .log-entry.warn { background:rgba(245,158,11,0.03); }
   .log-entry.err { background:rgba(230,57,70,0.04); }
-  .log-time { font-size:12px; color:var(--muted); white-space:nowrap; flex-shrink:0; }
-  .log-method { display:inline-flex; align-items:center; justify-content:center; min-width:52px; height:24px; border-radius:4px; font-size:11px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; }
+  .log-time { font-size:13px; color:var(--muted); white-space:nowrap; flex-shrink:0; }
+  .log-method { display:inline-flex; align-items:center; justify-content:center; min-width:56px; height:26px; border-radius:4px; font-size:11px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; }
   .log-method.get { background:rgba(72,187,120,.15); color:var(--green); }
   .log-method.post { background:rgba(59,130,246,.15); color:#3b82f6; }
   .log-method.delete { background:rgba(239,68,68,.15); color:var(--error); }
-  .log-code { display:inline-flex; align-items:center; justify-content:center; min-width:40px; height:24px; border-radius:4px; font-size:11px; font-weight:800; }
+  .log-code { display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:26px; border-radius:4px; font-size:12px; font-weight:800; }
   .log-code.ok { background:rgba(72,187,120,.15); color:var(--green); }
   .log-code.warn { background:rgba(245,158,11,.15); color:var(--warn); }
   .log-code.err { background:rgba(239,68,68,.15); color:var(--error); }
-  .log-ip { font-size:12px; color:var(--text2); font-family:var(--font-mono); flex-shrink:0; }
-  .log-path { font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; cursor:pointer; }
+  .log-ip { font-size:13px; color:var(--text2); font-family:var(--font-mono); flex-shrink:0; }
+  .log-path { font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; cursor:pointer; }
   .log-path:hover { color:var(--accent); }
   .logs-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; color:var(--muted); text-align:center; }
   .logs-empty .icon { font-size:36px; opacity:.4; margin-bottom:10px; }
