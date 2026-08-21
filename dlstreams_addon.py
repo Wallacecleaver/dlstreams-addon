@@ -2871,6 +2871,7 @@ DASHBOARD_HTML = r"""<!doctype html>
               </div>
             </div>
           </div>
+        </div>
 
         <!-- PAGE: REGLAGES -->
         <div class="page" id="page-settings">
