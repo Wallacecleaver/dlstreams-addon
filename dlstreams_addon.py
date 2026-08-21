@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.12.7"
+_VERSION = "1.13.0"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -162,6 +162,16 @@ _SETTINGS_DEFAULT = {
     "epg": True,                                     # EPG (programme en cours)
     "epg_url": "https://xmltvfr.fr/xmltv/xmltv.xml.gz",
     "genres": {},                                    # overrides: nom chaine (minuscule) -> [genres]
+    "stremio": {
+        "manifest_name": "",
+        "manifest_desc": "",
+        "include_dlstreams": True,
+        "include_vavoo": True,
+        "default_lang": "fr",
+        "channel_names": {},
+        "channel_logos": {},
+        "channel_streams": {},
+    },
 }
 _settings: dict = dict(_SETTINGS_DEFAULT)
 
@@ -180,7 +190,13 @@ def _settings_load():
                 data = json.load(f)
             if isinstance(data, dict):
                 _s = dict(_SETTINGS_DEFAULT)
-                _s.update({k: v for k, v in data.items() if k in _SETTINGS_DEFAULT})
+                for k, v in data.items():
+                    if k in _SETTINGS_DEFAULT:
+                        if k == "stremio" and isinstance(v, dict):
+                            _s[k] = dict(_SETTINGS_DEFAULT[k])
+                            _s[k].update(v)
+                        else:
+                            _s[k] = v
                 _settings = _s
     except Exception:
         pass
@@ -634,15 +650,15 @@ def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
         html = _get(url).decode("utf-8", "replace")
         p = _LinkParser()
         p.feed(html)
-        
+
         if not p.items:
             return [], "Aucune chaîne trouvée sur cette page"
-        
+
         added = []
         existing_count = 0
         current_channels = {ch["id"]: ch for ch in _POPULAR_CHANNELS}
         current_channels.update(_manual_channels)
-        
+
         for idv, name in p.items:
             if idv not in current_channels:
                 ch = {"id": idv, "name": name, "lang": _detect_lang(name), "added_at": time.strftime("%Y-%m-%d %H:%M")}
@@ -650,14 +666,14 @@ def scrape_channels_from_url(url: str) -> tuple[list[dict], str]:
                 added.append(ch)
             else:
                 existing_count += 1
-        
+
         message = f"✅ {len(added)} chaîne(s) ajoutée(s)"
         if existing_count > 0:
             message += f" ({existing_count} déjà existantes)"
-        
+
         if added:
             _log_activity("Ajout de sources", f"{len(added)} chaînes depuis {url}")
-        
+
         return added, message
     except Exception as e:
         return [], f"❌ Erreur: {type(e).__name__}: {e}"
@@ -867,7 +883,7 @@ def _stats() -> dict:
     for ch in all_ch:
         lang = ch.get("lang", "other")
         lang_counts[lang] = lang_counts.get(lang, 0) + 1
-    
+
     return {
         "status": "ok",
         "uptime": int(time.time() - _START_TIME),
@@ -1417,6 +1433,20 @@ class Handler(BaseHTTPRequestHandler):
                 _settings["genres"] = {str(k).lower(): [str(g) for g in v]
                                        for k, v in data["genres"].items()}
                 changed = True
+            if isinstance(data.get("stremio"), dict):
+                st = data["stremio"]
+                for k in ("manifest_name", "manifest_desc", "default_lang"):
+                    if isinstance(st.get(k), str):
+                        _settings["stremio"][k] = st[k]
+                        changed = True
+                for k in ("include_dlstreams", "include_vavoo"):
+                    if isinstance(st.get(k), bool):
+                        _settings["stremio"][k] = st[k]
+                        changed = True
+                for k in ("channel_names", "channel_logos", "channel_streams"):
+                    if isinstance(st.get(k), dict):
+                        _settings["stremio"][k] = {str(kk): str(vv) for kk, vv in st[k].items()}
+                        changed = True
             if changed:
                 _settings_save()
             return self._send(200, json.dumps({"success": True, "settings": _settings}).encode(),
@@ -1624,9 +1654,9 @@ class Handler(BaseHTTPRequestHandler):
                             if "=" in kv:
                                 k, v = kv.split("=", 1)
                                 params[k] = urllib.parse.unquote_plus(v)
-                
+
                 lang_filter = qs.get("lang", [None])[0]
-                
+
                 chans = vavoo_channels() if catid == "vavoo" else channels(lang_filter=lang_filter)
                 q = params.get("search", "").lower().strip()
                 if q:
@@ -1657,17 +1687,31 @@ class Handler(BaseHTTPRequestHandler):
                 if source == "vavoo":
                     streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
+                # Check for custom stream
+                st = _settings.get("stremio", {})
+                custom_stream = st.get("channel_streams", {}).get(cid)
                 ok = working_players(cid)
-                streams = [{"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
-                            "url": f"{b}/hls/{cid}/index.m3u8"}] if ok else []
-                streams += [{"name": "dlstreams", "title": label,
-                             "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
+                streams = []
+                if custom_stream:
+                    streams.append({"name": "Personnalisé", "title": "⚙️ Flux personnalisé",
+                                "url": f"{b}/hls/{cid}/index.m3u8"})
+                if ok:
+                    streams.append({"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
+                                "url": f"{b}/hls/{cid}/index.m3u8"})
+                    streams += [{"name": "dlstreams", "title": label,
+                                "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
 
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
                 cid = parts[2]
-                if len(parts) == 5 and parts[3].startswith("p") and parts[3][1:].isdigit():
+                # Check for custom stream in stremio settings
+                st = _settings.get("stremio", {})
+                custom_stream = st.get("channel_streams", {}).get(cid)
+                if custom_stream:
+                    m3u8 = custom_stream
+                    host = urllib.parse.urlsplit(custom_stream).netloc
+                elif len(parts) == 5 and parts[3].startswith("p") and parts[3][1:].isdigit():
                     pls = players(cid)
                     idx = int(parts[3][1:])
                     if idx >= len(pls):
@@ -1730,47 +1774,67 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, b"not found", "text/plain")
 
     def _manifest(self, lang_filter: str | None = None) -> dict:
-        _extra = [{"name": "search", "isRequired": False},
-                  {"name": "skip", "isRequired": False},
-                  {"name": "genre", "isRequired": False,
-                   "options": _GENRE_CHOICES}]
-        name = "Chaînes live (dlstreams + Vavoo)"
-        desc = ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
-                "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
-        
-        if lang_filter and lang_filter != "all":
-            lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
-            lang_name = lang_names.get(lang_filter, lang_filter)
-            name = f"Chaînes live {lang_name}"
-            desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
-        
-        return {
-            "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
-"version": _VERSION,
-            "name": name,
-            "description": desc,
-            "resources": ["catalog", "meta", "stream"],
-            "types": ["tv"],
-            "idPrefixes": ["dlstreams:", "vavoo:"],
-            "catalogs": [{"type": "tv", "id": "dlstreams", "name": "dlstreams",
-                          "extra": _extra, "extraSupported": ["search", "skip", "genre"]},
-                         {"type": "tv", "id": "vavoo", "name": "Vavoo",
-                          "extra": _extra, "extraSupported": ["search", "skip", "genre"]}],
-        }
+            _extra = [{"name": "search", "isRequired": False},
+                      {"name": "skip", "isRequired": False},
+                      {"name": "genre", "isRequired": False,
+                       "options": _GENRE_CHOICES}]
+
+            st = _settings.get("stremio", {})
+            name = st.get("manifest_name") or "Chaînes live (dlstreams + Vavoo)"
+            desc = st.get("manifest_desc") or ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
+                    "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
+
+            if lang_filter and lang_filter != "all":
+                lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
+                lang_name = lang_names.get(lang_filter, lang_filter)
+                if not st.get("manifest_name"):
+                    name = f"Chaînes live {lang_name}"
+                if not st.get("manifest_desc"):
+                    desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
+
+            catalogs = []
+            if st.get("include_dlstreams", True):
+                catalogs.append({"type": "tv", "id": "dlstreams", "name": "dlstreams",
+                              "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+            if st.get("include_vavoo", True):
+                catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
+                              "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+
+            return {
+                "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
+                "version": _VERSION,
+                "name": name,
+                "description": desc,
+                "resources": ["catalog", "meta", "stream"],
+                "types": ["tv"],
+                "idPrefixes": ["dlstreams:", "vavoo:"],
+                "catalogs": catalogs,
+            }
 
     def _meta(self, c: dict, source: str) -> dict:
         cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
         base = self._self_base()
-        if _settings.get("logos", True):
+
+        st = _settings.get("stremio", {})
+        # Custom name
+        custom_name = st.get("channel_names", {}).get(str(c["id"]))
+        display_name = custom_name if custom_name else c["name"]
+
+        # Custom logo
+        custom_logo = st.get("channel_logos", {}).get(str(c["id"]))
+        if _settings.get("logos", True) and custom_logo:
+            poster = custom_logo
+        elif _settings.get("logos", True):
             poster = f"{base}/logo/{source}/{urllib.parse.quote(cid, safe='')}.png"
         else:
             poster = f"{base}/poster/{urllib.parse.quote(c['name'], safe='')}.png"
+
         lang = c.get("lang", "fr")
         lang_label = {"fr": "française", "en": "anglaise", "es": "espagnole",
                       "de": "allemande", "it": "italienne", "ar": "arabe",
                       "pt": "portugaise"}.get(lang, lang)
         genres = _genres_for(c["name"])
-        desc = (f"Chaîne {c['name']} diffusée en direct, chaîne {lang_label} "
+        desc = (f"Chaîne {display_name} diffusée en direct, chaîne {lang_label} "
                 f"disponible via {source}. Lecture directe dans Stremio grâce au proxy intégré.")
         release = "En direct"
         if source == "dlstreams":
@@ -1785,8 +1849,8 @@ class Handler(BaseHTTPRequestHandler):
                 if nxt:
                     tn = time.strftime("%H:%M", time.localtime(nxt["start"]))
                     desc += f"\n\nÀ suivre à {tn} : {nxt['title']}"
-                desc += f"\n\nChaîne {c['name']} diffusée en direct via {source}."
-        return {"id": f"{source}:{cid}", "type": "tv", "name": c["name"],
+                desc += f"\n\nChaîne {display_name} diffusée en direct via {source}."
+        return {"id": f"{source}:{cid}", "type": "tv", "name": display_name,
                 "poster": poster, "logo": poster, "posterShape": "landscape",
                 "background": poster,
                 "description": desc,
@@ -2158,6 +2222,21 @@ DASHBOARD_HTML = r"""<!doctype html>
   .logs-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; color:var(--muted); text-align:center; }
   .logs-empty .icon { font-size:36px; opacity:.4; margin-bottom:10px; }
 
+  /* Stremio table */
+  .stremio-table { display:flex; flex-direction:column; gap:6px; }
+  .stremio-row { display:grid; grid-template-columns: 80px 1fr 1fr auto; gap:10px; align-items:center;
+    padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; }
+  .stremio-row-head { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
+    background:var(--surface3); border:1px solid var(--border); }
+  .stremio-cell { display:flex; align-items:center; gap:8px; }
+  .stremio-cell input { flex:1; background:var(--input-bg); border:1px solid var(--border); border-radius:6px;
+    padding:8px 10px; color:var(--text); font-size:12px; font-family:var(--font-body); }
+  .stremio-cell input:focus { outline:none; border-color:var(--accent); }
+  .stremio-cell .stremio-del { padding:6px 10px; background:rgba(239,68,68,.1); color:var(--error); border:1px solid var(--error);
+    border-radius:6px; cursor:pointer; font-size:12px; transition:all .15s; }
+  .stremio-cell .stremio-del:hover { background:rgba(239,68,68,.2); }
+  .stremio-empty { text-align:center; color:var(--muted); padding:20px; font-size:13px; }
+
   .update-time { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; white-space:nowrap; font-weight:600; }
   .update-time .spinner { width:13px; height:13px; border:2px solid var(--border);
     border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; opacity:0; }
@@ -2318,6 +2397,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
           <button class="nav-item" data-page="programs" onclick="navigateTo('programs')">📺 Programmes</button>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
+          <button class="nav-item" data-page="stremio" onclick="navigateTo('stremio')">🎮 Stremio</button>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
           <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages</button>
         </div>
@@ -2517,6 +2597,127 @@ DASHBOARD_HTML = r"""<!doctype html>
             <div class="card-body" style="padding:0">
               <div class="logs-list" id="logs-list">
                 <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs…</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: STREMIO -->
+        <div class="page" id="page-stremio">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Stremio</div>
+              <div class="page-sub">Configuration de l'addon Stremio (manifest, chaînes, logos, flux)</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">📋 Manifest</div></div>
+            <div class="card-body">
+              <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+                <div>
+                  <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">Nom du manifest</label>
+                  <input type="text" id="stremio-manifest-name" class="add-source-input" placeholder="Laisser vide pour utiliser le défaut">
+                </div>
+                <div>
+                  <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">Description</label>
+                  <input type="text" id="stremio-manifest-desc" class="add-source-input" placeholder="Laisser vide pour utiliser le défaut">
+                </div>
+                <div>
+                  <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">Langue par défaut</label>
+                  <select id="stremio-default-lang" class="add-source-input" style="padding:10px 12px">
+                    <option value="all">🌍 Toutes</option>
+                    <option value="fr">🇫🇷 Français</option>
+                    <option value="en">🇬🇧 English</option>
+                    <option value="es">🇪🇸 Español</option>
+                    <option value="de">🇩🇪 Deutsch</option>
+                    <option value="it">🇮🇹 Italiano</option>
+                    <option value="ar">🇸🇦 Arabe</option>
+                    <option value="pt">🇵🇹 Português</option>
+                  </select>
+                </div>
+                <div style="display:flex;align-items:end;gap:10px;flex-wrap:wrap">
+                  <label class="toggle-row">
+                    <div>
+                      <div class="toggle-title">Inclure dlstreams</div>
+                      <div class="toggle-sub">Catalogue dlstreams dans le manifest</div>
+                    </div>
+                    <input type="checkbox" id="stremio-inc-dl" onchange="saveStremioSettings()">
+                  </label>
+                  <label class="toggle-row">
+                    <div>
+                      <div class="toggle-title">Inclure Vavoo</div>
+                      <div class="toggle-sub">Catalogue Vavoo dans le manifest</div>
+                    </div>
+                    <input type="checkbox" id="stremio-inc-vv" onchange="saveStremioSettings()">
+                  </label>
+                </div>
+              </div>
+              <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                <button class="add-source-btn" onclick="saveStremioSettings()">💾 Enregistrer le manifest</button>
+                <button class="btn-outline-sm" onclick="loadStremioSettings()">↻ Actualiser</button>
+                <span id="stremio-manifest-url" style="font-family:var(--font-mono);font-size:12px;color:var(--text2);flex:1;background:var(--input-bg);padding:8px 12px;border-radius:8px;border:1px solid var(--border);word-break:break-all"></span>
+              </div>
+              <div style="margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text2)">
+                <strong>URL du manifest pour Stremio :</strong> copiez l'URL ci-dessus dans Stremio → Addons → Install via URL.
+                <br>Le paramètre <code>?lang=</code> filtre les chaînes par langue.
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">✏️ Noms de chaînes (overrides)</div>
+              <span class="card-desc" id="stremio-names-count"></span>
+            </div>
+            <div class="card-body">
+              <div class="catalog-search" style="max-width:400px;margin-bottom:12px">
+                <span class="search-ico">🔍</span>
+                <input type="search" id="stremio-names-search" placeholder="Filtrer par ID ou nom…" oninput="renderStremioNames()">
+              </div>
+              <div class="stremio-table" id="stremio-names-list">
+                <div class="logs-empty"><div class="icon">📋</div><p>Aucun override</p></div>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:8px">
+                <button class="btn-outline-sm" onclick="addStremioNameRow()">➕ Ajouter</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">🖼️ Logos personnalisés</div>
+              <span class="card-desc" id="stremio-logos-count"></span>
+            </div>
+            <div class="card-body">
+              <div class="catalog-search" style="max-width:400px;margin-bottom:12px">
+                <span class="search-ico">🔍</span>
+                <input type="search" id="stremio-logos-search" placeholder="Filtrer par ID ou URL…" oninput="renderStremioLogos()">
+              </div>
+              <div class="stremio-table" id="stremio-logos-list">
+                <div class="logs-empty"><div class="icon">📋</div><p>Aucun logo personnalisé</p></div>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:8px">
+                <button class="btn-outline-sm" onclick="addStremioLogoRow()">➕ Ajouter</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">🔗 Flux personnalisés</div>
+              <span class="card-desc" id="stremio-streams-count"></span>
+            </div>
+            <div class="card-body">
+              <div class="catalog-search" style="max-width:400px;margin-bottom:12px">
+                <span class="search-ico">🔍</span>
+                <input type="search" id="stremio-streams-search" placeholder="Filtrer par ID ou URL…" oninput="renderStremioStreams()">
+              </div>
+              <div class="stremio-table" id="stremio-streams-list">
+                <div class="logs-empty"><div class="icon">📋</div><p>Aucun flux personnalisé</p></div>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:8px">
+                <button class="btn-outline-sm" onclick="addStremioStreamRow()">➕ Ajouter</button>
               </div>
             </div>
           </div>
@@ -2792,6 +2993,7 @@ function navigateTo(page) {
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'logs') { loadLogs(); }
     if (page === 'settings') { loadSettings(); }
+    if (page === 'stremio') { loadStremioSettings(); }
     if (page === 'programs') { loadNow(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
@@ -3407,6 +3609,164 @@ async function saveSettings(){
     const body = {logos: $('#set-logos').checked, epg: $('#set-epg').checked, epg_url: $('#set-epg-url').value.trim()};
     const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     if(r.ok){ toast('Réglages enregistrés','success'); } else toast('Erreur d\'enregistrement','error');
+}
+
+// ===== STREMIO SETTINGS =====
+async function loadStremioSettings(){
+    try{
+        const r = await apiFetch("/api/settings");
+        const d = await r.json();
+        const s = d.settings.stremio || {};
+        $('#stremio-manifest-name').value = s.manifest_name || '';
+        $('#stremio-manifest-desc').value = s.manifest_desc || '';
+        $('#stremio-default-lang').value = s.default_lang || 'fr';
+        $('#stremio-inc-dl').checked = s.include_dlstreams !== false;
+        $('#stremio-inc-vv').checked = s.include_vavoo !== false;
+        updateStremioManifestUrl();
+        renderStremioNames(s.channel_names || {});
+        renderStremioLogos(s.channel_logos || {});
+        renderStremioStreams(s.channel_streams || {});
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement Stremio','error'); }
+}
+
+function updateStremioManifestUrl(){
+    const base = window.location.origin;
+    const lang = $('#stremio-default-lang').value;
+    const url = lang === 'all' ? `${base}/manifest.json` : `${base}/manifest.json?lang=${lang}`;
+    $('#stremio-manifest-url').textContent = url;
+}
+
+async function saveStremioSettings(){
+    const s = {
+        manifest_name: $('#stremio-manifest-name').value.trim(),
+        manifest_desc: $('#stremio-manifest-desc').value.trim(),
+        default_lang: $('#stremio-default-lang').value,
+        include_dlstreams: $('#stremio-inc-dl').checked,
+        include_vavoo: $('#stremio-inc-vv').checked,
+    };
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:s})});
+    if(r.ok){
+        toast('Manifest Stremio enregistré','success');
+        updateStremioManifestUrl();
+    }else toast('Erreur enregistrement','error');
+}
+
+function renderStremioNames(obj){
+    const el = $('#stremio-names-list');
+    const cnt = $('#stremio-names-count');
+    const entries = Object.entries(obj);
+    if(cnt) cnt.textContent = entries.length + (entries.length>1?' overrides':' override');
+    if(!entries.length){ el.innerHTML = '<div class="stremio-empty">Aucun override de nom</div>'; return; }
+    el.innerHTML = '<div class="stremio-row stremio-row-head"><div>ID</div><div>Nom personnalisé</div><div>Nom original</div><div></div></div>' +
+        entries.map(([id, name]) => {
+            const orig = (ALL.dlstreams.find(c=>c.id===id) || ALL.vavoo.find(c=>c.id===id) || {}).name || '—';
+            return `<div class="stremio-row"><div class="stremio-cell">${escapeHtml(id)}</div>
+                <div class="stremio-cell"><input value="${escapeHtml(name)}" onchange="updateStremioName('${escapeHtml(id)}', this.value)"></div>
+                <div class="stremio-cell" style="color:var(--text2)">${escapeHtml(orig)}</div>
+                <div class="stremio-cell"><button class="stremio-del" onclick="deleteStremioName('${escapeHtml(id)}')">🗑️</button></div></div>`;
+        }).join('');
+}
+
+function renderStremioLogos(obj){
+    const el = $('#stremio-logos-list');
+    const cnt = $('#stremio-logos-count');
+    const entries = Object.entries(obj);
+    if(cnt) cnt.textContent = entries.length + (entries.length>1?' logos':' logo');
+    if(!entries.length){ el.innerHTML = '<div class="stremio-empty">Aucun logo personnalisé</div>'; return; }
+    el.innerHTML = '<div class="stremio-row stremio-row-head"><div>ID</div><div>URL du logo</div><div>Aperçu</div><div></div></div>' +
+        entries.map(([id, url]) => `<div class="stremio-row"><div class="stremio-cell">${escapeHtml(id)}</div>
+            <div class="stremio-cell"><input value="${escapeHtml(url)}" onchange="updateStremioLogo('${escapeHtml(id)}', this.value)"></div>
+            <div class="stremio-cell"><img src="${escapeHtml(url)}" alt="" style="width:40px;height:22px;object-fit:cover;border-radius:4px;border:1px solid var(--border)" onerror="this.style.display='none'"></div>
+            <div class="stremio-cell"><button class="stremio-del" onclick="deleteStremioLogo('${escapeHtml(id)}')">🗑️</button></div></div>`).join('');
+}
+
+function renderStremioStreams(obj){
+    const el = $('#stremio-streams-list');
+    const cnt = $('#stremio-streams-count');
+    const entries = Object.entries(obj);
+    if(cnt) cnt.textContent = entries.length + (entries.length>1?' flux':' flux');
+    if(!entries.length){ el.innerHTML = '<div class="stremio-empty">Aucun flux personnalisé</div>'; return; }
+    el.innerHTML = '<div class="stremio-row stremio-row-head"><div>ID</div><div>URL du flux (m3u8/mpd)</div><div>Test</div><div></div></div>' +
+        entries.map(([id, url]) => `<div class="stremio-row"><div class="stremio-cell">${escapeHtml(id)}</div>
+            <div class="stremio-cell"><input value="${escapeHtml(url)}" onchange="updateStremioStream('${escapeHtml(id)}', this.value)"></div>
+            <div class="stremio-cell"><button class="btn-outline-sm" onclick="testStremioStream('${escapeHtml(url)}')">▶ Test</button></div>
+            <div class="stremio-cell"><button class="stremio-del" onclick="deleteStremioStream('${escapeHtml(id)}')">🗑️</button></div></div>`).join('');
+}
+
+async function addStremioNameRow(){
+    const id = prompt('ID de la chaîne (ex: 401 pour TF1):');
+    if(!id) return;
+    const name = prompt('Nom personnalisé:');
+    if(!name) return;
+    const s = { ...(_settings.stremio||{}), channel_names: { ...(_settings.stremio?.channel_names||{}), [id]: name } };
+    await saveStremioObj({channel_names: s.channel_names});
+}
+
+async function addStremioLogoRow(){
+    const id = prompt('ID de la chaîne:');
+    if(!id) return;
+    const url = prompt('URL du logo (png/jpg):');
+    if(!url) return;
+    const s = { ...(_settings.stremio||{}), channel_logos: { ...(_settings.stremio?.channel_logos||{}), [id]: url } };
+    await saveStremioObj({channel_logos: s.channel_logos});
+}
+
+async function addStremioStreamRow(){
+    const id = prompt('ID de la chaîne:');
+    if(!id) return;
+    const url = prompt('URL du flux (m3u8/mpd):');
+    if(!url) return;
+    const s = { ...(_settings.stremio||{}), channel_streams: { ...(_settings.stremio?.channel_streams||{}), [id]: url } };
+    await saveStremioObj({channel_streams: s.channel_streams});
+}
+
+function updateStremioName(id, name){
+    const s = { ...(_settings.stremio||{}), channel_names: { ...(_settings.stremio?.channel_names||{}), [id]: name } };
+    saveStremioObj({channel_names: s.channel_names});
+}
+
+function updateStremioLogo(id, url){
+    const s = { ...(_settings.stremio||{}), channel_logos: { ...(_settings.stremio?.channel_logos||{}), [id]: url } };
+    saveStremioObj({channel_logos: s.channel_logos});
+}
+
+function updateStremioStream(id, url){
+    const s = { ...(_settings.stremio||{}), channel_streams: { ...(_settings.stremio?.channel_streams||{}), [id]: url } };
+    saveStremioObj({channel_streams: s.channel_streams});
+}
+
+function deleteStremioName(id){
+    const obj = { ...(_settings.stremio?.channel_names||{}) };
+    delete obj[id];
+    saveStremioObj({channel_names: obj});
+}
+
+function deleteStremioLogo(id){
+    const obj = { ...(_settings.stremio?.channel_logos||{}) };
+    delete obj[id];
+    saveStremioObj({channel_logos: obj});
+}
+
+function deleteStremioStream(id){
+    const obj = { ...(_settings.stremio?.channel_streams||{}) };
+    delete obj[id];
+    saveStremioObj({channel_streams: obj});
+}
+
+async function saveStremioObj(patch){
+    const s = { ...(_settings.stremio||{}), ...patch };
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:s})});
+    if(r.ok){
+        _settings.stremio = s;
+        if(patch.channel_names) renderStremioNames(s.channel_names);
+        if(patch.channel_logos) renderStremioLogos(s.channel_logos);
+        if(patch.channel_streams) renderStremioStreams(s.channel_streams);
+        toast('Enregistré','success');
+    }else toast('Erreur','error');
+}
+
+function testStremioStream(url){
+    window.open(url, '_blank');
 }
 
 async function refreshEpg(){
