@@ -1730,7 +1730,7 @@ class Handler(BaseHTTPRequestHandler):
                     streams.append({"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
                                 "url": f"{b}/hls/{cid}/index.m3u8"})
                     for idx, (i, label) in enumerate(ok):
-                        streams.append({"name": "dlstreams", "title": f"Source {idx+1}  1080p",
+                        streams.append({"name": "dlstreams", "title": f"1080p  Source {idx+1}",
                                     "url": f"{b}/hls/{cid}/p{i}/index.m3u8"})
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
 
