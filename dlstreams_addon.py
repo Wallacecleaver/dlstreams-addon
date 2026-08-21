@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.13.1"
+_VERSION = "1.13.2"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -171,6 +171,7 @@ _SETTINGS_DEFAULT = {
         "channel_names": {},
         "channel_logos": {},
         "channel_streams": {},
+        "channel_epg": {},
     },
 }
 _settings: dict = dict(_SETTINGS_DEFAULT)
@@ -1443,7 +1444,7 @@ class Handler(BaseHTTPRequestHandler):
                     if isinstance(st.get(k), bool):
                         _settings["stremio"][k] = st[k]
                         changed = True
-                for k in ("channel_names", "channel_logos", "channel_streams"):
+                for k in ("channel_names", "channel_logos", "channel_streams", "channel_epg"):
                     if isinstance(st.get(k), dict):
                         _settings["stremio"][k] = {str(kk): str(vv) for kk, vv in st[k].items()}
                         changed = True
@@ -1838,7 +1839,11 @@ class Handler(BaseHTTPRequestHandler):
                 f"disponible via {source}. Lecture directe dans Stremio grâce au proxy intégré.")
         release = "En direct"
         if source == "dlstreams":
-            cur, nxt = _epg_slot(c["id"])
+            # Check for custom EPG ID override
+            st = _settings.get("stremio", {})
+            custom_epg_id = st.get("channel_epg", {}).get(str(c["id"]))
+            epg_lookup_id = custom_epg_id if custom_epg_id else c["id"]
+            cur, nxt = _epg_slot(epg_lookup_id)
             if cur:
                 t0 = time.strftime("%H:%M", time.localtime(cur["start"]))
                 t1 = time.strftime("%H:%M", time.localtime(cur["stop"]))
@@ -2248,6 +2253,32 @@ DASHBOARD_HTML = r"""<!doctype html>
   .stremio-ch-row img { border-radius:4px; }
   .stremio-ch-row .btn-outline-sm { padding:4px 10px; font-size:11px; height:auto; }
 
+  /* TV Channels table */
+  .tv-ch-table { display:flex; flex-direction:column; gap:4px; }
+  .tv-ch-row { display:grid; grid-template-columns: 50px 1fr 100px 90px 90px 80px; gap:10px; align-items:center;
+    padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    transition:background .15s; cursor:pointer; }
+  .tv-ch-row:hover { background:var(--card-hover); }
+  .tv-ch-head { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
+    background:var(--surface3); border:1px solid var(--border); cursor:default; }
+  .tv-ch-row img { border-radius:4px; }
+  .tv-epg.ok { color:var(--green); font-weight:700; }
+  .tv-epg.warn { color:var(--warn); font-weight:700; }
+  .tv-epg.missing { color:var(--muted); font-size:11px; }
+  .tv-stream.ok { color:var(--accent); font-family:var(--font-mono); font-size:11px; }
+  .tv-stream.missing { color:var(--muted); font-size:11px; }
+  .tv-name.custom { color:var(--accent); font-weight:700; }
+  .tv-name.auto { color:var(--text2); }
+
+  /* TV Modal */
+  .tv-modal { max-width:560px; }
+  .form-row { margin-bottom:14px; }
+  .form-row label { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+  .form-row input { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-size:13px; }
+  .form-row input:focus { outline:none; border-color:var(--accent); }
+  .form-row input[readonly] { background:var(--surface2); color:var(--text2); }
+  .form-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; padding-top:16px; border-top:1px solid var(--border); }
+
   .update-time { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; white-space:nowrap; font-weight:600; }
   .update-time .spinner { width:13px; height:13px; border:2px solid var(--border);
     border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; opacity:0; }
@@ -2408,7 +2439,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
           <button class="nav-item" data-page="programs" onclick="navigateTo('programs')">📺 Programmes</button>
           <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
-          <button class="nav-item" data-page="stremio" onclick="navigateTo('stremio')">🎮 Stremio</button>
+          <button class="nav-item" data-page="channels" onclick="navigateTo('channels')">📺 Chaînes TV</button>
           <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
           <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages</button>
         </div>
@@ -2613,88 +2644,87 @@ DASHBOARD_HTML = r"""<!doctype html>
           </div>
         </div>
 
-        <!-- PAGE: STREMIO -->
-        <div class="page" id="page-stremio">
+        <!-- PAGE: CHAÎNES TV -->
+        <div class="page" id="page-channels">
           <div class="page-header">
             <div>
-              <div class="page-title">Stremio</div>
-              <div class="page-sub">Éditeur de chaînes pour l'addon Stremio — nom, logo, flux</div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">📋 Manifest</div></div>
-            <div class="card-body">
-              <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
-                <div>
-                  <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">Nom du manifest</label>
-                  <input type="text" id="stremio-manifest-name" class="add-source-input" placeholder="Laisser vide pour utiliser le défaut">
-                </div>
-                <div>
-                  <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">Description</label>
-                  <input type="text" id="stremio-manifest-desc" class="add-source-input" placeholder="Laisser vide pour utiliser le défaut">
-                </div>
-                <div>
-                  <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">Langue par défaut</label>
-                  <select id="stremio-default-lang" class="add-source-input" style="padding:10px 12px">
-                    <option value="all">🌍 Toutes</option>
-                    <option value="fr">🇫🇷 Français</option>
-                    <option value="en">🇬🇧 English</option>
-                    <option value="es">🇪🇸 Español</option>
-                    <option value="de">🇩🇪 Deutsch</option>
-                    <option value="it">🇮🇹 Italiano</option>
-                    <option value="ar">🇸🇦 Arabe</option>
-                    <option value="pt">🇵🇹 Português</option>
-                  </select>
-                </div>
-                <div style="display:flex;align-items:end;gap:10px;flex-wrap:wrap">
-                  <label class="toggle-row">
-                    <div>
-                      <div class="toggle-title">Inclure dlstreams</div>
-                      <div class="toggle-sub">Catalogue dlstreams dans le manifest</div>
-                    </div>
-                    <input type="checkbox" id="stremio-inc-dl" onchange="saveStremioSettings()">
-                  </label>
-                  <label class="toggle-row">
-                    <div>
-                      <div class="toggle-title">Inclure Vavoo</div>
-                      <div class="toggle-sub">Catalogue Vavoo dans le manifest</div>
-                    </div>
-                    <input type="checkbox" id="stremio-inc-vv" onchange="saveStremioSettings()">
-                  </label>
-                </div>
-              </div>
-              <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-                <button class="add-source-btn" onclick="saveStremioSettings()">💾 Enregistrer le manifest</button>
-                <button class="btn-outline-sm" onclick="loadStremioSettings()">↻ Actualiser</button>
-                <span id="stremio-manifest-url" style="font-family:var(--font-mono);font-size:12px;color:var(--text2);flex:1;background:var(--input-bg);padding:8px 12px;border-radius:8px;border:1px solid var(--border);word-break:break-all"></span>
-              </div>
-              <div style="margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text2)">
-                <strong>URL du manifest pour Stremio :</strong> copiez l'URL ci-dessus dans Stremio → Addons → Install via URL.
-                <br>Le paramètre <code>?lang=</code> filtre les chaînes par langue.
-              </div>
+              <div class="page-title">Chaînes TV</div>
+              <div class="page-sub">Gestion complète : nom, logo, flux, EPG</div>
             </div>
           </div>
 
           <div class="card">
             <div class="card-head">
-              <div class="card-title">✏️ Éditeur de chaînes (nom, logo, flux)</div>
+              <div class="card-title">📺 Liste des chaînes</div>
               <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                 <div class="catalog-search" style="min-width:280px;flex:1">
                   <span class="search-ico">🔍</span>
-                  <input type="search" id="stremio-ch-search" placeholder="Filtrer chaînes (nom, ID, source)…" oninput="renderStremioChannels()">
+                  <input type="search" id="tv-ch-search" placeholder="Filtrer (nom, ID, source, EPG)…" oninput="renderTvChannels()">
                 </div>
-                <span class="card-desc" id="stremio-ch-count"></span>
-                <button class="btn-outline-sm" onclick="loadStremioChannels()">↻ Rafraîchir liste</button>
+                <span class="card-desc" id="tv-ch-count"></span>
+                <button class="btn-outline-sm" onclick="loadTvChannels()">↻ Rafraîchir</button>
               </div>
             </div>
             <div class="card-body" style="padding-top:8px">
-              <div class="stremio-ch-table" id="stremio-ch-list">
-                <div class="stremio-empty">Chargement…</div>
+              <div class="tv-ch-table" id="tv-ch-list">
+                <div class="tv-empty">Chargement…</div>
               </div>
             </div>
           </div>
-        </div>
+
+          <!-- Modal édition chaîne -->
+          <div class="modal" id="tv-ch-modal" style="display:none">
+            <div class="modal-content tv-modal">
+              <div class="modal-header">
+                <h3 id="tv-modal-title">Éditer la chaîne</h3>
+                <button class="modal-close" onclick="closeTvModal()">&times;</button>
+              </div>
+              <div class="modal-body">
+                <input type="hidden" id="tv-modal-id">
+                <input type="hidden" id="tv-modal-src">
+                
+                <div class="form-row">
+                  <label>ID (lecture seule)</label>
+                  <input type="text" id="tv-modal-id-input" readonly style="background:var(--surface2);color:var(--text2)">
+                </div>
+                <div class="form-row">
+                  <label>Source</label>
+                  <input type="text" id="tv-modal-src-input" readonly style="background:var(--surface2);color:var(--text2);text-transform:uppercase">
+                </div>
+                
+                <div class="form-row">
+                  <label>Nom de la chaîne</label>
+                  <input type="text" id="tv-modal-name" placeholder="Nom personnalisé (vide = auto)">
+                  <span id="tv-modal-orig-name" style="font-size:11px;color:var(--muted)"></span>
+                </div>
+                
+                <div class="form-row">
+                  <label>Logo (URL png/jpg)</label>
+                  <input type="url" id="tv-modal-logo" placeholder="https://.../logo.png (vide = auto)">
+                  <img id="tv-modal-logo-preview" src="" alt="" style="width:48px;height:27px;object-fit:cover;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
+                  <span id="tv-modal-orig-logo" style="font-size:11px;color:var(--muted)"></span>
+                </div>
+                
+                <div class="form-row">
+                  <label>Flux (m3u8/mpd)</label>
+                  <input type="url" id="tv-modal-stream" placeholder="https://.../stream.m3u8 (vide = auto)">
+                  <span id="tv-modal-orig-stream" style="font-size:11px;color:var(--muted)"></span>
+                </div>
+                
+                <div class="form-row">
+                  <label>EPG (ID xmltv)</label>
+                  <input type="text" id="tv-modal-epg" placeholder="ID xmltv pour l'EPG (vide = auto)">
+                  <span id="tv-modal-orig-epg" style="font-size:11px;color:var(--muted)"></span>
+                </div>
+                
+                <div class="form-actions">
+                  <button class="btn-outline-sm" onclick="resetTvModal()">↺ Réinitialiser</button>
+                  <button class="btn-outline-sm" onclick="deleteTvChannel()">🗑️ Supprimer override</button>
+                  <button class="add-source-btn" onclick="saveTvChannel()">💾 Enregistrer</button>
+                </div>
+              </div>
+            </div>
+          </div>
 
         <!-- PAGE: REGLAGES -->
         <div class="page" id="page-settings">
@@ -2966,7 +2996,7 @@ function navigateTo(page) {
     if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
     if (page === 'logs') { loadLogs(); }
     if (page === 'settings') { loadSettings(); }
-    if (page === 'stremio') { loadStremioSettings(); }
+    if (page === 'channels') { loadTvChannels(); }
     if (page === 'programs') { loadNow(); }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
@@ -3776,6 +3806,177 @@ async function saveStremioObj(patch){
         _settings.stremio = s;
         toast('Enregistré','success');
     }else toast('Erreur','error');
+}
+
+async function saveTvChannel(){
+    const id = $('#tv-modal-id').value;
+    const src = $('#tv-modal-src').value;
+    if(!id || !src) return;
+
+    const name = $('#tv-modal-name').value.trim();
+    const logo = $('#tv-modal-logo').value.trim();
+    const stream = $('#tv-modal-stream').value.trim();
+    const epg = $('#tv-modal-epg').value.trim();
+
+    const patch = {
+        channel_names: { ...(_settings.stremio?.channel_names||{}), [id]: name || undefined },
+        channel_logos: { ...(_settings.stremio?.channel_logos||{}), [id]: logo || undefined },
+        channel_streams: { ...(_settings.stremio?.channel_streams||{}), [id]: stream || undefined },
+        channel_epg: { ...(_settings.stremio?.channel_epg||{}), [id]: epg || undefined },
+    };
+
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:patch})});
+    if(r.ok){
+        toast('Chaîne enregistrée','success');
+        closeTvModal();
+        await loadTvChannels();
+    }else toast('Erreur','error');
+}
+
+async function deleteTvChannel(){
+    const id = $('#tv-modal-id').value;
+    const src = $('#tv-modal-src').value;
+    if(!id || !src) return;
+    if(!confirm('Supprimer l\'override de cette chaîne ?')) return;
+
+    const patch = {
+        channel_names: Object.fromEntries(Object.entries(_settings.stremio?.channel_names||{}).filter(([k])=>k!==id)),
+        channel_logos: Object.fromEntries(Object.entries(_settings.stremio?.channel_logos||{}).filter(([k])=>k!==id)),
+        channel_streams: Object.fromEntries(Object.entries(_settings.stremio?.channel_streams||{}).filter(([k])=>k!==id)),
+        channel_epg: Object.fromEntries(Object.entries(_settings.stremio?.channel_epg||{}).filter(([k])=>k!==id)),
+    };
+
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:patch})});
+    if(r.ok){
+        toast('Override supprimé','success');
+        closeTvModal();
+        loadTvChannels();
+    }else toast('Erreur','error');
+}
+
+function resetTvModal(){
+    if(!window._editingTvChannel) return;
+    const c = _TV_CHANNELS.find(x => x.id === window._editingTvChannel.id && x.src === window._editingTvChannel.src);
+    if(!c) return;
+    $('#tv-modal-name').value = c.override_name || '';
+    $('#tv-modal-logo').value = c.override_logo || '';
+    $('#tv-modal-logo-preview').src = c.override_logo || '';
+    $('#tv-modal-logo-preview').style.display = c.override_logo ? 'block' : 'none';
+    $('#tv-modal-stream').value = c.override_stream || '';
+    $('#tv-modal-epg').value = c.override_epg || '';
+    $('#tv-modal-name').focus();
+}
+
+function closeTvModal(){
+    document.getElementById('tv-ch-modal').style.display = 'none';
+    window._editingTvChannel = null;
+}
+
+function openTvModal(id, src){
+    const c = _TV_CHANNELS.find(x => x.id === id && x.src === src);
+    if(!c) return;
+    window._editingTvChannel = {id: c.id, src: c.src};
+
+    $('#tv-modal-title').textContent = `Éditer : ${c.name}`;
+    $('#tv-modal-id').value = c.id;
+    $('#tv-modal-src').value = c.src;
+    $('#tv-modal-id-input').value = c.id;
+    $('#tv-modal-src-input').value = c.src;
+    $('#tv-modal-name').value = c.override_name || '';
+    $('#tv-modal-orig-name').textContent = c.override_name ? `Original: ${c.name}` : '';
+    $('#tv-modal-logo').value = c.override_logo || '';
+    $('#tv-modal-logo-preview').src = c.override_logo || '';
+    $('#tv-modal-logo-preview').style.display = c.override_logo ? 'block' : 'none';
+    $('#tv-modal-orig-logo').textContent = c.override_logo ? '' : `Auto: /logo/${c.src}/${c.id}.png`;
+    $('#tv-modal-stream').value = c.override_stream || '';
+    $('#tv-modal-orig-stream').textContent = c.override_stream ? '' : `Auto: /hls/${c.id}/index.m3u8`;
+    $('#tv-modal-epg').value = c.override_epg || '';
+    $('#tv-modal-orig-epg').textContent = c.override_epg ? '' : `Auto: ${_CH_EPG[c.id] || '—'}`;
+
+    document.getElementById('tv-ch-modal').style.display = 'flex';
+    $('#tv-modal-name').focus();
+}
+
+let _TV_CHANNELS = [];
+async function loadTvChannels(){
+    try{
+        // Ensure catalog is loaded
+        if(!ALL.dlstreams.length) await loadCatalog('dlstreams');
+        if(!ALL.vavoo.length) await loadCatalog('vavoo');
+
+        const r = await apiFetch("/api/settings");
+        const d = await r.json();
+        const s = d.settings.stremio || {};
+
+        _TV_CHANNELS = [];
+        [...(ALL.dlstreams||[]), ...(ALL.vavoo||[])].forEach(c => {
+            const id = c.id;
+            _TV_CHANNELS.push({
+                id,
+                src: 'dlstreams',
+                name: c.name,
+                orig_name: c.name,
+                override_name: s.channel_names?.[id],
+                override_logo: s.channel_logos?.[id],
+                override_stream: s.channel_streams?.[id],
+                override_epg: s.channel_epg?.[id],
+                epg_id: _CH_EPG[c.id],
+            });
+        });
+        [...(ALL.vavoo||[])].forEach(c => {
+            if (!_TV_CHANNELS.some(x => x.id === c.id && x.src === 'vavoo')) {
+                _TV_CHANNELS.push({
+                    id: c.id,
+                    src: 'vavoo',
+                    name: c.name,
+                    orig_name: c.name,
+                    override_name: s.channel_names?.[c.id],
+                    override_logo: s.channel_logos?.[c.id],
+                    override_stream: s.channel_streams?.[c.id],
+                    override_epg: s.channel_epg?.[c.id],
+                    epg_id: _CH_EPG[c.id],
+                });
+            }
+        });
+        renderTvChannels();
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement chaînes','error'); }
+}
+
+function renderTvChannels(){
+    const q = ($('#tv-ch-search').value || '').toLowerCase().trim();
+    const list = $('#tv-ch-list');
+    const cnt = $('#tv-ch-count');
+    let channels = _TV_CHANNELS;
+    if(q) channels = channels.filter(c =>
+        (c.id||'').toLowerCase().includes(q) ||
+        (c.name||'').toLowerCase().includes(q) ||
+        (c.src||'').toLowerCase().includes(q) ||
+        (c.epg_id||'').toLowerCase().includes(q)
+    );
+    if(cnt) cnt.textContent = channels.length + (channels.length>1?' chaînes':' chaîne');
+    if(!channels.length){
+        list.innerHTML = '<div class="tv-empty">Aucune chaîne</div>';
+        return;
+    }
+    list.innerHTML = '<div class="tv-ch-row tv-ch-head"><div style="width:50px">Logo</div><div>Nom</div><div style="width:100px">Source</div><div style="width:90px">EPG</div><div style="width:90px">Flux</div><div style="width:80px"></div></div>' +
+        channels.map(c => {
+            const hasName = !!c.override_name;
+            const hasLogo = !!c.override_logo;
+            const hasStream = !!c.override_stream;
+            const hasEpg = !!c.override_epg;
+            const logoHtml = c.override_logo ? `<img src="${escapeHtml(c.override_logo)}" style="width:36px;height:20px;object-fit:cover;border-radius:3px;border:1px solid var(--border)">` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
+            const streamHtml = c.override_stream ? `<span class="tv-stream ok">${escapeHtml(c.override_stream).substring(0,35)}…</span>` : `<span class="tv-stream missing">Auto</span>`;
+            const epgHtml = c.override_epg ? `<span class="tv-epg ok">${escapeHtml(c.override_epg)}</span>` : (c.epg_id ? `<span class="tv-epg warn">${escapeHtml(c.epg_id)}</span>` : `<span class="tv-epg missing">—</span>`);
+            const nameHtml = c.override_name ? `<span class="tv-name custom">${escapeHtml(c.override_name)}</span>` : `<span class="tv-name auto">${escapeHtml(c.name)}</span>`;
+            return `<div class="tv-ch-row" data-id="${escapeHtml(c.id)}" data-src="${escapeHtml(c.src)}" onclick="openTvModal('${escapeHtml(c.id)}','${escapeHtml(c.src)}')">
+                <div style="width:50px">${logoHtml}</div>
+                <div>${nameHtml}</div>
+                <div style="width:100px;text-transform:uppercase;font-size:11px;color:var(--muted)">${c.src}</div>
+                <div style="width:90px;text-align:center">${epgHtml}</div>
+                <div style="width:90px;text-align:center">${streamHtml}</div>
+                <div style="width:80px;text-align:center"><span style="color:var(--muted);font-size:11px">✏️</span></div>
+            </div>`;
+        }).join('');
 }
 
 function testStremioStream(url){
