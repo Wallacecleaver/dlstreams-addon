@@ -3138,7 +3138,8 @@ function navigateTo(page) {
         if (page === 'channels') { loadTvChannels(); }
         if (page === 'programs') { loadNow(); }
         if (page === 'catalog') {
-            if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
+            console.log('navigateTo: catalog page, ALL.dlstreams.length=', ALL?.dlstreams?.length);
+            if (!ALL.dlstreams.length) { loadCatalog('dlstreams').then(render).catch(e => toast('Erreur chargement catalogue: ' + e.message, 'error')); } else { try { console.log('Calling render()'); render(); } catch(e) { console.error('Erreur render:', e); toast('Erreur render: ' + e.message, 'error'); } }
         }
     } catch(err) {
         console.error('navigateTo error:', err);
@@ -3585,7 +3586,9 @@ async function loadCatalog(src){
 }
 
 function render(){
-    const q = $("#q").value.toLowerCase().trim();
+    try {
+        console.log('render() called, CURRENT=', CURRENT, 'ALL.dlstreams.length=', ALL?.dlstreams?.length);
+        const q = $("#q").value.toLowerCase().trim();
     const words = q ? q.split(/\s+/) : [];
     const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
 
@@ -3608,6 +3611,10 @@ function render(){
     }
 
     const list = $("#list");
+    if(!list){
+        console.error('render(): #list element not found');
+        return;
+    }
     if(!items.length){
         list.innerHTML = '<div class="fav-empty">aucun résultat — essaie un autre filtre</div>';
         return;
@@ -3638,6 +3645,10 @@ function render(){
             </div>
         </a>`;
     }).join("");
+    } catch(err) {
+        console.error('render() error:', err);
+        toast('Erreur render: ' + err.message, 'error');
+    }
 }
 
 const CHECKED = (()=>{ try{ return JSON.parse(localStorage.getItem("dl_checked")||"{}"); }catch(e){ return {}; } })();
