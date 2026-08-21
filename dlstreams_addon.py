@@ -701,8 +701,37 @@ def players(cid: str) -> list[tuple[str, str]]:
     pairs = re.findall(r'data-url="([^"]+)"[^>]*title="([^"]*)"', w)
     out = [(title.strip() or f"Player {i + 1}", url)
            for i, (url, title) in enumerate(pairs) if url.startswith("http")]
-    return out or [(f"Player {i + 1}", f"{SITE}/{p}/stream-{cid}.php")
-                   for i, p in enumerate(_PLAYER_PATHS)]
+    
+    # Replace generic "PLAYER N" titles with descriptive names
+    if out:
+        path_names = {
+            "stream": "Stream principal",
+            "watch": "Watch",
+            "player": "Player",
+            "plus": "Plus",
+            "hub": "Hub",
+            "cast": "Cast",
+            "casting": "Casting",
+        }
+        # Map generic "PLAYER N" to path-based names
+        for i, (title, url) in enumerate(out):
+            if re.match(r'^player\s+\d+$', title, re.IGNORECASE):
+                path = _PLAYER_PATHS[i] if i < len(_PLAYER_PATHS) else "player"
+                out[i] = (path_names.get(path, path.capitalize()), url)
+        return out
+    
+    # Fallback: use descriptive names based on player path
+    path_names = {
+        "stream": "Stream principal",
+        "watch": "Watch",
+        "player": "Player",
+        "plus": "Plus",
+        "hub": "Hub",
+        "cast": "Cast",
+        "casting": "Casting",
+    }
+    return [(path_names.get(p, p.capitalize()), f"{SITE}/{p}/stream-{cid}.php")
+            for i, p in enumerate(_PLAYER_PATHS)]
 
 def _first_iframe(html: str) -> str | None:
     return next((m for m in re.findall(r'<iframe[^>]+src="([^"]+)"', html) if m.startswith("http")), None)
