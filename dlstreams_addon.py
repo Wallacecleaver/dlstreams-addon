@@ -172,6 +172,7 @@ _SETTINGS_DEFAULT = {
         "channel_logos": {},
         "channel_streams": {},
         "channel_epg": {},
+        "custom_channels": {},
     },
 }
 _settings: dict = dict(_SETTINGS_DEFAULT)
@@ -1473,10 +1474,31 @@ class Handler(BaseHTTPRequestHandler):
                     if isinstance(st.get(k), bool):
                         _settings["stremio"][k] = st[k]
                         changed = True
-                for k in ("channel_names", "channel_logos", "channel_streams", "channel_epg"):
+                for k in ("channel_names", "channel_logos", "channel_epg"):
                     if isinstance(st.get(k), dict):
                         _settings["stremio"][k] = {str(kk): str(vv) for kk, vv in st[k].items()}
                         changed = True
+                # channel_streams: support array of URLs per channel
+                if isinstance(st.get("channel_streams"), dict):
+                    _settings["stremio"]["channel_streams"] = {}
+                    for kk, vv in st["channel_streams"].items():
+                        if isinstance(vv, list):
+                            _settings["stremio"]["channel_streams"][str(kk)] = [str(v) for v in vv]
+                        elif isinstance(vv, str):
+                            _settings["stremio"]["channel_streams"][str(kk)] = [str(vv)]
+                        changed = True
+                # custom_channels: fully custom channels for Stremio
+                if isinstance(st.get("custom_channels"), dict):
+                    _settings["stremio"]["custom_channels"] = {}
+                    for kk, vv in st["custom_channels"].items():
+                        if isinstance(vv, dict):
+                            _settings["stremio"]["custom_channels"][str(kk)] = {
+                                "name": str(vv.get("name", "")),
+                                "logo": str(vv.get("logo", "")),
+                                "streams": [str(s) for s in (vv.get("streams") or []) if isinstance(s, str)],
+                                "epg": str(vv.get("epg", "")),
+                            }
+                            changed = True
             if changed:
                 _settings_save()
             return self._send(200, json.dumps({"success": True, "settings": _settings}).encode(),
@@ -1688,6 +1710,17 @@ class Handler(BaseHTTPRequestHandler):
 
                 lang_filter = qs.get("lang", [None])[0]
 
+                if catid == "custom":
+                    st = _settings.get("stremio", {})
+                    custom_channels = st.get("custom_channels", {})
+                    metas = []
+                    for cid, cc in custom_channels.items():
+                        c = {"id": cid, "name": cc.get("name", "Custom"), "logo": cc.get("logo", ""), "lang": "fr"}
+                        metas.append(self._meta(c, "custom"))
+                    skip = int(params.get("skip") or 0)
+                    metas = metas[skip:skip + 100]
+                    return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
+
                 chans = vavoo_channels() if catid == "vavoo" else channels(lang_filter=lang_filter)
                 q = params.get("search", "").lower().strip()
                 if q:
@@ -1718,14 +1751,31 @@ class Handler(BaseHTTPRequestHandler):
                 if source == "vavoo":
                     streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
-                # Check for custom stream
+                
                 st = _settings.get("stremio", {})
-                custom_stream = st.get("channel_streams", {}).get(cid)
-                ok = working_players(cid)
                 streams = []
-                if custom_stream:
-                    streams.append({"name": "Personnalisé", "title": "⚙️ Flux personnalisé",
-                                "url": f"{b}/hls/{cid}/index.m3u8"})
+                
+                # Custom channels (fully custom)
+                custom_channels = st.get("custom_channels", {})
+                if cid in custom_channels:
+                    cc = custom_channels[cid]
+                    for idx, stream_url in enumerate(cc.get("streams", [])):
+                        streams.append({"name": "Personnalisé", "title": f"{cc.get('name', 'Custom')}  Source {idx+1}",
+                                    "url": f"{b}/custom/{cid}/s{idx}/index.m3u8"})
+                    if streams:
+                        return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
+                
+                # Regular channels with custom streams (now array)
+                custom_streams = st.get("channel_streams", {}).get(cid, [])
+                if isinstance(custom_streams, str):
+                    custom_streams = [custom_streams]
+                
+                for idx, stream_url in enumerate(custom_streams):
+                    streams.append({"name": "Personnalisé", "title": f"⚙️ Flux perso {idx+1}",
+                                "url": f"{b}/hls/{cid}/custom_{idx}/index.m3u8"})
+                
+                # Regular dlstreams players
+                ok = working_players(cid)
                 if ok:
                     streams.append({"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
                                 "url": f"{b}/hls/{cid}/index.m3u8"})
@@ -1831,6 +1881,11 @@ class Handler(BaseHTTPRequestHandler):
             if st.get("include_vavoo", True):
                 catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
                               "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+            # Custom channels catalog
+            custom_channels = st.get("custom_channels", {})
+            if custom_channels:
+                catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
+                              "extra": _extra, "extraSupported": ["search", "skip"]})
 
             return {
                 "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
@@ -1839,11 +1894,42 @@ class Handler(BaseHTTPRequestHandler):
                 "description": desc,
                 "resources": ["catalog", "meta", "stream"],
                 "types": ["tv"],
-                "idPrefixes": ["dlstreams:", "vavoo:"],
+                "idPrefixes": ["dlstreams:", "vavoo:", "custom:"],
                 "catalogs": catalogs,
             }
 
     def _meta(self, c: dict, source: str) -> dict:
+        cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
+        base = self._self_base()
+
+        st = _settings.get("stremio", {})
+        
+        # Custom channels (fully custom)
+        if source == "custom":
+            cc = st.get("custom_channels", {}).get(cid, {})
+            display_name = cc.get("name", c["name"])
+            custom_logo = cc.get("logo", "")
+            custom_epg = cc.get("epg", "")
+            custom_streams = cc.get("streams", [])
+            if _settings.get("logos", True) and custom_logo:
+                poster = custom_logo
+            else:
+                poster = f"{base}/poster/{urllib.parse.quote(c['name'], safe='')}.png"
+            lang = c.get("lang", "fr")
+            lang_label = {"fr": "française", "en": "anglaise", "es": "espagnole",
+                          "de": "allemande", "it": "italienne", "ar": "arabe",
+                          "pt": "portugaise"}.get(lang, lang)
+            genres = _genres_for(c["name"])
+            desc = f"Chaîne personnalisée {display_name} via proxy intégré."
+            release = "En direct"
+            return {"id": f"custom:{cid}", "type": "tv", "name": display_name,
+                    "poster": poster, "logo": poster, "posterShape": "landscape",
+                    "background": poster,
+                    "description": desc,
+                    "releaseInfo": release,
+                    "genres": genres}
+        
+        # Regular channels
         cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
         base = self._self_base()
 
@@ -2702,7 +2788,10 @@ DASHBOARD_HTML = r"""<!doctype html>
 
           <div class="card">
             <div class="card-head">
-              <div class="card-title">📺 Liste des chaînes</div>
+              <div class="tabs" style="margin-bottom:8px">
+                <button class="tab active" data-tv-tab="all" onclick="switchTvTab('all')">📺 Toutes</button>
+                <button class="tab" data-tv-tab="custom" onclick="switchTvTab('custom')">⭐ Personnalisées</button>
+              </div>
               <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                 <div class="catalog-search" style="min-width:280px;flex:1">
                   <span class="search-ico">🔍</span>
@@ -2710,6 +2799,7 @@ DASHBOARD_HTML = r"""<!doctype html>
                 </div>
                 <span class="card-desc" id="tv-ch-count"></span>
                 <button class="btn-outline-sm" onclick="loadTvChannels()">↻ Rafraîchir</button>
+                <button class="add-source-btn" id="tv-add-custom-btn" style="display:none" onclick="openAddCustomChannel()">➕ Ajouter chaîne</button>
               </div>
             </div>
             <div class="card-body" style="padding-top:8px">
@@ -2719,7 +2809,7 @@ DASHBOARD_HTML = r"""<!doctype html>
             </div>
           </div>
 
-          <!-- Modal édition chaîne -->
+          <!-- Modal édition chaîne (existantes) -->
           <div class="modal" id="tv-ch-modal">
             <div class="modal-content tv-modal">
               <div class="modal-header">
@@ -4006,8 +4096,33 @@ async function loadTvChannels(){
                 });
             }
         });
-        renderTvChannels();
+        // Custom channels
+        const custom = s.custom_channels || {};
+        for(const [cid, cc] of Object.entries(custom)){
+            _TV_CHANNELS.push({
+                id: cid,
+                src: 'custom',
+                name: cc.name,
+                orig_name: cc.name,
+                override_name: cc.name,
+                override_logo: cc.logo,
+                override_stream: (cc.streams || [])[0] || '',
+                override_epg: cc.epg,
+                auto_logo: cc.logo || '',
+                auto_stream: (cc.streams || [])[0] || '',
+                auto_epg: cc.epg || '',
+            });
+}
     }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement chaînes: ' + err.message,'error'); }
+}
+let _TV_TAB = 'all';
+function switchTvTab(tab){
+    _TV_TAB = tab;
+    document.querySelectorAll('.tab[data-tv-tab]').forEach(b=>{
+        b.classList.toggle('active', b.dataset.tvTab === tab);
+    });
+    $('#tv-add-custom-btn').style.display = tab === 'custom' ? 'inline-flex' : 'none';
+    renderTvChannels();
 }
 
 function renderTvChannels(){
@@ -4015,6 +4130,9 @@ function renderTvChannels(){
     const list = $('#tv-ch-list');
     const cnt = $('#tv-ch-count');
     let channels = _TV_CHANNELS;
+    if(_TV_TAB === 'custom'){
+        channels = channels.filter(c => c.src === 'custom');
+    }
     if(q) channels = channels.filter(c =>
         (c.id||'').toLowerCase().includes(q) ||
         (c.name||'').toLowerCase().includes(q) ||
@@ -4045,6 +4163,114 @@ function renderTvChannels(){
                 <div style="width:80px;text-align:center"><span style="color:var(--muted);font-size:11px">✏️</span></div>
             </div>`;
         }).join('');
+}
+
+function testStremioStream(url){
+    window.open(url, '_blank');
+}
+
+// Custom channel management
+let _editingCustomId = null;
+
+function openAddCustomChannel(){
+    _editingCustomId = null;
+    $('#tv-custom-modal-title').textContent = 'Ajouter chaîne personnalisée';
+    $('#tv-custom-id').value = '';
+    $('#tv-custom-id-input').value = '';
+    $('#tv-custom-name').value = '';
+    $('#tv-custom-logo').value = '';
+    $('#tv-custom-logo-preview').src = '';
+    $('#tv-custom-logo-preview').style.display = 'none';
+    $('#tv-custom-streams').value = '';
+    $('#tv-custom-epg').value = '';
+    $('#tv-custom-id-input').readOnly = false;
+    document.getElementById('tv-custom-modal').classList.add('active');
+    $('#tv-custom-id-input').focus();
+}
+
+function closeCustomChannelModal(){
+    document.getElementById('tv-custom-modal').classList.remove('active');
+    _editingCustomId = null;
+}
+
+async function saveCustomChannel(){
+    const id = $('#tv-custom-id-input').value.trim();
+    const name = $('#tv-custom-name').value.trim();
+    const logo = $('#tv-custom-logo').value.trim();
+    const streams = $('#tv-custom-streams').value.trim().split('\n').map(s=>s.trim()).filter(Boolean);
+    const epg = $('#tv-custom-epg').value.trim();
+    
+    if(!id || !name || !streams.length){
+        toast('ID, nom et au moins un flux requis','error');
+        return;
+    }
+    if(!/^[a-zA-Z0-9_-]+$/.test(id)){
+        toast('ID: lettres, chiffres, _ et - uniquement','error');
+        return;
+    }
+    
+    const st = _settings.stremio || {};
+    const custom = st.custom_channels || {};
+    
+    if(!_editingCustomId && custom[id]){
+        toast('Cet ID existe déjà','error');
+        return;
+    }
+    if(_editingCustomId && _editingCustomId !== id && custom[id]){
+        toast('Cet ID existe déjà','error');
+        return;
+    }
+    
+    // Remove old if renaming
+    if(_editingCustomId && _editingCustomId !== id){
+        delete custom[_editingCustomId];
+    }
+    
+    custom[id] = { name, logo, streams, epg };
+    
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:{...st, custom_channels:custom}})});
+    if(r.ok){
+        toast('Chaîne personnalisée enregistrée','success');
+        closeCustomChannelModal();
+        await loadTvChannels();
+    }else toast('Erreur','error');
+}
+
+function editCustomChannel(id){
+    const st = _settings.stremio || {};
+    const cc = (st.custom_channels || {})[id];
+    if(!cc) return;
+    _editingCustomId = id;
+    $('#tv-custom-modal-title').textContent = `Éditer: ${cc.name}`;
+    $('#tv-custom-id').value = id;
+    $('#tv-custom-id-input').value = id;
+    $('#tv-custom-id-input').readOnly = true;
+    $('#tv-custom-name').value = cc.name || '';
+    $('#tv-custom-logo').value = cc.logo || '';
+    $('#tv-custom-logo-preview').src = cc.logo || '';
+    $('#tv-custom-logo-preview').style.display = cc.logo ? 'block' : 'none';
+    $('#tv-custom-streams').value = (cc.streams || []).join('\n');
+    $('#tv-custom-epg').value = cc.epg || '';
+    document.getElementById('tv-custom-modal').classList.add('active');
+}
+
+async function deleteCustomChannel(){
+    if(!_editingCustomId) return;
+    if(!confirm('Supprimer cette chaîne personnalisée ?')) return;
+    const st = _settings.stremio || {};
+    const custom = { ...(st.custom_channels || {}) };
+    delete custom[_editingCustomId];
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:{...st, custom_channels:custom}})});
+    if(r.ok){
+        toast('Chaîne personnalisée supprimée','success');
+        closeCustomChannelModal();
+        await loadTvChannels();
+    }else toast('Erreur','error');
+}
+
+function closeCustomChannelModal(){
+    document.getElementById('tv-custom-modal').classList.remove('active');
+    _editingCustomId = null;
 }
 
 function testStremioStream(url){
