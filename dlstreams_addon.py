@@ -3114,29 +3114,35 @@ let _lastPage = null;
 function navigateTo(page) {
     _lastPage = page;
     try { if (location.hash !== '#' + page) history.replaceState(null, '', '#' + page); } catch(e){}
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    try {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
-    $(`#page-${page}`).classList.add('active');
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
+        $(`#page-${page}`).classList.add('active');
+        document.querySelector(`[data-page="${page}"]`).classList.add('active');
 
-    const subtitles = {
-        dashboard: 'Statistiques de votre proxy de chaînes',
-        sources: 'Gérer vos sources personnalisées',
-        catalog: 'Explorer toutes les chaînes disponibles',
-        logs: 'Journal en direct des requêtes passées sur votre proxy',
-        settings: 'Logos, EPG et catégories personnalisables',
-        programs: 'Programme en cours des chaînes populaires'
-    };
-    document.querySelector('.page.active .page-sub').textContent = subtitles[page] || '';
+        const subtitles = {
+            dashboard: 'Statistiques de votre proxy de chaînes',
+            sources: 'Gérer vos sources personnalisées',
+            catalog: 'Explorer toutes les chaînes disponibles',
+            logs: 'Journal en direct des requêtes passées sur votre proxy',
+            settings: 'Logos, EPG et catégories personnalisables',
+            programs: 'Programme en cours des chaînes populaires',
+            channels: 'Gestion complète : nom, logo, flux, EPG'
+        };
+        document.querySelector('.page.active .page-sub').textContent = subtitles[page] || '';
 
-    if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
-    if (page === 'logs') { loadLogs(); }
-    if (page === 'settings') { loadSettings(); }
-    if (page === 'channels') { loadTvChannels(); }
-    if (page === 'programs') { loadNow(); }
-    if (page === 'catalog') {
-        if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
+        if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
+        if (page === 'logs') { loadLogs(); }
+        if (page === 'settings') { loadSettings(); }
+        if (page === 'channels') { loadTvChannels(); }
+        if (page === 'programs') { loadNow(); }
+        if (page === 'catalog') {
+            if (!ALL.dlstreams.length) loadCatalog('dlstreams').then(render); else render();
+        }
+    } catch(err) {
+        console.error('navigateTo error:', err);
+        toast('Erreur navigation: ' + err.message, 'error');
     }
 }
 window.addEventListener('hashchange', () => {
