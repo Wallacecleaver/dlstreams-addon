@@ -2271,6 +2271,22 @@ DASHBOARD_HTML = r"""<!doctype html>
   .tv-name.custom { color:var(--accent); font-weight:700; }
   .tv-name.auto { color:var(--text2); }
 
+  /* Generic modal */
+  .modal { position:fixed; top:0; left:0; right:0; bottom:0;
+    background:rgba(0,0,0,0.6); z-index:1000;
+    display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal.active { display:flex; }
+  .modal-content { width:100%; max-width:560px; background:var(--surface);
+    border:1px solid var(--border); border-radius:16px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+  .modal-header { display:flex; justify-content:space-between; align-items:center;
+    padding:16px 20px; border-bottom:1px solid var(--border); }
+  .modal-header h3 { margin:0; font-size:15px; font-weight:700; }
+  .modal-close { background:none; border:none; color:var(--text2); font-size:24px; cursor:pointer; width:32px; height:32px;
+    display:grid; place-items:center; border-radius:6px; transition:all .2s; }
+  .modal-close:hover { background:var(--surface2); color:var(--text); }
+  .modal-body { padding:20px; max-height:70vh; overflow-y:auto; }
+
   /* TV Modal */
   .tv-modal { max-width:560px; }
   .form-row { margin-bottom:14px; }
@@ -2674,7 +2690,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           </div>
 
           <!-- Modal édition chaîne -->
-          <div class="modal" id="tv-ch-modal" style="display:none">
+          <div class="modal" id="tv-ch-modal">
             <div class="modal-content tv-modal">
               <div class="modal-header">
                 <h3 id="tv-modal-title">Éditer la chaîne</h3>
@@ -3869,7 +3885,7 @@ function resetTvModal(){
 }
 
 function closeTvModal(){
-    document.getElementById('tv-ch-modal').style.display = 'none';
+    document.getElementById('tv-ch-modal').classList.remove('active');
     window._editingTvChannel = null;
 }
 
@@ -3903,7 +3919,7 @@ function openTvModal(id, src){
     $('#tv-modal-epg').value = epgVal;
     $('#tv-modal-orig-epg').textContent = c.override_epg ? `Override` : `Auto: ${c.auto_epg || '—'}`;
 
-    document.getElementById('tv-ch-modal').style.display = 'flex';
+    document.getElementById('tv-ch-modal').classList.add('active');
     $('#tv-modal-name').focus();
 }
 
