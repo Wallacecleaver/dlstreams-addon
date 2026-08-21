@@ -1729,8 +1729,9 @@ class Handler(BaseHTTPRequestHandler):
                 if ok:
                     streams.append({"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
                                 "url": f"{b}/hls/{cid}/index.m3u8"})
-                    streams += [{"name": "dlstreams", "title": label,
-                                "url": f"{b}/hls/{cid}/p{i}/index.m3u8"} for i, label in ok]
+                    for idx, (i, label) in enumerate(ok):
+                        streams.append({"name": "dlstreams", "title": f"Source {idx+1}  1080p",
+                                    "url": f"{b}/hls/{cid}/p{i}/index.m3u8"})
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
 
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
