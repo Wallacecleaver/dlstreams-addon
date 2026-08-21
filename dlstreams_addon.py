@@ -5,6 +5,8 @@ Dashboard avec session persistante, gestion des sources, et navigation SPA.
 from __future__ import annotations
 import base64
 import gzip
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -897,6 +899,16 @@ def _b64u(s: str) -> str:
 def _unb64u(s: str) -> str:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4)).decode()
 
+# Secret par process : signe les URLs proxifiees pour que /px et /sx ne relaient QUE des URLs
+# generees par nous (sinon relais/SSRF ouvert : n'importe qui proxifierait n'importe quoi via l'instance).
+_PROXY_SECRET = secrets.token_bytes(32)
+
+def _proxy_sign(u_b64: str, h_b64: str) -> str:
+    return hmac.new(_PROXY_SECRET, (u_b64 + "|" + h_b64).encode(), hashlib.sha256).hexdigest()[:24]
+
+def _proxy_ok(u_b64: str, h_b64: str, sig: str) -> bool:
+    return bool(sig) and hmac.compare_digest(sig, _proxy_sign(u_b64, h_b64))
+
 def _proxy_get(url: str, hdr: dict, timeout: int = 25) -> bytes:
     headers = {"User-Agent": UA}
     headers.update(hdr or {})
@@ -914,7 +926,8 @@ def _rewrite_playlist(text: str, playlist_url: str, hdr_enc: str, self_base: str
             continue
         absu = s if s.startswith("http") else urllib.parse.urljoin(base, s)
         route = "px" if ".m3u8" in absu.split("?", 1)[0] else "sx"
-        out.append(f"{self_base}/{route}?u={_b64u(absu)}&h={hdr_enc}")
+        ub = _b64u(absu)
+        out.append(f"{self_base}/{route}?u={ub}&h={hdr_enc}&s={_proxy_sign(ub, hdr_enc)}")
     return "\n".join(out)
 
 def _stats() -> dict:
@@ -1487,15 +1500,21 @@ class Handler(BaseHTTPRequestHandler):
                     if isinstance(st.get(k), dict):
                         _settings["stremio"][k] = {str(kk): str(vv) for kk, vv in st[k].items()}
                         changed = True
-                # channel_streams: support array of URLs per channel
+                # channel_streams: liste de flux par chaîne, chacun {url, label}. Rétro-compat : une chaîne
+                # simple ou une liste de chaînes devient [{url, label:""}].
                 if isinstance(st.get("channel_streams"), dict):
                     _settings["stremio"]["channel_streams"] = {}
                     for kk, vv in st["channel_streams"].items():
-                        if isinstance(vv, list):
-                            _settings["stremio"]["channel_streams"][str(kk)] = [str(v) for v in vv]
-                        elif isinstance(vv, str):
-                            _settings["stremio"]["channel_streams"][str(kk)] = [str(vv)]
-                        changed = True
+                        items = vv if isinstance(vv, list) else [vv]
+                        streams = []
+                        for v in items:
+                            if isinstance(v, dict) and v.get("url"):
+                                streams.append({"url": str(v["url"]), "label": str(v.get("label", ""))})
+                            elif isinstance(v, str) and v.strip():
+                                streams.append({"url": v.strip(), "label": ""})
+                        if streams:
+                            _settings["stremio"]["channel_streams"][str(kk)] = streams
+                    changed = True
                 # custom_channels: fully custom channels for Stremio
                 if isinstance(st.get("custom_channels"), dict):
                     _settings["stremio"]["custom_channels"] = {}
@@ -1550,7 +1569,7 @@ class Handler(BaseHTTPRequestHandler):
                 pname = urllib.parse.unquote(path[len("/poster/"):-4])
                 return self._send(200, _poster_get(pname), "image/png", True)
 
-            if path == "/dashboard" or path == "/dashboard.html":
+            if path == "/dashboard" or path == "/dashboard.html" or path.startswith("/dashboard/"):
                 return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
 
             if path == "/configure" or path == "/configure.html":
@@ -1777,10 +1796,10 @@ class Handler(BaseHTTPRequestHandler):
                 # Regular channels with custom streams (now array)
                 custom_streams = st.get("channel_streams", {}).get(cid, [])
                 if isinstance(custom_streams, str):
-                    custom_streams = [custom_streams]
-                
-                for idx, stream_url in enumerate(custom_streams):
-                    streams.append({"name": "Personnalisé", "title": f"⚙️ Flux perso {idx+1}",
+                    custom_streams = [{"url": custom_streams, "label": ""}]
+                for idx, sitem in enumerate(custom_streams):
+                    label = (sitem.get("label") if isinstance(sitem, dict) else "") or f"Flux perso {idx+1}"
+                    streams.append({"name": "Personnalisé", "title": f"⚙️ {label}",
                                 "url": f"{b}/hls/{cid}/custom_{idx}/index.m3u8"})
                 
                 # Regular dlstreams players
@@ -1796,15 +1815,19 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
                 cid = parts[2]
-                # Check for custom stream in stremio settings
                 st = _settings.get("stremio", {})
-                custom_stream = st.get("channel_streams", {}).get(cid)
-                if custom_stream:
-                    m3u8 = custom_stream
-                    host = urllib.parse.urlsplit(custom_stream).netloc
-                elif len(parts) == 5 and parts[3].startswith("p") and parts[3][1:].isdigit():
+                seg3 = parts[3] if len(parts) == 5 else ""
+                if seg3.startswith("custom_") and seg3[len("custom_"):].isdigit():
+                    cs = st.get("channel_streams", {}).get(cid, [])
+                    idx = int(seg3[len("custom_"):])
+                    if idx >= len(cs):
+                        return self._send(404, b"flux perso inconnu", "text/plain")
+                    item = cs[idx]
+                    m3u8 = item["url"] if isinstance(item, dict) else str(item)
+                    host = urllib.parse.urlsplit(m3u8).netloc
+                elif seg3.startswith("p") and seg3[1:].isdigit():
                     pls = players(cid)
-                    idx = int(parts[3][1:])
+                    idx = int(seg3[1:])
                     if idx >= len(pls):
                         return self._send(404, b"player inconnu", "text/plain")
                     m3u8, host = resolve_player(pls[idx][1])
@@ -1830,16 +1853,22 @@ class Handler(BaseHTTPRequestHandler):
                                   "application/vnd.apple.mpegurl")
 
             if path == "/px":
-                url = _unb64u(qs["u"][0])
+                ub = qs["u"][0]
                 henc = qs.get("h", [""])[0]
+                if not _proxy_ok(ub, henc, qs.get("s", [""])[0]):
+                    return self._send(403, b"forbidden", "text/plain")   # anti relais ouvert
+                url = _unb64u(ub)
                 hdr = json.loads(_unb64u(henc)) if henc else {}
                 text = _proxy_get(url, hdr).decode("utf-8", "replace")
                 return self._send(200, _rewrite_playlist(text, url, henc, self._self_base()).encode(),
                                   "application/vnd.apple.mpegurl")
 
             if path == "/sx":
-                url = _unb64u(qs["u"][0])
+                ub = qs["u"][0]
                 henc = qs.get("h", [""])[0]
+                if not _proxy_ok(ub, henc, qs.get("s", [""])[0]):
+                    return self._send(403, b"forbidden", "text/plain")   # anti relais ouvert
+                url = _unb64u(ub)
                 hdr = json.loads(_unb64u(henc)) if henc else {}
                 return self._send(200, _proxy_get(url, hdr), "video/mp2t")
 
@@ -2536,9 +2565,20 @@ DASHBOARD_HTML = r"""<!doctype html>
   .btn-danger:hover { background:var(--error); color:#fff; }
   .btn-danger:disabled { opacity:.6; cursor:not-allowed; }
 
+  .mobile-topbar { display:none; }
+  .sidebar-backdrop { display:none; }
   @media (max-width:900px) {
-    .sidebar { display:none; }
-    .main { margin-left:0; padding:20px 16px 60px; }
+    .sidebar { position:fixed; top:0; left:0; height:100%; z-index:200; transform:translateX(-100%);
+               transition:transform .25s ease; box-shadow:2px 0 24px rgba(0,0,0,.4); }
+    .sidebar.open { transform:translateX(0); }
+    .sidebar-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:150; }
+    .sidebar-backdrop.open { display:block; }
+    .mobile-topbar { display:flex; align-items:center; gap:12px; padding:11px 14px; position:sticky; top:0;
+                     z-index:100; background:var(--surface); border-bottom:1px solid var(--border); }
+    .mobile-topbar .burger { background:var(--surface2); border:1px solid var(--border); color:var(--text);
+                             border-radius:9px; padding:6px 13px; font-size:18px; line-height:1; cursor:pointer; }
+    .mobile-topbar .mt-title { font-family:var(--font-display); font-size:19px; letter-spacing:.5px; }
+    .main { margin-left:0; padding:16px 16px 60px; }
     .stats-grid { grid-template-columns:repeat(2,1fr); }
     .ov-grid-2 { grid-template-columns:1fr; }
   }
@@ -2564,6 +2604,7 @@ DASHBOARD_HTML = r"""<!doctype html>
 
   <div id="dashboard">
     <div class="layout">
+      <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
       <div class="sidebar">
         <div class="sidebar-logo">
           <div class="sidebar-logo-brand">
@@ -2591,6 +2632,10 @@ DASHBOARD_HTML = r"""<!doctype html>
       </div>
 
       <div class="main">
+        <div class="mobile-topbar">
+          <button class="burger" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button>
+          <div class="mt-title">dlstreams</div>
+        </div>
 
         <!-- PAGE: OVERVIEW -->
         <div class="page active" id="page-dashboard">
@@ -2852,9 +2897,10 @@ DASHBOARD_HTML = r"""<!doctype html>
                 </div>
                 
                 <div class="form-row">
-                  <label>Flux (m3u8/mpd)</label>
-                  <input type="url" id="tv-modal-stream" placeholder="https://.../stream.m3u8 (vide = auto)">
-                  <span id="tv-modal-orig-stream" style="font-size:11px;color:var(--muted)"></span>
+                  <label>Flux personnalisés (m3u8/mpd) — texte + lien, plusieurs possibles</label>
+                  <div id="tv-modal-streams"></div>
+                  <button type="button" class="btn-outline-sm" onclick="addTvStreamRow()" style="margin-top:6px">➕ Ajouter un flux</button>
+                  <span id="tv-modal-orig-stream" style="font-size:11px;color:var(--muted);display:block;margin-top:5px"></span>
                 </div>
                 
                 <div class="form-row">
@@ -3121,9 +3167,18 @@ function logout() {
 }
 
 let _lastPage = null;
+function toggleSidebar() {
+    document.querySelector('.sidebar')?.classList.toggle('open');
+    document.querySelector('.sidebar-backdrop')?.classList.toggle('open');
+}
+function closeSidebar() {
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.querySelector('.sidebar-backdrop')?.classList.remove('open');
+}
 function navigateTo(page) {
     _lastPage = page;
-    try { if (location.hash !== '#' + page) history.replaceState(null, '', '#' + page); } catch(e){}
+    try { if (location.pathname !== '/dashboard/' + page) history.pushState(null, '', '/dashboard/' + page); } catch(e){}
+    closeSidebar();
     try {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -3185,8 +3240,8 @@ function navigateTo(page) {
         }
     }, 100);
 }
-window.addEventListener('hashchange', () => {
-    const p = location.hash.replace('#', '');
+window.addEventListener('popstate', () => {
+    const p = (location.pathname.split('/dashboard/')[1] || 'dashboard').replace(/\/+$/, '');
     if (p && p !== _lastPage && document.getElementById('page-' + p)) navigateTo(p);
 });
 
@@ -4010,6 +4065,29 @@ async function saveStremioObj(patch){
     }else toast('Erreur','error');
 }
 
+function tvStreamRowHtml(url, label){
+    return `<div class="tv-stream-row" style="display:flex;gap:6px;margin-bottom:6px">
+        <input type="url" class="tv-stream-url" value="${escapeHtml(url||'')}" placeholder="https://.../flux.m3u8" style="flex:2">
+        <input type="text" class="tv-stream-label" value="${escapeHtml(label||'')}" placeholder="Texte (ex: HD, Source 2)" style="flex:1">
+        <button type="button" class="btn-outline-sm" onclick="this.parentElement.remove()" title="Retirer ce flux">🗑️</button>
+    </div>`;
+}
+function renderTvStreamRows(streams){
+    const box = document.getElementById('tv-modal-streams');
+    box.innerHTML = (streams && streams.length)
+        ? streams.map(s => tvStreamRowHtml(typeof s === 'string' ? s : (s.url||''),
+                                           typeof s === 'string' ? '' : (s.label||''))).join('')
+        : '';
+}
+function addTvStreamRow(){
+    document.getElementById('tv-modal-streams').insertAdjacentHTML('beforeend', tvStreamRowHtml('',''));
+}
+function collectTvStreams(){
+    return [...document.querySelectorAll('#tv-modal-streams .tv-stream-row')].map(r => ({
+        url: r.querySelector('.tv-stream-url').value.trim(),
+        label: r.querySelector('.tv-stream-label').value.trim(),
+    })).filter(s => s.url);
+}
 async function saveTvChannel(){
     const id = $('#tv-modal-id').value;
     const src = $('#tv-modal-src').value;
@@ -4017,13 +4095,13 @@ async function saveTvChannel(){
 
     const name = $('#tv-modal-name').value.trim();
     const logo = $('#tv-modal-logo').value.trim();
-    const stream = $('#tv-modal-stream').value.trim();
+    const streams = collectTvStreams();
     const epg = $('#tv-modal-epg').value.trim();
 
     const patch = {
         channel_names: { ...(_settings.stremio?.channel_names||{}), [id]: name || undefined },
         channel_logos: { ...(_settings.stremio?.channel_logos||{}), [id]: logo || undefined },
-        channel_streams: { ...(_settings.stremio?.channel_streams||{}), [id]: stream || undefined },
+        channel_streams: { ...(_settings.stremio?.channel_streams||{}), [id]: streams.length ? streams : undefined },
         channel_epg: { ...(_settings.stremio?.channel_epg||{}), [id]: epg || undefined },
     };
 
@@ -4064,7 +4142,7 @@ function resetTvModal(){
     $('#tv-modal-logo').value = c.override_logo || '';
     $('#tv-modal-logo-preview').src = c.override_logo || '';
     $('#tv-modal-logo-preview').style.display = c.override_logo ? 'block' : 'none';
-    $('#tv-modal-stream').value = c.override_stream || '';
+    renderTvStreamRows(c.override_streams);
     $('#tv-modal-epg').value = c.override_epg || '';
     $('#tv-modal-name').focus();
 }
@@ -4096,9 +4174,9 @@ function openTvModal(id, src){
     $('#tv-modal-logo-preview').style.display = logoVal ? 'block' : 'none';
     $('#tv-modal-orig-logo').textContent = c.override_logo ? `Override` : `Auto: ${c.auto_logo}`;
     
-    const streamVal = c.override_stream || c.auto_stream;
-    $('#tv-modal-stream').value = streamVal;
-    $('#tv-modal-orig-stream').textContent = c.override_stream ? `Override` : `Auto: ${c.auto_stream}`;
+    renderTvStreamRows(c.override_streams);
+    $('#tv-modal-orig-stream').textContent = (c.override_streams && c.override_streams.length)
+        ? `${c.override_streams.length} flux perso` : `Auto: ${c.auto_stream}`;
     
     const epgVal = c.override_epg || c.auto_epg;
     $('#tv-modal-epg').value = epgVal;
@@ -4134,7 +4212,7 @@ async function loadTvChannels(){
                 orig_name: c.name,
                 override_name: s.channel_names?.[id],
                 override_logo: s.channel_logos?.[id],
-                override_stream: s.channel_streams?.[id],
+                override_streams: s.channel_streams?.[id] || [],
                 override_epg: s.channel_epg?.[id],
                 auto_logo: autoLogo,
                 auto_stream: autoStream,
@@ -4153,7 +4231,7 @@ async function loadTvChannels(){
                     orig_name: c.name,
                     override_name: s.channel_names?.[c.id],
                     override_logo: s.channel_logos?.[c.id],
-                    override_stream: s.channel_streams?.[c.id],
+                    override_streams: s.channel_streams?.[c.id] || [],
                     override_epg: s.channel_epg?.[c.id],
                     auto_logo: autoLogo,
                     auto_stream: autoStream,
@@ -4592,9 +4670,9 @@ async function boot(){
     loadLogs();
     loadLive();
     restartLogPolling();
-    setInterval(refreshStats, 30000);
-    setInterval(loadLive, 5000);
-    const hp = location.hash.replace('#', '');
+    setInterval(() => { if (!document.hidden) refreshStats(); }, 30000);
+    setInterval(() => { if (!document.hidden) loadLive(); }, 5000);
+    const hp = (location.pathname.split('/dashboard/')[1] || '').replace(/\/+$/, '');
     if (hp && hp !== 'dashboard' && document.getElementById('page-' + hp)) navigateTo(hp);
 }
 
