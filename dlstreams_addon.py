@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8781"))
-_VERSION = "1.13.0"
+_VERSION = "1.13.1"
 
 # Mot de passe dashboard : si DASHBOARD_PASSWORD n'est pas fourni en variable
 # d'environnement, on en genere un aleatoire au demarrage plutot que d'utiliser
@@ -2237,6 +2237,17 @@ DASHBOARD_HTML = r"""<!doctype html>
   .stremio-cell .stremio-del:hover { background:rgba(239,68,68,.2); }
   .stremio-empty { text-align:center; color:var(--muted); padding:20px; font-size:13px; }
 
+  /* Stremio channel editor table */
+  .stremio-ch-table { display:flex; flex-direction:column; gap:4px; }
+  .stremio-ch-row { display:grid; grid-template-columns: 60px 1fr 100px 120px 160px 80px; gap:10px; align-items:center;
+    padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    transition:background .15s; }
+  .stremio-ch-row:hover { background:var(--card-hover); }
+  .stremio-ch-head { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
+    background:var(--surface3); border:1px solid var(--border); }
+  .stremio-ch-row img { border-radius:4px; }
+  .stremio-ch-row .btn-outline-sm { padding:4px 10px; font-size:11px; height:auto; }
+
   .update-time { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; white-space:nowrap; font-weight:600; }
   .update-time .spinner { width:13px; height:13px; border:2px solid var(--border);
     border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; opacity:0; }
@@ -2607,7 +2618,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div class="page-header">
             <div>
               <div class="page-title">Stremio</div>
-              <div class="page-sub">Configuration de l'addon Stremio (manifest, chaînes, logos, flux)</div>
+              <div class="page-sub">Éditeur de chaînes pour l'addon Stremio — nom, logo, flux</div>
             </div>
           </div>
 
@@ -2667,57 +2678,19 @@ DASHBOARD_HTML = r"""<!doctype html>
 
           <div class="card">
             <div class="card-head">
-              <div class="card-title">✏️ Noms de chaînes (overrides)</div>
-              <span class="card-desc" id="stremio-names-count"></span>
-            </div>
-            <div class="card-body">
-              <div class="catalog-search" style="max-width:400px;margin-bottom:12px">
-                <span class="search-ico">🔍</span>
-                <input type="search" id="stremio-names-search" placeholder="Filtrer par ID ou nom…" oninput="renderStremioNames()">
-              </div>
-              <div class="stremio-table" id="stremio-names-list">
-                <div class="logs-empty"><div class="icon">📋</div><p>Aucun override</p></div>
-              </div>
-              <div style="margin-top:12px;display:flex;gap:8px">
-                <button class="btn-outline-sm" onclick="addStremioNameRow()">➕ Ajouter</button>
+              <div class="card-title">✏️ Éditeur de chaînes (nom, logo, flux)</div>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div class="catalog-search" style="min-width:280px;flex:1">
+                  <span class="search-ico">🔍</span>
+                  <input type="search" id="stremio-ch-search" placeholder="Filtrer chaînes (nom, ID, source)…" oninput="renderStremioChannels()">
+                </div>
+                <span class="card-desc" id="stremio-ch-count"></span>
+                <button class="btn-outline-sm" onclick="loadStremioChannels()">↻ Rafraîchir liste</button>
               </div>
             </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div class="card-title">🖼️ Logos personnalisés</div>
-              <span class="card-desc" id="stremio-logos-count"></span>
-            </div>
-            <div class="card-body">
-              <div class="catalog-search" style="max-width:400px;margin-bottom:12px">
-                <span class="search-ico">🔍</span>
-                <input type="search" id="stremio-logos-search" placeholder="Filtrer par ID ou URL…" oninput="renderStremioLogos()">
-              </div>
-              <div class="stremio-table" id="stremio-logos-list">
-                <div class="logs-empty"><div class="icon">📋</div><p>Aucun logo personnalisé</p></div>
-              </div>
-              <div style="margin-top:12px;display:flex;gap:8px">
-                <button class="btn-outline-sm" onclick="addStremioLogoRow()">➕ Ajouter</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div class="card-title">🔗 Flux personnalisés</div>
-              <span class="card-desc" id="stremio-streams-count"></span>
-            </div>
-            <div class="card-body">
-              <div class="catalog-search" style="max-width:400px;margin-bottom:12px">
-                <span class="search-ico">🔍</span>
-                <input type="search" id="stremio-streams-search" placeholder="Filtrer par ID ou URL…" oninput="renderStremioStreams()">
-              </div>
-              <div class="stremio-table" id="stremio-streams-list">
-                <div class="logs-empty"><div class="icon">📋</div><p>Aucun flux personnalisé</p></div>
-              </div>
-              <div style="margin-top:12px;display:flex;gap:8px">
-                <button class="btn-outline-sm" onclick="addStremioStreamRow()">➕ Ajouter</button>
+            <div class="card-body" style="padding-top:8px">
+              <div class="stremio-ch-table" id="stremio-ch-list">
+                <div class="stremio-empty">Chargement…</div>
               </div>
             </div>
           </div>
@@ -3611,8 +3584,9 @@ async function saveSettings(){
     if(r.ok){ toast('Réglages enregistrés','success'); } else toast('Erreur d\'enregistrement','error');
 }
 
-// ===== STREMIO SETTINGS =====
-async function loadStremioSettings(){
+// ===== STREMIO CHANNEL EDITOR =====
+let _STREMIO_CHANNELS = [];
+async function loadStremioChannels(){
     try{
         const r = await apiFetch("/api/settings");
         const d = await r.json();
@@ -3623,9 +3597,40 @@ async function loadStremioSettings(){
         $('#stremio-inc-dl').checked = s.include_dlstreams !== false;
         $('#stremio-inc-vv').checked = s.include_vavoo !== false;
         updateStremioManifestUrl();
-        renderStremioNames(s.channel_names || {});
-        renderStremioLogos(s.channel_logos || {});
-        renderStremioStreams(s.channel_streams || {});
+
+        // Build unified channel list with overrides
+        const names = s.channel_names || {};
+        const logos = s.channel_logos || {};
+        const streams = s.channel_streams || {};
+
+        _STREMIO_CHANNELS = [];
+        [...(ALL.dlstreams||[]), ...(ALL.vavoo||[])].forEach(c => {
+            const id = c.id;
+            _STREMIO_CHANNELS.push({
+                id,
+                src: 'dlstreams',
+                name: c.name,
+                orig_name: c.name,
+                override_name: names[id],
+                override_logo: logos[id],
+                override_stream: streams[id],
+            });
+        });
+        [...(ALL.vavoo||[])].forEach(c => {
+            // Avoid duplicates if same ID exists in both
+            if (!_STREMIO_CHANNELS.some(x => x.id === c.id && x.src === 'vavoo')) {
+                _STREMIO_CHANNELS.push({
+                    id: c.id,
+                    src: 'vavoo',
+                    name: c.name,
+                    orig_name: c.name,
+                    override_name: names[c.id],
+                    override_logo: logos[c.id],
+                    override_stream: streams[c.id],
+                });
+            }
+        });
+        renderStremioChannels();
     }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement Stremio','error'); }
 }
 
@@ -3651,106 +3656,117 @@ async function saveStremioSettings(){
     }else toast('Erreur enregistrement','error');
 }
 
-function renderStremioNames(obj){
-    const el = $('#stremio-names-list');
-    const cnt = $('#stremio-names-count');
-    const entries = Object.entries(obj);
-    if(cnt) cnt.textContent = entries.length + (entries.length>1?' overrides':' override');
-    if(!entries.length){ el.innerHTML = '<div class="stremio-empty">Aucun override de nom</div>'; return; }
-    el.innerHTML = '<div class="stremio-row stremio-row-head"><div>ID</div><div>Nom personnalisé</div><div>Nom original</div><div></div></div>' +
-        entries.map(([id, name]) => {
-            const orig = (ALL.dlstreams.find(c=>c.id===id) || ALL.vavoo.find(c=>c.id===id) || {}).name || '—';
-            return `<div class="stremio-row"><div class="stremio-cell">${escapeHtml(id)}</div>
-                <div class="stremio-cell"><input value="${escapeHtml(name)}" onchange="updateStremioName('${escapeHtml(id)}', this.value)"></div>
-                <div class="stremio-cell" style="color:var(--text2)">${escapeHtml(orig)}</div>
-                <div class="stremio-cell"><button class="stremio-del" onclick="deleteStremioName('${escapeHtml(id)}')">🗑️</button></div></div>`;
+function renderStremioChannels(){
+    const q = ($('#stremio-ch-search').value || '').toLowerCase().trim();
+    const list = $('#stremio-ch-list');
+    const cnt = $('#stremio-ch-count');
+    let channels = _STREMIO_CHANNELS;
+    if(q) channels = channels.filter(c =>
+        (c.id||'').toLowerCase().includes(q) ||
+        (c.name||'').toLowerCase().includes(q) ||
+        (c.src||'').toLowerCase().includes(q)
+    );
+    if(cnt) cnt.textContent = channels.length + (channels.length>1?' chaînes':' chaîne');
+    if(!channels.length){
+        list.innerHTML = '<div class="stremio-empty">Aucune chaîne</div>';
+        return;
+    }
+    list.innerHTML = '<div class="stremio-ch-row stremio-ch-head"><div style="width:60px">ID</div><div>Nom</div><div style="width:100px">Source</div><div style="width:120px">Logo</div><div style="width:160px">Flux</div><div style="width:80px"></div></div>' +
+        channels.map(c => {
+            const hasName = !!c.override_name;
+            const hasLogo = !!c.override_logo;
+            const hasStream = !!c.override_stream;
+            const logoPreview = c.override_logo ? `<img src="${escapeHtml(c.override_logo)}" style="width:32px;height:18px;object-fit:cover;border-radius:3px;border:1px solid var(--border)" onerror="this.style.display='none'">` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
+            const streamPreview = c.override_stream ? `<span style="color:var(--accent);font-family:var(--font-mono);font-size:11px">${escapeHtml(c.override_stream).substring(0,50)}…</span>` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
+            const nameDisplay = c.override_name ? `<span style="color:var(--accent)">${escapeHtml(c.override_name)}</span>` : `<span style="color:var(--text2)">${escapeHtml(c.orig_name)}</span>`;
+            return `<div class="stremio-ch-row" data-id="${escapeHtml(c.id)}" data-src="${escapeHtml(c.src)}">
+                <div style="width:60px;font-family:var(--font-mono);font-size:11px;color:var(--text2)">${escapeHtml(c.id)}</div>
+                <div>${nameDisplay}</div>
+                <div style="width:100px;text-transform:uppercase;font-size:11px;color:var(--muted)">${c.src}</div>
+                <div style="width:120px">${logoPreview}</div>
+                <div style="width:160px">${streamPreview}</div>
+                <div style="width:80px"><button class="btn-outline-sm" onclick="editStremioChannel('${escapeHtml(c.id)}','${escapeHtml(c.src)}')" style="padding:4px 10px;font-size:11px">✏️</button></div>
+            </div>`;
         }).join('');
 }
 
-function renderStremioLogos(obj){
-    const el = $('#stremio-logos-list');
-    const cnt = $('#stremio-logos-count');
-    const entries = Object.entries(obj);
-    if(cnt) cnt.textContent = entries.length + (entries.length>1?' logos':' logo');
-    if(!entries.length){ el.innerHTML = '<div class="stremio-empty">Aucun logo personnalisé</div>'; return; }
-    el.innerHTML = '<div class="stremio-row stremio-row-head"><div>ID</div><div>URL du logo</div><div>Aperçu</div><div></div></div>' +
-        entries.map(([id, url]) => `<div class="stremio-row"><div class="stremio-cell">${escapeHtml(id)}</div>
-            <div class="stremio-cell"><input value="${escapeHtml(url)}" onchange="updateStremioLogo('${escapeHtml(id)}', this.value)"></div>
-            <div class="stremio-cell"><img src="${escapeHtml(url)}" alt="" style="width:40px;height:22px;object-fit:cover;border-radius:4px;border:1px solid var(--border)" onerror="this.style.display='none'"></div>
-            <div class="stremio-cell"><button class="stremio-del" onclick="deleteStremioLogo('${escapeHtml(id)}')">🗑️</button></div></div>`).join('');
+function editStremioChannel(id, src){
+    const c = _STREMIO_CHANNELS.find(x => x.id === id && x.src === src);
+    if(!c) return;
+    document.getElementById('stremio-channel-form').style.display = 'block';
+    $('#stremio-ch-id').value = c.id;
+    $('#stremio-ch-src').value = c.src;
+    $('#stremio-ch-name').value = c.override_name || '';
+    $('#stremio-ch-orig-name').textContent = c.orig_name ? `Original: ${c.orig_name}` : '';
+    $('#stremio-ch-logo').value = c.override_logo || '';
+    $('#stremio-ch-logo-preview').src = c.override_logo || '';
+    $('#stremio-ch-logo-preview').style.display = c.override_logo ? 'inline-block' : 'none';
+    $('#stremio-ch-orig-logo').textContent = c.override_logo ? '' : `Auto: /logo/${c.src}/${c.id}.png`;
+    $('#stremio-ch-stream').value = c.override_stream || '';
+    $('#stremio-ch-orig-stream').style.display = c.override_stream ? 'none' : 'inline';
+    window._editingStremio = {id: c.id, src: c.src};
+    $('#stremio-ch-name').focus();
 }
 
-function renderStremioStreams(obj){
-    const el = $('#stremio-streams-list');
-    const cnt = $('#stremio-streams-count');
-    const entries = Object.entries(obj);
-    if(cnt) cnt.textContent = entries.length + (entries.length>1?' flux':' flux');
-    if(!entries.length){ el.innerHTML = '<div class="stremio-empty">Aucun flux personnalisé</div>'; return; }
-    el.innerHTML = '<div class="stremio-row stremio-row-head"><div>ID</div><div>URL du flux (m3u8/mpd)</div><div>Test</div><div></div></div>' +
-        entries.map(([id, url]) => `<div class="stremio-row"><div class="stremio-cell">${escapeHtml(id)}</div>
-            <div class="stremio-cell"><input value="${escapeHtml(url)}" onchange="updateStremioStream('${escapeHtml(id)}', this.value)"></div>
-            <div class="stremio-cell"><button class="btn-outline-sm" onclick="testStremioStream('${escapeHtml(url)}')">▶ Test</button></div>
-            <div class="stremio-cell"><button class="stremio-del" onclick="deleteStremioStream('${escapeHtml(id)}')">🗑️</button></div></div>`).join('');
+function resetStremioChannel(){
+    if(!window._editingStremio) return;
+    const c = _STREMIO_CHANNELS.find(x => x.id === window._editingStremio.id && x.src === window._editingStremio.src);
+    if(!c) return;
+    $('#stremio-ch-name').value = c.override_name || '';
+    $('#stremio-ch-logo').value = c.override_logo || '';
+    $('#stremio-ch-logo-preview').src = c.override_logo || '';
+    $('#stremio-ch-logo-preview').style.display = c.override_logo ? 'inline-block' : 'none';
+    $('#stremio-ch-stream').value = c.override_stream || '';
+    $('#stremio-ch-name').focus();
 }
 
-async function addStremioNameRow(){
-    const id = prompt('ID de la chaîne (ex: 401 pour TF1):');
-    if(!id) return;
-    const name = prompt('Nom personnalisé:');
-    if(!name) return;
-    const s = { ...(_settings.stremio||{}), channel_names: { ...(_settings.stremio?.channel_names||{}), [id]: name } };
-    await saveStremioObj({channel_names: s.channel_names});
+async function saveStremioChannel(){
+    const e = window._editingStremio;
+    if(!e) return;
+    const name = $('#stremio-ch-name').value.trim();
+    const logo = $('#stremio-ch-logo').value.trim();
+    const stream = $('#stremio-ch-stream').value.trim();
+
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+        stremio: {
+            channel_names: { ...(_settings.stremio?.channel_names||{}), [e.id]: name || undefined },
+            channel_logos: { ...(_settings.stremio?.channel_logos||{}), [e.id]: logo || undefined },
+            channel_streams: { ...(_settings.stremio?.channel_streams||{}), [e.id]: stream || undefined },
+        }
+    })});
+    if(r.ok){
+        toast('Chaîne enregistrée','success');
+        await loadStremioChannels();
+        cancelStremioChannel();
+    }else toast('Erreur','error');
 }
 
-async function addStremioLogoRow(){
-    const id = prompt('ID de la chaîne:');
-    if(!id) return;
-    const url = prompt('URL du logo (png/jpg):');
-    if(!url) return;
-    const s = { ...(_settings.stremio||{}), channel_logos: { ...(_settings.stremio?.channel_logos||{}), [id]: url } };
-    await saveStremioObj({channel_logos: s.channel_logos});
+async function deleteStremioChannel(){
+    if(!window._editingStremio) return;
+    if(!confirm('Supprimer l\'override de cette chaîne ?')) return;
+    const e = window._editingStremio;
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+        stremio: {
+            channel_names: Object.fromEntries(Object.entries(_settings.stremio?.channel_names||{}).filter(([k])=>k!==e.id)),
+            channel_logos: Object.fromEntries(Object.entries(_settings.stremio?.channel_logos||{}).filter(([k])=>k!==e.id)),
+            channel_streams: Object.fromEntries(Object.entries(_settings.stremio?.channel_streams||{}).filter(([k])=>k!==e.id)),
+        }
+    })});
+    if(r.ok){
+        toast('Override supprimé','success');
+        await loadStremioChannels();
+        cancelStremioChannel();
+    }else toast('Erreur','error');
 }
 
-async function addStremioStreamRow(){
-    const id = prompt('ID de la chaîne:');
-    if(!id) return;
-    const url = prompt('URL du flux (m3u8/mpd):');
-    if(!url) return;
-    const s = { ...(_settings.stremio||{}), channel_streams: { ...(_settings.stremio?.channel_streams||{}), [id]: url } };
-    await saveStremioObj({channel_streams: s.channel_streams});
+function cancelStremioChannel(){
+    document.getElementById('stremio-channel-form').style.display = 'none';
+    window._editingStremio = null;
 }
 
-function updateStremioName(id, name){
-    const s = { ...(_settings.stremio||{}), channel_names: { ...(_settings.stremio?.channel_names||{}), [id]: name } };
-    saveStremioObj({channel_names: s.channel_names});
-}
-
-function updateStremioLogo(id, url){
-    const s = { ...(_settings.stremio||{}), channel_logos: { ...(_settings.stremio?.channel_logos||{}), [id]: url } };
-    saveStremioObj({channel_logos: s.channel_logos});
-}
-
-function updateStremioStream(id, url){
-    const s = { ...(_settings.stremio||{}), channel_streams: { ...(_settings.stremio?.channel_streams||{}), [id]: url } };
-    saveStremioObj({channel_streams: s.channel_streams});
-}
-
-function deleteStremioName(id){
-    const obj = { ...(_settings.stremio?.channel_names||{}) };
-    delete obj[id];
-    saveStremioObj({channel_names: obj});
-}
-
-function deleteStremioLogo(id){
-    const obj = { ...(_settings.stremio?.channel_logos||{}) };
-    delete obj[id];
-    saveStremioObj({channel_logos: obj});
-}
-
-function deleteStremioStream(id){
-    const obj = { ...(_settings.stremio?.channel_streams||{}) };
-    delete obj[id];
-    saveStremioObj({channel_streams: obj});
+function testStremioChannelStream(){
+    const url = $('#stremio-ch-stream').value.trim();
+    if(url) window.open(url, '_blank');
 }
 
 async function saveStremioObj(patch){
@@ -3758,9 +3774,6 @@ async function saveStremioObj(patch){
     const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:s})});
     if(r.ok){
         _settings.stremio = s;
-        if(patch.channel_names) renderStremioNames(s.channel_names);
-        if(patch.channel_logos) renderStremioLogos(s.channel_logos);
-        if(patch.channel_streams) renderStremioStreams(s.channel_streams);
         toast('Enregistré','success');
     }else toast('Erreur','error');
 }
