@@ -1,8 +1,8 @@
 services:
-  dlstreams-addon:
+  waddontv:
     build: .
-    image: dlstreams-addon
-    container_name: dlstreams-addon
+    image: waddontv
+    container_name: waddontv
     ports:
       - "8781:8781"        # Stremio/VLC accedent via http://<ip-hote>:8781
     restart: unless-stopped

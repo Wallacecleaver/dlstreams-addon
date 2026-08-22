@@ -1945,7 +1945,7 @@ class Handler(BaseHTTPRequestHandler):
                        "options": _GENRE_CHOICES}]
 
             st = _settings.get("stremio", {})
-            name = st.get("manifest_name") or "Chaînes live (dlstreams + Vavoo)"
+            name = st.get("manifest_name") or "W Addon TV"
             desc = st.get("manifest_desc") or ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
                     "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
 
@@ -1958,9 +1958,9 @@ class Handler(BaseHTTPRequestHandler):
                     desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
 
             catalogs = []
-            if st.get("include_dlstreams", True):
-                catalogs.append({"type": "tv", "id": "dlstreams", "name": "dlstreams",
-                              "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+if st.get("include_dlstreams", True):
+                catalogs.append({"type": "tv", "id": "dlstreams", "name": "W Addon TV",
+                               "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
             if st.get("include_vavoo", True):
                 catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
                               "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
@@ -1971,7 +1971,7 @@ class Handler(BaseHTTPRequestHandler):
                               "extra": _extra, "extraSupported": ["search", "skip"]})
 
             return {
-                "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
+                "id": "st.waddontv.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
                 "version": _VERSION,
                 "name": name,
                 "description": desc,
@@ -2067,7 +2067,7 @@ def main():
     _sessions_load()
     _settings_load()
     _epg_load()
-    log.info(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
+    log.info(f"W Addon TV addon+proxy sur http://0.0.0.0:{PORT}")
     log.info(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     log.info(f"  Configure: http://127.0.0.1:{PORT}/configure")
     log.info(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json?lang=fr")

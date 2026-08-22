@@ -1,4 +1,4 @@
-# dlstreams -> Stremio : addon + proxy autonome.
+# W Addon TV -> Stremio : addon + proxy autonome.
 # Zero dependance (stdlib pure) -> image minimale, rien a installer.
 FROM python:3.12-slim
 WORKDIR /app

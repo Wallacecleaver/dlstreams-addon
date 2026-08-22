@@ -1,4 +1,4 @@
-# dlstreams → Stremio (addon + proxy autonome)
+# W Addon TV → Stremio (addon + proxy autonome)
 
 Récupère les chaînes live de **dlstreams.st** (réseau DaddyLive) et les sert :
 
