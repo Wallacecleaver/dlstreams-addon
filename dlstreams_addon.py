@@ -2053,7 +2053,7 @@ class Handler(BaseHTTPRequestHandler):
             catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
                           "extra": _extra, "extraSupported": ["search", "skip"]})
 
-return {
+        return {
             "id": "st.waddontv.proxy.fr",
             "version": _VERSION,
             "name": name,
