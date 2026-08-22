@@ -1,0 +1,10 @@
+services:
+  waddontv:
+    build: .
+    image: waddontv
+    container_name: waddontv
+    ports:
+      - "8781:8781"           # Stremio/VLC accedent via http://<ip-hote>:8781
+    restart: unless-stopped
+    # environment:
+    #   PORT: "8781"          # decommenter pour changer le port (adapter le mapping ci-dessus)
