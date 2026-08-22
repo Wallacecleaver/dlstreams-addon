@@ -950,7 +950,9 @@ def _b64u(s: str) -> str:
     return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
 
 def _unb64u(s: str) -> str:
-    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4)).decode()
+    # Handle missing padding robustly
+    padding = 4 - (len(s) % 4) if len(s) % 4 else 0
+    return base64.urlsafe_b64decode(s + "=" * padding).decode()
 
 # Secret par process : signe les URLs proxifiees pour que /px et /sx ne relaient QUE des URLs
 # generees par nous (sinon relais/SSRF ouvert : n'importe qui proxifierait n'importe quoi via l'instance).
