@@ -1693,9 +1693,15 @@ class Handler(BaseHTTPRequestHandler):
                     url = _unb64u(cid)
                     c = next((x for x in vavoo_channels() if x["id"] == url), None)
                     if c is None:
-                        # Fallback: essaie de retrouver la chaîne par nom (si cid est une play URL résolue)
-                        # On ne peut pas inverser la résolution, donc on retourne un fallback générique
-                        c = {"id": url, "name": "Vavoo", "logo": ""}
+                        # Fallback: cherche par nom normalisé dans le catalogue vavoo
+                        # (au cas où l'ID serait une play URL différente de celle en cache)
+                        for ch in vavoo_channels():
+                            if ch.get("logo") and ch.get("name"):
+                                # Le nom suffit pour récupérer le logo via _logo_bytes
+                                c = ch
+                                break
+                        if c is None:
+                            c = {"id": url, "name": "Vavoo", "logo": ""}
                 else:
                     c = next((x for x in channels() if str(x.get("id")) == str(cid)),
                              {"id": cid, "name": f"dlstreams {cid}", "logo": ""})
