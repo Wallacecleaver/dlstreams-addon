@@ -1931,56 +1931,56 @@ class Handler(BaseHTTPRequestHandler):
             _log_activity("Logs effacés")
             return self._send(200, json.dumps({"success": True}).encode(), "application/json")
 
-        return self._send(404, b"not found", "text/plain")
+return self._send(404, b"not found", "text/plain")
 
-def _manifest(self, lang_filter: str | None = None) -> dict:
-            _extra = [{"name": "search", "isRequired": False},
-                      {"name": "skip", "isRequired": False},
-                      {"name": "genre", "isRequired": False,
-                       "options": _GENRE_CHOICES}]
+    def _manifest(self, lang_filter: str | None = None) -> dict:
+        _extra = [{"name": "search", "isRequired": False},
+                  {"name": "skip", "isRequired": False},
+                  {"name": "genre", "isRequired": False,
+                   "options": _GENRE_CHOICES}]
 
-            st = _settings.get("stremio", {})
-            name = st.get("manifest_name") or "Chaînes live (dlstreams + Vavoo)"
-            desc = st.get("manifest_desc") or ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
-                    "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
+        st = _settings.get("stremio", {})
+        name = st.get("manifest_name") or "W Addon TV"
+        desc = st.get("manifest_desc") or ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
+                "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
 
-            if lang_filter and lang_filter != "all":
-                lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
-                lang_name = lang_names.get(lang_filter, lang_filter)
-                if not st.get("manifest_name"):
-                    name = f"Chaînes live {lang_name}"
-                if not st.get("manifest_desc"):
-                    desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
+        if lang_filter and lang_filter != "all":
+            lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
+            lang_name = lang_names.get(lang_filter, lang_filter)
+            if not st.get("manifest_name"):
+                name = f"Chaînes live {lang_name}"
+            if not st.get("manifest_desc"):
+                desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
 
-            catalogs = []
-            if st.get("include_dlstreams", True):
-                catalogs.append({"type": "tv", "id": "dlstreams", "name": "dlstreams",
-                              "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
-            if st.get("include_vavoo", True):
-                catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
-                              "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
-            # Custom channels catalog
-            custom_channels = st.get("custom_channels", {})
-            if custom_channels:
-                catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
-                              "extra": _extra, "extraSupported": ["search", "skip"]})
+        catalogs = []
+        if st.get("include_dlstreams", True):
+            catalogs.append({"type": "tv", "id": "dlstreams", "name": "W Addon TV",
+                           "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+        if st.get("include_vavoo", True):
+            catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
+                          "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+        # Custom channels catalog
+        custom_channels = st.get("custom_channels", {})
+        if custom_channels:
+            catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
+                          "extra": _extra, "extraSupported": ["search", "skip"]})
 
-            return {
-                "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
-                "version": _VERSION,
-                "name": name,
-                "description": desc,
-                "resources": ["catalog", "meta", "stream"],
-                "types": ["tv"],
-                "idPrefixes": ["dlstreams:", "vavoo:", "custom:"],
-                "catalogs": catalogs,
-                "behaviorHints": {
-                    "configurable": True,
-                    "configurationRequired": False,
-                    "adultContent": False,
-                    "p2p": False
-                }
+        return {
+            "id": "st.waddontv.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
+            "version": _VERSION,
+            "name": name,
+            "description": desc,
+            "resources": ["catalog", "meta", "stream"],
+            "types": ["tv"],
+            "idPrefixes": ["dlstreams:", "vavoo:", "custom:"],
+            "catalogs": catalogs,
+            "behaviorHints": {
+                "configurable": True,
+                "configurationRequired": False,
+                "adultContent": False,
+                "p2p": False
             }
+        }
 
     def _meta(self, c: dict, source: str) -> dict:
         # Normalize ID: for vavoo, the catalog stores the raw URL, we need to b64 encode for Stremio
