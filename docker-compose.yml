@@ -8,9 +8,14 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - ./dlstreams_settings.json:/app/dlstreams_settings.json
+      - ./dlstreams_sessions.json:/app/dlstreams_sessions.json
+      - ./dlstreams_hist.json:/app/dlstreams_hist.json
+      - ./dlstreams_epg.json:/app/dlstreams_epg.json
 
-# Profil dev : build local depuis les sources
-# Usage: docker compose --profile dev up -d --build
+  # Profil dev : build local depuis les sources
+  # Usage: docker compose --profile dev up -d --build
   waddontv-dev:
     build: .
     image: waddontv-dev
