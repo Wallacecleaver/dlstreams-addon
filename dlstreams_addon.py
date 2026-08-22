@@ -1771,6 +1771,7 @@ class Handler(BaseHTTPRequestHandler):
                 if g:
                     chans = [c for c in chans if g in _genres_for(c["name"])]
                 skip = int(params.get("skip") or 0)
+                # Ensure consistent IDs: for vavoo, use raw URL as ID (will be b64 encoded in _meta)
                 metas = [self._meta(c, catid) for c in chans[skip:skip + 100]]
                 return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
 
@@ -1778,6 +1779,7 @@ class Handler(BaseHTTPRequestHandler):
                 seg = urllib.parse.unquote(path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 if source == "vavoo":
+                    # cid is already b64 encoded from Stremio, decode to get raw URL
                     url = _unb64u(cid)
                     c = next((x for x in vavoo_channels() if x["id"] == url), {"id": url, "name": "Vavoo"})
                 else:
@@ -1790,22 +1792,24 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
+                    # cid is already b64 encoded from Stremio
                     streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 
                 st = _settings.get("stremio", {})
                 streams = []
                 
-                # Custom channels (fully custom)
+                # Custom channels (fully custom) - cid is raw ID for custom
                 custom_channels = st.get("custom_channels", {})
                 if cid in custom_channels:
                     cc = custom_channels[cid]
                     for idx, stream_url in enumerate(cc.get("streams", [])):
                         streams.append({"name": "Personnalisé", "title": f"{cc.get('name', 'Custom')}  Source {idx+1}",
-                                    "url": f"{b}/custom/{cid}/s{idx}/index.m3u8"})
+                                    "url": f"{b}/hls/custom/{cid}/s{idx}/index.m3u8"})
                     if streams:
                         return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 
+                # For dlstreams, cid is the raw numeric ID
                 # Regular channels with custom streams (now array)
                 custom_streams = st.get("channel_streams", {}).get(cid, [])
                 if isinstance(custom_streams, str):
@@ -1827,6 +1831,29 @@ class Handler(BaseHTTPRequestHandler):
 
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
+                # /hls/<cid>/... or /hls/custom/<cid>/s<idx>/...
+                if parts[2] == "custom":
+                    # /hls/custom/<cid>/s<idx>/index.m3u8
+                    cid = parts[3]
+                    seg4 = parts[4] if len(parts) == 6 else ""
+                    if seg4.startswith("s") and seg4[1:].isdigit():
+                        idx = int(seg4[1:])
+                        st = _settings.get("stremio", {})
+                        custom_channels = st.get("custom_channels", {})
+                        cc = custom_channels.get(cid, {})
+                        streams = cc.get("streams", [])
+                        if idx >= len(streams):
+                            return self._send(404, b"flux custom inconnu", "text/plain")
+                        m3u8 = streams[idx]
+                        host = urllib.parse.urlsplit(m3u8).netloc
+                        _track_play("custom", cid)
+                        hdr = {"Referer": host + "/", "Origin": host}
+                        henc = _b64u(json.dumps(hdr))
+                        text = _proxy_get(m3u8, hdr).decode("utf-8", "replace")
+                        return self._send(200, _rewrite_playlist(text, m3u8, henc, self._self_base()).encode(),
+                                          "application/vnd.apple.mpegurl")
+                    return self._send(404, b"format custom invalide", "text/plain")
+                
                 cid = parts[2]
                 st = _settings.get("stremio", {})
                 seg3 = parts[3] if len(parts) == 5 else ""
@@ -1906,7 +1933,7 @@ class Handler(BaseHTTPRequestHandler):
 
         return self._send(404, b"not found", "text/plain")
 
-    def _manifest(self, lang_filter: str | None = None) -> dict:
+def _manifest(self, lang_filter: str | None = None) -> dict:
             _extra = [{"name": "search", "isRequired": False},
                       {"name": "skip", "isRequired": False},
                       {"name": "genre", "isRequired": False,
@@ -1947,10 +1974,23 @@ class Handler(BaseHTTPRequestHandler):
                 "types": ["tv"],
                 "idPrefixes": ["dlstreams:", "vavoo:", "custom:"],
                 "catalogs": catalogs,
+                "behaviorHints": {
+                    "configurable": True,
+                    "configurationRequired": False,
+                    "adultContent": False,
+                    "p2p": False
+                }
             }
 
     def _meta(self, c: dict, source: str) -> dict:
-        cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
+        # Normalize ID: for vavoo, the catalog stores the raw URL, we need to b64 encode for Stremio
+        raw_id = c["id"]
+        if source == "vavoo":
+            cid = _b64u(raw_id)
+        elif source == "dlstreams":
+            cid = raw_id
+        else:
+            cid = raw_id
         base = self._self_base()
 
         st = _settings.get("stremio", {})
@@ -1981,16 +2021,12 @@ class Handler(BaseHTTPRequestHandler):
                     "genres": genres}
         
         # Regular channels
-        cid = c["id"] if source == "dlstreams" else _b64u(c["id"])
-        base = self._self_base()
-
-        st = _settings.get("stremio", {})
-        # Custom name
-        custom_name = st.get("channel_names", {}).get(str(c["id"]))
+        # Use raw_id for settings lookup (channel_names, channel_logos use raw IDs)
+        custom_name = st.get("channel_names", {}).get(str(raw_id))
         display_name = custom_name if custom_name else c["name"]
 
         # Custom logo
-        custom_logo = st.get("channel_logos", {}).get(str(c["id"]))
+        custom_logo = st.get("channel_logos", {}).get(str(raw_id))
         if _settings.get("logos", True) and custom_logo:
             poster = custom_logo
         elif _settings.get("logos", True):
@@ -2009,8 +2045,8 @@ class Handler(BaseHTTPRequestHandler):
         if source == "dlstreams":
             # Check for custom EPG ID override
             st = _settings.get("stremio", {})
-            custom_epg_id = st.get("channel_epg", {}).get(str(c["id"]))
-            epg_lookup_id = custom_epg_id if custom_epg_id else c["id"]
+            custom_epg_id = st.get("channel_epg", {}).get(str(raw_id))
+            epg_lookup_id = custom_epg_id if custom_epg_id else raw_id
             cur, nxt = _epg_slot(epg_lookup_id)
             if cur:
                 t0 = time.strftime("%H:%M", time.localtime(cur["start"]))
