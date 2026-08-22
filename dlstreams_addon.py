@@ -1844,7 +1844,13 @@ class Handler(BaseHTTPRequestHandler):
                     metas = metas[skip:skip + 100]
                     return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
 
-                chans = vavoo_channels() if catid == "vavoo" else channels(lang_filter=lang_filter)
+                # dlstreams = seulement chaînes françaises (force lang=fr)
+                if catid == "dlstreams":
+                    chans = channels(lang_filter="fr")
+                elif catid == "vavoo":
+                    chans = vavoo_channels()
+                else:
+                    chans = channels(lang_filter=lang_filter)
                 q = params.get("search", "").lower().strip()
                 if q:
                     words = q.replace("+", " ").split()
