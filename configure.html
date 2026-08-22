@@ -145,15 +145,6 @@
     <div class="section-header"><div class="section-line"></div><div class="section-label">Affichage & Lecture</div><div class="section-line"></div></div>
     <div class="config-card">
       <div class="config-field">
-        <label class="toggle-card" for="cfg-logos">
-          <input type="checkbox" id="cfg-logos" checked>
-          <span class="toggle-text">
-            <span class="toggle-title">Afficher les logos des chaînes</span>
-            <span class="toggle-desc">Récupère les logos officiels (epg.best) pour chaque chaîne.</span>
-          </span>
-        </label>
-      </div>
-      <div class="config-field">
         <label class="toggle-card" for="cfg-epg">
           <input type="checkbox" id="cfg-epg" checked>
           <span class="toggle-text">
@@ -161,27 +152,6 @@
             <span class="toggle-desc">Affiche « En ce moment » et « À suivre » via xmltvfr.fr.</span>
           </span>
         </label>
-      </div>
-      <div class="config-field">
-        <label for="cfg-lang">Langue par défaut</label>
-        <select id="cfg-lang">
-          <option value="fr">Français</option>
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="de">Deutsch</option>
-          <option value="it">Italiano</option>
-        </select>
-        <div class="hint">Langue utilisée pour le catalogue et les métadonnées.</div>
-      </div>
-      <div class="config-field">
-        <label for="cfg-quality">Qualité préférée</label>
-        <select id="cfg-quality">
-          <option value="auto">Auto (meilleur dispo)</option>
-          <option value="1080p">1080p max</option>
-          <option value="720p">720p max</option>
-          <option value="480p">480p max</option>
-        </select>
-        <div class="hint">Sélectionne le player par défaut. « Auto » prend le premier qui fonctionne.</div>
       </div>
     </div>
 
@@ -193,15 +163,6 @@
           <span class="toggle-text">
             <span class="toggle-title">Inclure le catalogue Vavoo</span>
             <span class="toggle-desc">Ajoute les chaînes Vavoo en plus de dlstreams (plus de choix, mais moins stables).</span>
-          </span>
-        </label>
-      </div>
-      <div class="config-field">
-        <label class="toggle-card" for="cfg-adult">
-          <input type="checkbox" id="cfg-adult">
-          <span class="toggle-text">
-            <span class="toggle-title">Inclure les chaînes adultes</span>
-            <span class="toggle-desc">Affiche les chaînes 18+ si disponibles sur les sources.</span>
           </span>
         </label>
       </div>
@@ -233,21 +194,13 @@
     function buildConfig() {
       const pseudo = document.getElementById('cfg-pseudo').value.trim();
       const device = document.getElementById('cfg-device').value.trim();
-      const logos = document.getElementById('cfg-logos').checked;
       const epg = document.getElementById('cfg-epg').checked;
-      const lang = document.getElementById('cfg-lang').value;
-      const quality = document.getElementById('cfg-quality').value;
       const vavoo = document.getElementById('cfg-vavoo').checked;
-      const adult = document.getElementById('cfg-adult').checked;
       const cfg = {};
       if (pseudo) cfg.pseudo = pseudo.slice(0, 32);
       if (device) cfg.device = device.slice(0, 32);
-      if (!logos) cfg.logos = false;
       if (!epg) cfg.epg = false;
-      if (lang !== 'fr') cfg.lang = lang;
-      if (quality !== 'auto') cfg.quality = quality;
       if (!vavoo) cfg.vavoo = false;
-      if (adult) cfg.adult = true;
       return Object.keys(cfg).length ? b64urlEncode(JSON.stringify(cfg)) : '';
     }
 
@@ -262,29 +215,19 @@
     // Reste 100% côté navigateur, rien n'est envoyé nulle part avant de cliquer "Installer".
     const STORAGE_KEYS = {
       pseudo: 'waddontv_pseudo', device: 'waddontv_device',
-      logos: 'waddontv_logos', epg: 'waddontv_epg',
-      lang: 'waddontv_lang', quality: 'waddontv_quality',
-      vavoo: 'waddontv_vavoo', adult: 'waddontv_adult',
+      epg: 'waddontv_epg', vavoo: 'waddontv_vavoo',
     };
 
     function loadSavedValues() {
       try {
         const pseudo = localStorage.getItem(STORAGE_KEYS.pseudo);
         const device = localStorage.getItem(STORAGE_KEYS.device);
-        const logos = localStorage.getItem(STORAGE_KEYS.logos);
         const epg = localStorage.getItem(STORAGE_KEYS.epg);
-        const lang = localStorage.getItem(STORAGE_KEYS.lang);
-        const quality = localStorage.getItem(STORAGE_KEYS.quality);
         const vavoo = localStorage.getItem(STORAGE_KEYS.vavoo);
-        const adult = localStorage.getItem(STORAGE_KEYS.adult);
         if (pseudo) document.getElementById('cfg-pseudo').value = pseudo;
         if (device) document.getElementById('cfg-device').value = device;
-        if (logos !== null) document.getElementById('cfg-logos').checked = logos === '1';
         if (epg !== null) document.getElementById('cfg-epg').checked = epg === '1';
-        if (lang) document.getElementById('cfg-lang').value = lang;
-        if (quality) document.getElementById('cfg-quality').value = quality;
         if (vavoo !== null) document.getElementById('cfg-vavoo').checked = vavoo === '1';
-        if (adult !== null) document.getElementById('cfg-adult').checked = adult === '1';
       } catch (e) { /* navigation privée -> silencieux */ }
     }
 
@@ -292,16 +235,12 @@
       try {
         localStorage.setItem(STORAGE_KEYS.pseudo, document.getElementById('cfg-pseudo').value.trim());
         localStorage.setItem(STORAGE_KEYS.device, document.getElementById('cfg-device').value.trim());
-        localStorage.setItem(STORAGE_KEYS.logos, document.getElementById('cfg-logos').checked ? '1' : '0');
         localStorage.setItem(STORAGE_KEYS.epg, document.getElementById('cfg-epg').checked ? '1' : '0');
-        localStorage.setItem(STORAGE_KEYS.lang, document.getElementById('cfg-lang').value);
-        localStorage.setItem(STORAGE_KEYS.quality, document.getElementById('cfg-quality').value);
         localStorage.setItem(STORAGE_KEYS.vavoo, document.getElementById('cfg-vavoo').checked ? '1' : '0');
-        localStorage.setItem(STORAGE_KEYS.adult, document.getElementById('cfg-adult').checked ? '1' : '0');
       } catch (e) { /* silencieux */ }
     }
 
-    ['cfg-pseudo', 'cfg-device', 'cfg-logos', 'cfg-epg', 'cfg-lang', 'cfg-quality', 'cfg-vavoo', 'cfg-adult'].forEach(id => {
+    ['cfg-pseudo', 'cfg-device', 'cfg-epg', 'cfg-vavoo'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', saveValuesLocally);
     });
