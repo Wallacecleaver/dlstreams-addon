@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dlstreams — configuration</title>
+<style>
+    :root{--primary:#6366f1;--secondary:#ec4899;--bg:#0f172a;--bg2:#1e293b;--card:#1e293b;--border:#334155;--text:#f1f5f9;--muted:#94a3b8;--ok:#10b981;--gradient:linear-gradient(135deg,#6366f1 0%,#ec4899 100%)}
+    *{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);background-image:radial-gradient(circle at 20% 50%,rgba(99,102,241,0.15) 0%,transparent 50%),radial-gradient(circle at 80% 80%,rgba(236,72,153,0.15) 0%,transparent 50%);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+    header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px}
+    header .logo{width:40px;height:40px;border-radius:10px;background:var(--gradient);display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(99,102,241,.3)}
+    header h1{margin:0;font-size:20px;letter-spacing:.3px;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    main{padding:24px;max-width:800px;margin:0 auto}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
+    .card h2{margin:0 0 16px;color:var(--muted);font-size:15px;text-transform:uppercase;letter-spacing:.1em}
+    .lang-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
+    .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
+    .lang-btn:hover{border-color:var(--primary);transform:translateY(-2px)}
+    .lang-btn.selected{border-color:var(--ok);background:rgba(16,185,129,.1)}
+    .lang-flag{font-size:24px}.lang-name{font-weight:600}.lang-count{color:var(--muted);font-size:12px;margin-top:2px}
+    .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
+    .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
+    .copy:hover{color:var(--text);border-color:var(--primary)}
+    .info{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}
+    .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(99,102,241,.15);color:var(--primary);margin-left:6px}
+    a{color:var(--primary);text-decoration:none}a:hover{color:var(--secondary)}
+</style>
+</head>
+<body>
+<header><div class="logo">▶</div><div><h1>Configuration <span class="badge">langue</span></h1></div></header>
+<main>
+  <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
+    <div class="lang-grid" id="lang-grid">
+      <button class="lang-btn" data-lang="all"><span class="lang-flag">🌍</span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
+      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
+      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
+      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇪🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
+      <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
+      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
+      <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
+      <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇵🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
+    </div>
+  </div>
+  <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
+    <div class="manifest-box" id="manifest-url">—</div>
+    <button class="copy" id="copy-btn">📋 Copier l'URL</button>
+    <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
+  </div>
+  <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
+    <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
+    <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
+    <div><a href="/">→ Retour accueil</a></div>
+  </div></div>
+</main>
+<script>
+const BASE = location.origin;
+const $ = s => document.querySelector(s);
+let CURRENT_LANG = "fr";
+document.querySelectorAll(".lang-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    CURRENT_LANG = btn.dataset.lang;
+    updateManifest();
+  });
+});
+function updateManifest() {
+  const url = CURRENT_LANG === "all" 
+    ? `${BASE}/manifest.json`
+    : `${BASE}/manifest.json?lang=${CURRENT_LANG}`;
+  $("#manifest-url").textContent = url;
+}
+$("#copy-btn").addEventListener("click", () => {
+  const url = $("#manifest-url").textContent;
+  navigator.clipboard.writeText(url).then(() => {
+    const old = $("#copy-btn").textContent;
+    $("#copy-btn").textContent = "✓ Copié !";
+    setTimeout(() => $("#copy-btn").textContent = old, 2000);
+  });
+});
+updateManifest();
+</script>
+</body>
+</html>
