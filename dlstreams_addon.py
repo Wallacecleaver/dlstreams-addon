@@ -1814,8 +1814,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps(_system_info()).encode(), "application/json")
 
             if path in ("/", "/manifest.json"):
-                lang = qs.get("lang", [None])[0]
-                return self._send(200, json.dumps(self._manifest(lang_filter=lang)).encode(), "application/json", True)
+                # FORCE FRANÇAIS UNIQUEMENT
+                return self._send(200, json.dumps(self._manifest(lang_filter="fr")).encode(), "application/json", True)
 
             if path.startswith("/catalog/tv/"):
                 extra = path[len("/catalog/tv/"):].removesuffix(".json")
@@ -1831,7 +1831,8 @@ class Handler(BaseHTTPRequestHandler):
                                 k, v = kv.split("=", 1)
                                 params[k] = urllib.parse.unquote_plus(v)
 
-                lang_filter = qs.get("lang", [None])[0]
+                # FORCE FRANÇAIS UNIQUEMENT - ignore qs.get("lang")
+                lang_filter = "fr"
 
                 if catid == "custom":
                     st = _settings.get("stremio", {})
@@ -1844,13 +1845,13 @@ class Handler(BaseHTTPRequestHandler):
                     metas = metas[skip:skip + 100]
                     return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
 
-                # dlstreams = seulement chaînes françaises (force lang=fr)
+                # TOUT EN FRANÇAIS UNIQUEMENT
                 if catid == "dlstreams":
                     chans = channels(lang_filter="fr")
                 elif catid == "vavoo":
-                    chans = vavoo_channels()
+                    chans = [c for c in vavoo_channels() if c.get("lang") == "fr"]
                 else:
-                    chans = channels(lang_filter=lang_filter)
+                    chans = channels(lang_filter="fr")
                 q = params.get("search", "").lower().strip()
                 if q:
                     words = q.replace("+", " ").split()
@@ -2020,6 +2021,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"success": True}).encode(), "application/json")
 
     def _manifest(self, lang_filter: str | None = None) -> dict:
+        # FORCE FRANÇAIS UNIQUEMENT
+        lang_filter = "fr"
         _extra = [{"name": "search", "isRequired": False},
                   {"name": "skip", "isRequired": False},
                   {"name": "genre", "isRequired": False,
@@ -2030,13 +2033,12 @@ class Handler(BaseHTTPRequestHandler):
         desc = st.get("manifest_desc") or ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
                 "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
 
-        if lang_filter and lang_filter != "all":
-            lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
-            lang_name = lang_names.get(lang_filter, lang_filter)
-            if not st.get("manifest_name"):
-                name = f"Chaînes live {lang_name}"
-            if not st.get("manifest_desc"):
-                desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
+        lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
+        lang_name = lang_names.get(lang_filter, lang_filter)
+        if not st.get("manifest_name"):
+            name = f"Chaînes live {lang_name}"
+        if not st.get("manifest_desc"):
+            desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
 
         catalogs = []
         if st.get("include_dlstreams", True):
@@ -2051,11 +2053,11 @@ class Handler(BaseHTTPRequestHandler):
             catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
                           "extra": _extra, "extraSupported": ["search", "skip"]})
 
-        return {
-            "id": "st.waddontv.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
+return {
+            "id": "st.waddontv.proxy.fr",
             "version": _VERSION,
             "name": name,
-"description": desc,
+            "description": desc,
             "resources": ["catalog", "meta", "stream"],
             "types": ["tv"],
             "idPrefixes": ["dlstreams:", "vavoo:", "custom:"],

@@ -29,22 +29,17 @@
 <body>
 <header><div class="logo">▶</div><div><h1>W Addon TV <span class="badge">configuration</span></h1></div></header>
 <main>
-  <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
-    <div class="lang-grid" id="lang-grid">
-      <button class="lang-btn" data-lang="all"><span class="lang-flag">🌍</span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
-      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
-      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
-      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇪🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
-      <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
-      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
-      <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
-      <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇵🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
+  <div class="card"><h2>🇫🇷 Addon 100% Français</h2>
+    <p style="margin:0 0 12px;color:var(--muted)">Cet addon ne diffuse que des chaînes françaises (TF1, France 2, Canal+, beIN Sports, RMC Sport, etc.).</p>
+    <div style="background:rgba(16,185,129,.1);border:1px solid #10b981;border-radius:8px;padding:16px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:32px">🇫🇷</span>
+      <div><strong style="font-size:16px">Français uniquement</strong><br><span style="color:var(--muted)">Toutes les autres langues sont désactivées</span></div>
     </div>
   </div>
   <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
     <div class="manifest-box" id="manifest-url">—</div>
     <button class="copy" id="copy-btn">📋 Copier l'URL</button>
-    <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
+    <div class="info"><strong>Comment faire :</strong><br>1. Copiez l'URL du manifest ci-dessus<br>2. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>3. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE des chaînes françaises.</em></div>
   </div>
   <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
     <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
@@ -55,19 +50,10 @@
 <script>
 const BASE = location.origin;
 const $ = s => document.querySelector(s);
-let CURRENT_LANG = "fr";
-document.querySelectorAll(".lang-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("selected"));
-    btn.classList.add("selected");
-    CURRENT_LANG = btn.dataset.lang;
-    updateManifest();
-  });
-});
+// Addon forcé en français uniquement
+const CURRENT_LANG = "fr";
 function updateManifest() {
-  const url = CURRENT_LANG === "all" 
-    ? `${BASE}/manifest.json`
-    : `${BASE}/manifest.json?lang=${CURRENT_LANG}`;
+  const url = `${BASE}/manifest.json?lang=fr`;
   $("#manifest-url").textContent = url;
 }
 $("#copy-btn").addEventListener("click", () => {
