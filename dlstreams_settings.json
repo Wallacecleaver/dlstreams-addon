@@ -1,0 +1,29 @@
+{
+ "logos": true,
+ "epg": true,
+ "epg_url": "https://xmltvfr.fr/xmltv/xmltv.xml.gz",
+ "genres": {},
+ "stremio": {
+  "manifest_name": "",
+  "manifest_desc": "",
+  "include_dlstreams": true,
+  "include_vavoo": true,
+  "default_lang": "fr",
+  "channel_names": {},
+  "channel_logos": {},
+  "channel_streams": {
+   "121": [
+    {
+     "url": "http://127.0.0.1:8781/hls/121/index.m3u8",
+     "label": "Mon Flux HD"
+    },
+    {
+     "url": "http://x/y.m3u8",
+     "label": "Backup"
+    }
+   ]
+  },
+  "channel_epg": {},
+  "custom_channels": {}
+ }
+}

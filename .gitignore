@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+dlstreams_hist.json
+dlstreams_sessions.json
+dlstreams_settings.json
+dlstreams_epg.json
