@@ -895,6 +895,44 @@
               </div>
             </div>
           </div>
+
+          <div class="modal" id="tv-custom-modal">
+            <div class="modal-content tv-modal">
+              <div class="modal-header">
+                <h3 id="tv-custom-modal-title">Ajouter chaîne personnalisée</h3>
+                <button class="modal-close" onclick="closeCustomChannelModal()">&times;</button>
+              </div>
+              <div class="modal-body">
+                <input type="hidden" id="tv-custom-id">
+                <div class="form-row">
+                  <label>ID unique (lettres, chiffres, _ et -)</label>
+                  <input type="text" id="tv-custom-id-input" placeholder="ex: ma-chaine-1">
+                </div>
+                <div class="form-row">
+                  <label>Nom de la chaîne</label>
+                  <input type="text" id="tv-custom-name" placeholder="Nom affiché dans Stremio">
+                </div>
+                <div class="form-row">
+                  <label>Logo (URL png/jpg)</label>
+                  <input type="url" id="tv-custom-logo" placeholder="https://.../logo.png" oninput="$('#tv-custom-logo-preview').src=this.value;$('#tv-custom-logo-preview').style.display=this.value?'block':'none'">
+                  <img id="tv-custom-logo-preview" src="" alt="" style="width:48px;height:27px;object-fit:cover;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
+                </div>
+                <div class="form-row">
+                  <label>Flux (un par ligne, m3u8/mpd)</label>
+                  <textarea id="tv-custom-streams" rows="4" placeholder="https://.../flux1.m3u8" style="width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:var(--font-mono);resize:vertical"></textarea>
+                </div>
+                <div class="form-row">
+                  <label>EPG (ID xmltv, optionnel)</label>
+                  <input type="text" id="tv-custom-epg" placeholder="ID xmltv (facultatif)">
+                </div>
+                <div class="form-actions">
+                  <button class="btn-outline-sm" onclick="closeCustomChannelModal()">Annuler</button>
+                  <button class="btn-danger" id="tv-custom-delete-btn" style="display:none" onclick="deleteCustomChannel()">🗑️ Supprimer</button>
+                  <button class="add-source-btn" onclick="saveCustomChannel()">💾 Enregistrer</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- PAGE: REGLAGES -->
@@ -1851,200 +1889,6 @@ async function saveSettings(){
     if(r.ok){ toast('Réglages enregistrés','success'); } else toast('Erreur d\'enregistrement','error');
 }
 
-// ===== STREMIO CHANNEL EDITOR =====
-let _STREMIO_CHANNELS = [];
-async function loadStremioChannels(){
-    try{
-        const r = await apiFetch("/api/settings");
-        const d = await r.json();
-        const s = d.settings.stremio || {};
-        $('#stremio-manifest-name').value = s.manifest_name || '';
-        $('#stremio-manifest-desc').value = s.manifest_desc || '';
-        $('#stremio-default-lang').value = s.default_lang || 'fr';
-        $('#stremio-inc-dl').checked = s.include_dlstreams !== false;
-        $('#stremio-inc-vv').checked = s.include_vavoo !== false;
-        updateStremioManifestUrl();
-
-        // Build unified channel list with overrides
-        const names = s.channel_names || {};
-        const logos = s.channel_logos || {};
-        const streams = s.channel_streams || {};
-
-        _STREMIO_CHANNELS = [];
-        [...(ALL.dlstreams||[]), ...(ALL.vavoo||[])].forEach(c => {
-            const id = c.id;
-            _STREMIO_CHANNELS.push({
-                id,
-                src: 'dlstreams',
-                name: c.name,
-                orig_name: c.name,
-                override_name: names[id],
-                override_logo: logos[id],
-                override_stream: streams[id],
-            });
-        });
-        [...(ALL.vavoo||[])].forEach(c => {
-            // Avoid duplicates if same ID exists in both
-            if (!_STREMIO_CHANNELS.some(x => x.id === c.id && x.src === 'vavoo')) {
-                _STREMIO_CHANNELS.push({
-                    id: c.id,
-                    src: 'vavoo',
-                    name: c.name,
-                    orig_name: c.name,
-                    override_name: names[c.id],
-                    override_logo: logos[c.id],
-                    override_stream: streams[c.id],
-                });
-            }
-        });
-        renderStremioChannels();
-    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement Stremio','error'); }
-}
-
-function updateStremioManifestUrl(){
-    const base = window.location.origin;
-    const lang = $('#stremio-default-lang').value;
-    const url = lang === 'all' ? `${base}/manifest.json` : `${base}/manifest.json?lang=${lang}`;
-    $('#stremio-manifest-url').textContent = url;
-}
-
-async function saveStremioSettings(){
-    const s = {
-        manifest_name: $('#stremio-manifest-name').value.trim(),
-        manifest_desc: $('#stremio-manifest-desc').value.trim(),
-        default_lang: $('#stremio-default-lang').value,
-        include_dlstreams: $('#stremio-inc-dl').checked,
-        include_vavoo: $('#stremio-inc-vv').checked,
-    };
-    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:s})});
-    if(r.ok){
-        toast('Manifest Stremio enregistré','success');
-        updateStremioManifestUrl();
-    }else toast('Erreur enregistrement','error');
-}
-
-function renderStremioChannels(){
-    const q = ($('#stremio-ch-search').value || '').toLowerCase().trim();
-    const list = $('#stremio-ch-list');
-    const cnt = $('#stremio-ch-count');
-    let channels = _STREMIO_CHANNELS;
-    if(q) channels = channels.filter(c =>
-        (c.id||'').toLowerCase().includes(q) ||
-        (c.name||'').toLowerCase().includes(q) ||
-        (c.src||'').toLowerCase().includes(q)
-    );
-    if(cnt) cnt.textContent = channels.length + (channels.length>1?' chaînes':' chaîne');
-    if(!channels.length){
-        list.innerHTML = '<div class="stremio-empty">Aucune chaîne</div>';
-        return;
-    }
-    list.innerHTML = '<div class="stremio-ch-row stremio-ch-head"><div style="width:60px">ID</div><div>Nom</div><div style="width:100px">Source</div><div style="width:120px">Logo</div><div style="width:160px">Flux</div><div style="width:80px"></div></div>' +
-        channels.map(c => {
-            const hasName = !!c.override_name;
-            const hasLogo = !!c.override_logo;
-            const hasStream = !!c.override_stream;
-            const logoPreview = c.override_logo ? `<img src="${escapeHtml(c.override_logo)}" style="width:32px;height:18px;object-fit:cover;border-radius:3px;border:1px solid var(--border)" onerror="this.style.display='none'">` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
-            const streamPreview = c.override_stream ? `<span style="color:var(--accent);font-family:var(--font-mono);font-size:11px">${escapeHtml(c.override_stream).substring(0,50)}…</span>` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
-            const nameDisplay = c.override_name ? `<span style="color:var(--accent)">${escapeHtml(c.override_name)}</span>` : `<span style="color:var(--text2)">${escapeHtml(c.orig_name)}</span>`;
-            return `<div class="stremio-ch-row" data-id="${escapeHtml(c.id)}" data-src="${escapeHtml(c.src)}">
-                <div style="width:60px;font-family:var(--font-mono);font-size:11px;color:var(--text2)">${escapeHtml(c.id)}</div>
-                <div>${nameDisplay}</div>
-                <div style="width:100px;text-transform:uppercase;font-size:11px;color:var(--muted)">${c.src}</div>
-                <div style="width:120px">${logoPreview}</div>
-                <div style="width:160px">${streamPreview}</div>
-                <div style="width:80px"><button class="btn-outline-sm" onclick="editStremioChannel('${escapeHtml(c.id)}','${escapeHtml(c.src)}')" style="padding:4px 10px;font-size:11px">✏️</button></div>
-            </div>`;
-        }).join('');
-}
-
-function editStremioChannel(id, src){
-    const c = _STREMIO_CHANNELS.find(x => x.id === id && x.src === src);
-    if(!c) return;
-    document.getElementById('stremio-channel-form').style.display = 'block';
-    $('#stremio-ch-id').value = c.id;
-    $('#stremio-ch-src').value = c.src;
-    $('#stremio-ch-name').value = c.override_name || '';
-    $('#stremio-ch-orig-name').textContent = c.orig_name ? `Original: ${c.orig_name}` : '';
-    $('#stremio-ch-logo').value = c.override_logo || '';
-    $('#stremio-ch-logo-preview').src = c.override_logo || '';
-    $('#stremio-ch-logo-preview').style.display = c.override_logo ? 'inline-block' : 'none';
-    $('#stremio-ch-orig-logo').textContent = c.override_logo ? '' : `Auto: /logo/${c.src}/${c.id}.png`;
-    $('#stremio-ch-stream').value = c.override_stream || '';
-    $('#stremio-ch-orig-stream').style.display = c.override_stream ? 'none' : 'inline';
-    window._editingStremio = {id: c.id, src: c.src};
-    $('#stremio-ch-name').focus();
-}
-
-function resetStremioChannel(){
-    if(!window._editingStremio) return;
-    const c = _STREMIO_CHANNELS.find(x => x.id === window._editingStremio.id && x.src === window._editingStremio.src);
-    if(!c) return;
-    $('#stremio-ch-name').value = c.override_name || '';
-    $('#stremio-ch-logo').value = c.override_logo || '';
-    $('#stremio-ch-logo-preview').src = c.override_logo || '';
-    $('#stremio-ch-logo-preview').style.display = c.override_logo ? 'inline-block' : 'none';
-    $('#stremio-ch-stream').value = c.override_stream || '';
-    $('#stremio-ch-name').focus();
-}
-
-async function saveStremioChannel(){
-    const e = window._editingStremio;
-    if(!e) return;
-    const name = $('#stremio-ch-name').value.trim();
-    const logo = $('#stremio-ch-logo').value.trim();
-    const stream = $('#stremio-ch-stream').value.trim();
-
-    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-        stremio: {
-            channel_names: { ...(_settings.stremio?.channel_names||{}), [e.id]: name || undefined },
-            channel_logos: { ...(_settings.stremio?.channel_logos||{}), [e.id]: logo || undefined },
-            channel_streams: { ...(_settings.stremio?.channel_streams||{}), [e.id]: stream || undefined },
-        }
-    })});
-    if(r.ok){
-        toast('Chaîne enregistrée','success');
-        await loadStremioChannels();
-        cancelStremioChannel();
-    }else toast('Erreur','error');
-}
-
-async function deleteStremioChannel(){
-    if(!window._editingStremio) return;
-    if(!confirm('Supprimer l\'override de cette chaîne ?')) return;
-    const e = window._editingStremio;
-    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-        stremio: {
-            channel_names: Object.fromEntries(Object.entries(_settings.stremio?.channel_names||{}).filter(([k])=>k!==e.id)),
-            channel_logos: Object.fromEntries(Object.entries(_settings.stremio?.channel_logos||{}).filter(([k])=>k!==e.id)),
-            channel_streams: Object.fromEntries(Object.entries(_settings.stremio?.channel_streams||{}).filter(([k])=>k!==e.id)),
-        }
-    })});
-    if(r.ok){
-        toast('Override supprimé','success');
-        await loadStremioChannels();
-        cancelStremioChannel();
-    }else toast('Erreur','error');
-}
-
-function cancelStremioChannel(){
-    document.getElementById('stremio-channel-form').style.display = 'none';
-    window._editingStremio = null;
-}
-
-function testStremioChannelStream(){
-    const url = $('#stremio-ch-stream').value.trim();
-    if(url) window.open(url, '_blank');
-}
-
-async function saveStremioObj(patch){
-    const s = { ...(_settings.stremio||{}), ...patch };
-    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:s})});
-    if(r.ok){
-        _settings.stremio = s;
-        toast('Enregistré','success');
-    }else toast('Erreur','error');
-}
-
 function tvStreamRowHtml(url, label){
     return `<div class="tv-stream-row" style="display:flex;gap:6px;margin-bottom:6px">
         <input type="url" class="tv-stream-url" value="${escapeHtml(url||'')}" placeholder="https://.../flux.m3u8" style="flex:2">
@@ -2277,7 +2121,8 @@ function renderTvChannels(){
             const streamHtml = c.override_stream ? `<span class="tv-stream ok">${escapeHtml(c.override_stream).substring(0,35)}…</span>` : `<span class="tv-stream missing">Auto</span>`;
             const epgHtml = c.override_epg ? `<span class="tv-epg ok">${escapeHtml(c.override_epg)}</span>` : (c.epg_id ? `<span class="tv-epg warn">${escapeHtml(c.epg_id)}</span>` : `<span class="tv-epg missing">—</span>`);
             const nameHtml = c.override_name ? `<span class="tv-name custom">${escapeHtml(c.override_name)}</span>` : `<span class="tv-name auto">${escapeHtml(c.name)}</span>`;
-            return `<div class="tv-ch-row" data-id="${escapeHtml(c.id)}" data-src="${escapeHtml(c.src)}" onclick="openTvModal('${escapeHtml(c.id)}','${escapeHtml(c.src)}')">
+            const rowClick = c.src === 'custom' ? `editCustomChannel('${escapeHtml(c.id)}')` : `openTvModal('${escapeHtml(c.id)}','${escapeHtml(c.src)}')`;
+            return `<div class="tv-ch-row" data-id="${escapeHtml(c.id)}" data-src="${escapeHtml(c.src)}" onclick="${rowClick}">
                 <div style="width:50px">${logoHtml}</div>
                 <div>${nameHtml}</div>
                 <div style="width:100px;text-transform:uppercase;font-size:11px;color:var(--muted)">${c.src}</div>
@@ -2286,10 +2131,6 @@ function renderTvChannels(){
                 <div style="width:80px;text-align:center"><span style="color:var(--muted);font-size:11px">✏️</span></div>
             </div>`;
         }).join('');
-}
-
-function testStremioStream(url){
-    window.open(url, '_blank');
 }
 
 // Custom channel management
@@ -2307,6 +2148,7 @@ function openAddCustomChannel(){
     $('#tv-custom-streams').value = '';
     $('#tv-custom-epg').value = '';
     $('#tv-custom-id-input').readOnly = false;
+    $('#tv-custom-delete-btn').style.display = 'none';
     document.getElementById('tv-custom-modal').classList.add('active');
     $('#tv-custom-id-input').focus();
 }
@@ -2374,6 +2216,7 @@ function editCustomChannel(id){
     $('#tv-custom-logo-preview').style.display = cc.logo ? 'block' : 'none';
     $('#tv-custom-streams').value = (cc.streams || []).join('\n');
     $('#tv-custom-epg').value = cc.epg || '';
+    $('#tv-custom-delete-btn').style.display = 'inline-flex';
     document.getElementById('tv-custom-modal').classList.add('active');
 }
 
@@ -2389,11 +2232,6 @@ async function deleteCustomChannel(){
         closeCustomChannelModal();
         await loadTvChannels();
     }else toast('Erreur','error');
-}
-
-function closeCustomChannelModal(){
-    document.getElementById('tv-custom-modal').classList.remove('active');
-    _editingCustomId = null;
 }
 
 async function refreshEpg(){
