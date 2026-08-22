@@ -117,107 +117,54 @@ _POPULAR_CHANNELS = [
 ]
 
 # Logos reels des chaines populaires FR (ids dlstreams -> URL logo).
-# Sources : static.epg.best (EPG/logo iptv-org) + Wikimedia + logos officiels.
-# Servees via le proxy /logo/... avec fallback poster genere si indisponible.
+# Sources : static.epg.best (EPG/logo iptv-org) + Wikimedia. Servees via le
+# proxy /logo/... avec fallback poster genere si indisponible.
 _CH_LOGO = {
-    # Canal+
     "121": "https://static.epg.best/fr/CanalPlus.fr.png",
     "122": "https://static.epg.best/fr/CanalPlusSport.fr.png",
-    "123": "https://static.epg.best/fr/CanalPlusCinema.fr.png",
-    "124": "https://static.epg.best/fr/CanalPlusSeries.fr.png",
+    "123": "https://upload.wikimedia.org/wikipedia/fr/thumb/e/eb/C%2B_Cin%C3%A9ma%28s%29.png/500px-C%2B_Cin%C3%A9ma%28s%29.png",
+    "124": "https://upload.wikimedia.org/wikipedia/fr/thumb/e/e3/C%2B_S%C3%A9ries.png/500px-C%2B_S%C3%A9ries.png",
     "125": "https://static.epg.best/fr/CanalPlusFamily.fr.png",
-    # RMC Sport
     "211": "https://static.epg.best/fr/RMCSport1.fr.png",
     "212": "https://static.epg.best/fr/RMCSport2.fr.png",
     "213": "https://static.epg.best/fr/RMCSport3.fr.png",
     "214": "https://static.epg.best/fr/RMCSport4.fr.png",
-    # Eurosport
     "301": "https://static.epg.best/fr/Eurosport1.fr.png",
     "302": "https://static.epg.best/fr/Eurosport2.fr.png",
-    # TNT
     "401": "https://static.epg.best/fr/TF1.fr.png",
     "402": "https://static.epg.best/fr/France2.fr.png",
     "403": "https://static.epg.best/fr/France3.fr.png",
     "404": "https://static.epg.best/fr/France4.fr.png",
     "405": "https://static.epg.best/fr/France5.fr.png",
     "406": "https://static.epg.best/fr/M6.fr.png",
-    "407": "https://static.epg.best/fr/Arte.fr.png",
+    "407": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Arte_Logo_2017.svg/500px-Arte_Logo_2017.svg.png",
     "408": "https://static.epg.best/fr/C8.fr.png",
     "409": "https://static.epg.best/fr/W9.fr.png",
     "410": "https://static.epg.best/fr/TMC.fr.png",
     "411": "https://static.epg.best/fr/TFX.fr.png",
     "412": "https://static.epg.best/fr/NRJ12.fr.png",
     "413": "https://static.epg.best/fr/LCP.fr.png",
-    "414": "https://static.epg.best/fr/FranceInfo.fr.png",
     "415": "https://static.epg.best/fr/BFMTV.fr.png",
     "416": "https://static.epg.best/fr/CNews.fr.png",
     "417": "https://static.epg.best/fr/CStar.fr.png",
     "418": "https://static.epg.best/fr/Gulli.fr.png",
     "419": "https://static.epg.best/fr/TF1SeriesFilms.fr.png",
-    "420": "https://static.epg.best/fr/LEquipe.fr.png",
     "421": "https://static.epg.best/fr/6ter.fr.png",
     "422": "https://static.epg.best/fr/RMCStory.fr.png",
-    "423": "https://static.epg.best/fr/RMCDecouverte.fr.png",
+    "423": "https://commons.wikimedia.org/wiki/Special:FilePath/Logo_de_RMC_d%C3%A9couverte_depuis_le_08-11-2025.png",
     "424": "https://static.epg.best/fr/Cherie25.fr.png",
-    # beIN Sports
+    "414": "https://static.epg.best/fr/FranceInfo.fr.png",
+    "420": "https://static.epg.best/fr/LEquipe21.fr.png",
+    "645": "https://static.epg.best/fr/LEquipe21.fr.png",
     "201": "https://static.epg.best/fr/BeinSports1.fr.png",
     "202": "https://static.epg.best/fr/BeinSports2.fr.png",
     "203": "https://static.epg.best/fr/BeinSports3.fr.png",
     "116": "https://static.epg.best/fr/BeinSports1.fr.png",
-    # L'Equipe / Eurosport extras
     "772": "https://static.epg.best/fr/Eurosport1.fr.png",
-    "645": "https://static.epg.best/fr/LEquipe.fr.png",
-    # Ligue 1 / Amazon Prime Video (nouveaux logos officiels)
-    "960": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
-    "68": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
-    "76": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
-    # DAZN / Ligue 1+
-    "970": "https://static.epg.best/fr/DAZN1.fr.png",
-    "971": "https://static.epg.best/fr/DAZN2.fr.png",
-    "972": "https://static.epg.best/fr/DAZN3.fr.png",
-    "973": "https://static.epg.best/fr/DAZN4.fr.png",
-    "974": "https://static.epg.best/fr/DAZN5.fr.png",
-    # Autres sport
-    "800": "https://static.epg.best/fr/FootPlus.fr.png",
-    "801": "https://static.epg.best/fr/RugbyPlus.fr.png",
+    "960": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
+    "68": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
+    "76": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
 }
-
-# Mapping normalise nom_chaine -> URL logo (pour sync dlstreams <-> vavoo)
-# Cle = nom normalise (minuscules, sans accents, sans espaces speciaux)
-_LOGO_BY_NAME: dict[str, str] = {}
-
-def _norm_name(name: str) -> str:
-    """Normalise un nom de chaine pour matching cross-source."""
-    import unicodedata
-    s = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
-    s = re.sub(r"[^a-z0-9]+", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    # Supprime mots generiques
-    for w in ("hd", "fhd", "uhd", "4k", "hevc", "h264", "h265", "fr", "france", "live", "direct"):
-        s = re.sub(rf"\b{w}\b", "", s)
-    return s.strip()
-
-def _build_logo_by_name():
-    """Construit le mapping nom -> logo depuis _CH_LOGO + _POPULAR_CHANNELS."""
-    global _LOGO_BY_NAME
-    _LOGO_BY_NAME.clear()
-    # Depuis _CH_LOGO (ids -> url) + _POPULAR_CHANNELS (ids -> nom)
-    for cid, url in _CH_LOGO.items():
-        for ch in _POPULAR_CHANNELS:
-            if str(ch.get("id")) == str(cid):
-                key = _norm_name(ch["name"])
-                if key and url:
-                    _LOGO_BY_NAME[key] = url
-                break
-    # Ajoute aussi les noms directs depuis _POPULAR_CHANNELS
-    for ch in _POPULAR_CHANNELS:
-        key = _norm_name(ch["name"])
-        if key and key not in _LOGO_BY_NAME:
-            # Sera rempli plus tard si logo dispo
-            pass
-
-# Appel initial
-_build_logo_by_name()
 
 # ============================ REGLAGES ============================
 _SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_settings.json")
@@ -225,7 +172,6 @@ _SETTINGS_DEFAULT = {
     "logos": True,                                   # logos reels des chaines populaires
     "epg": True,                                     # EPG (programme en cours)
     "epg_url": "https://xmltvfr.fr/xmltv/xmltv.xml.gz",
-    "playlists": {},                                 # nom -> liste de cles "src:id"
     "genres": {},                                    # overrides: nom chaine (minuscule) -> [genres]
     "stremio": {
         "manifest_name": "",
@@ -485,14 +431,6 @@ def _genre_for(name: str) -> list[str]:
         return ["Divertissement"]
     return ["Télévision"]
 
-def _playlist_channel_info(key: str) -> dict:
-    src, _, cid = key.partition(":")
-    return {"key": key, "src": src, "id": cid, "name": _name_for(src, cid)}
-
-def _playlists_list() -> list[dict]:
-    pl = _settings.get("playlists", {})
-    return [{"name": n, "count": len(ks), "channels": [_playlist_channel_info(k) for k in ks]} for n, ks in pl.items()]
-
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
     headers = {"User-Agent": UA, "Referer": referer}
     if extra:
@@ -714,10 +652,6 @@ def channels(lang_filter: str | None = None) -> list[dict]:
             lg = _CH_LOGO.get(str(ch.get("id")))
             if lg:
                 ch["logo"] = lg
-                # Enregistre dans le mapping unifie pour sync vavoo
-                key = _norm_name(ch.get("name", ""))
-                if key and key not in _LOGO_BY_NAME:
-                    _LOGO_BY_NAME[key] = lg
 
     out = _ch_cache["list"]
     if lang_filter and lang_filter != "all":
@@ -944,18 +878,8 @@ def vavoo_channels(country: str = "France") -> list[dict]:
         batch = d.get("items") or []
         if not batch:
             break
-        for x in batch:
-            url = x.get("url")
-            if not url:
-                continue
-            name = x.get("name") or ""
-            logo = x.get("logo") or ""
-            items.append({"id": url, "name": name, "logo": logo, "lang": "fr"})
-            # Enregistre le logo vavoo dans le mapping unifie pour sync dlstreams
-            if logo and name:
-                key = _norm_name(name)
-                if key and key not in _LOGO_BY_NAME:
-                    _LOGO_BY_NAME[key] = logo
+        items += [{"id": x.get("url"), "name": x.get("name") or "", "logo": x.get("logo") or "", "lang": "fr"}
+                  for x in batch if x.get("url")]
         cursor, pages = d.get("nextCursor"), pages + 1
     if items:
         _vavoo_cache.update(at=time.time(), list=items)
@@ -1284,31 +1208,10 @@ def _now_playing() -> list[dict]:
     return out
 
 def _logo_bytes(src: str, c: dict) -> bytes:
-    """Logo reel (proxye) si dispo, sinon poster genere. Jamais de tile cassee.
-    Sync dlstreams <-> vavoo : utilise le mapping unifie par nom normalise."""
+    """Logo reel (proxye) si dispo, sinon poster genere. Jamais de tile cassee."""
     if not _settings.get("logos", True):
         return _poster_get(c.get("name") or "TV")
-
-    name = c.get("name") or ""
-    cid = str(c.get("id") or "")
-
-    # 1. Override manuel via settings (stremio.channel_logos)
-    st = _settings.get("stremio", {})
-    manual = st.get("channel_logos", {}).get(cid)
-    if manual:
-        url = manual.strip()
-    else:
-        # 2. Logo source native
-        if src == "dlstreams":
-            url = _CH_LOGO.get(cid, "")
-        else:
-            url = (c.get("logo") or "").strip()
-
-        # 3. Fallback : mapping unifie par nom normalise (sync cross-source)
-        if not url and name:
-            key = _norm_name(name)
-            url = _LOGO_BY_NAME.get(key, "")
-
+    url = _CH_LOGO.get(str(c.get("id")), "") if src == "dlstreams" else (c.get("logo") or "").strip()
     if url:
         png = _logo_cache.get(url)
         if png is None and url not in _logo_bad:
@@ -1326,13 +1229,8 @@ def _logo_bytes(src: str, c: dict) -> bytes:
                     _logo_cache.clear()
                 _logo_cache[url] = png
         if png:
-            # Enregistre dans le mapping unifie pour l'autre source
-            if name:
-                key = _norm_name(name)
-                if key and key not in _LOGO_BY_NAME:
-                    _LOGO_BY_NAME[key] = url
             return png
-    return _poster_get(name or "TV")
+    return _poster_get(c.get("name") or "TV")
 
 def _warm_logos():
     for url in _CH_LOGO.values():
@@ -1512,37 +1410,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"success": False, "message": str(e)}).encode(), "application/json")
 
-        if path == "/api/playlists":
-            if not self._require_auth():
-                return
-            try:
-                data = json.loads(body) if body else {}
-            except Exception as e:
-                data = {}
-            action = data.get("action")
-            name = str(data.get("name", "")).strip()
-            pl = dict(_settings.get("playlists", {}))
-            if action == "create":
-                if not name:
-                    return self._send(400, json.dumps({"success": False, "message": "nom requis"}).encode(), "application/json")
-                pl.setdefault(name, [])
-            elif action == "delete":
-                pl.pop(name, None)
-            elif action == "add":
-                key = str(data.get("key", ""))
-                if name in pl and key and key not in pl[name]:
-                    pl[name].append(key)
-            elif action == "remove":
-                key = str(data.get("key", ""))
-                if name in pl and key in pl[name]:
-                    pl[name].remove(key)
-            else:
-                return self._send(400, json.dumps({"success": False, "message": "action inconnue"}).encode(), "application/json")
-            _settings["playlists"] = pl
-            _settings_save()
-            _log_activity("Playlists", f"{action} - {name}")
-            return self._send(200, json.dumps({"success": True, "playlists": _playlists_list()}).encode(), "application/json")
-
         if path == "/api/check-batch":
             if not self._require_auth():
                 return
@@ -1691,17 +1558,21 @@ class Handler(BaseHTTPRequestHandler):
                 src, _, cid = seg.partition("/")
                 if src == "vavoo":
                     url = _unb64u(cid)
-                    c = next((x for x in vavoo_channels() if x["id"] == url), None)
+
+                    # Résolution stricte : l'ID Vavoo décodé doit correspondre
+                    # exactement à l'URL du flux présente dans le catalogue.
+                    # Ne jamais prendre arbitrairement le premier canal en
+                    # cas d'échec : cela pouvait servir le mauvais logo.
+                    c = next(
+                        (x for x in vavoo_channels()
+                         if str(x.get("id", "")).strip() == str(url).strip()),
+                        None
+                    )
+
                     if c is None:
-                        # Fallback: cherche par nom normalisé dans le catalogue vavoo
-                        # (au cas où l'ID serait une play URL différente de celle en cache)
-                        for ch in vavoo_channels():
-                            if ch.get("logo") and ch.get("name"):
-                                # Le nom suffit pour récupérer le logo via _logo_bytes
-                                c = ch
-                                break
-                        if c is None:
-                            c = {"id": url, "name": "Vavoo", "logo": ""}
+                        # Aucun canal correspondant : on garde l'URL comme
+                        # identifiant mais on ne fabrique pas un faux mapping.
+                        c = {"id": url, "name": "Vavoo", "logo": ""}
                 else:
                     c = next((x for x in channels() if str(x.get("id")) == str(cid)),
                              {"id": cid, "name": f"dlstreams {cid}", "logo": ""})
@@ -1782,11 +1653,6 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(list(_manual_channels.values())).encode(), "application/json")
-
-            if path == "/api/playlists":
-                if not self._require_auth():
-                    return
-                return self._send(200, json.dumps(_playlists_list()).encode(), "application/json")
 
             if path == "/api/activity":
                 if not self._require_auth():
@@ -2047,7 +1913,7 @@ class Handler(BaseHTTPRequestHandler):
                        "options": _GENRE_CHOICES}]
 
             st = _settings.get("stremio", {})
-            name = st.get("manifest_name") or "W Addon TV"
+            name = st.get("manifest_name") or "Chaînes live (dlstreams + Vavoo)"
             desc = st.get("manifest_desc") or ("Chaînes TV en direct (sport, info, divertissement) via dlstreams + Vavoo, "
                     "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
 
@@ -2059,10 +1925,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not st.get("manifest_desc"):
                     desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
 
-catalogs = []
+            catalogs = []
             if st.get("include_dlstreams", True):
-                catalogs.append({"type": "tv", "id": "dlstreams", "name": "W Addon TV",
-                               "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+                catalogs.append({"type": "tv", "id": "dlstreams", "name": "dlstreams",
+                              "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
             if st.get("include_vavoo", True):
                 catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
                               "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
@@ -2073,7 +1939,7 @@ catalogs = []
                               "extra": _extra, "extraSupported": ["search", "skip"]})
 
             return {
-                "id": "st.waddontv.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
+                "id": "st.dlstreams.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
                 "version": _VERSION,
                 "name": name,
                 "description": desc,
@@ -2169,7 +2035,7 @@ def main():
     _sessions_load()
     _settings_load()
     _epg_load()
-    log.info(f"W Addon TV addon+proxy sur http://0.0.0.0:{PORT}")
+    log.info(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     log.info(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     log.info(f"  Configure: http://127.0.0.1:{PORT}/configure")
     log.info(f"  Stremio  : http://<ton-ip-LAN>:{PORT}/manifest.json?lang=fr")
@@ -2206,15 +2072,2713 @@ def _warm_channels():
     except Exception as e:
         log.error(f"annuaire: erreur de chargement ({e})")
 
-_HTML_DIR = os.path.dirname(os.path.abspath(__file__))
+DASHBOARD_HTML = r"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dlstreams — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+<style>
+  :root {
+    --bg:#0a0a0b; --surface:#111113; --surface2:#18181b; --border:rgba(255,255,255,0.06);
+    --accent:#e53e3e; --accent-dim:rgba(229,62,62,0.08); --green:#48bb78;
+    --text:#f0f0f0; --text2:#888; --muted:#666; --input-bg:#0a0a0b; --card-hover:rgba(255,255,255,0.02);
+    --warn:#f59e0b; --error:#ef4444; --info:#60a5fa;
+    --font-display:'Bebas Neue',sans-serif; --font-mono:'Rajdhani',monospace; --font-body:'DM Sans',sans-serif;
+  }
+  body.light {
+    --bg:#f1f5f9; --surface:#ffffff; --surface2:#f8fafc; --border:rgba(0,0,0,0.08);
+    --accent:#dc2626; --accent-dim:rgba(220,38,38,0.08); --green:#38a169;
+    --text:#0f172a; --text2:#475569; --muted:#94a3b8; --input-bg:#f8fafc; --card-hover:rgba(0,0,0,0.02);
+    --info:#2563eb;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; transition:background .3s,color .3s; }
 
-def _load_html(name: str) -> str:
-    path = os.path.join(_HTML_DIR, name)
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+  /* LOGIN */
+  #login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; position:relative; }
+  #login-screen::before { content:''; position:fixed; top:-200px; left:50%; transform:translateX(-50%);
+    width:600px; height:500px; background:radial-gradient(ellipse,rgba(229,62,62,0.08) 0%,transparent 70%); pointer-events:none; }
+  .login-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:40px; width:340px;
+    box-shadow:0 24px 80px rgba(0,0,0,0.3); position:relative; z-index:1; }
+  .login-logo { text-align:center; margin-bottom:12px; }
+  .login-logo .logo-icon { width:64px; height:64px; margin:0 auto 10px; border-radius:16px;
+    background:linear-gradient(135deg,var(--accent),#ff7a59); display:grid; place-items:center;
+    font-size:28px; font-weight:800; color:#fff; box-shadow:0 8px 28px rgba(229,62,62,.4); }
+  .login-title { font-family:var(--font-display); font-size:30px; font-weight:400; letter-spacing:1px; text-align:center; color:var(--text); margin-bottom:2px; }
+  .login-sub { font-size:11px; color:var(--muted); text-align:center; margin-bottom:24px; letter-spacing:.5px; text-transform:uppercase; }
+  .field label { display:block; font-size:12px; color:var(--text2); margin-bottom:6px; font-weight:600; }
+  .field input { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:11px 14px;
+    color:var(--text); font-family:var(--font-mono); font-size:14px; transition:border-color .2s; margin-bottom:16px; }
+  .field input:focus { outline:none; border-color:var(--accent); }
+  .login-error { font-size:12px; color:var(--accent); text-align:center; margin-bottom:12px; padding:8px 12px;
+    background:rgba(229,62,62,0.08); border:1px solid rgba(229,62,62,0.2); border-radius:8px; display:none; }
+  .btn-primary { width:100%; background:var(--accent); color:#fff; border:none; border-radius:8px; padding:12px;
+    font-family:var(--font-body); font-size:14px; font-weight:700; cursor:pointer; transition:background .2s; }
+  .btn-primary:hover { background:#c53030; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
+  .shake { animation:shake .4s; }
 
-DASHBOARD_HTML = _load_html("dashboard.html")
-CONFIGURE_HTML = _load_html("configure.html")
+  /* LAYOUT */
+  #dashboard { display:none; }
+  #dashboard.active { display:block; }
+  .layout { display:flex; min-height:100vh; }
+  .sidebar { width:250px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column;
+    position:fixed; top:0; bottom:0; left:0; z-index:10; overflow-y:auto; }
+  .sidebar-logo { padding:18px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .sidebar-logo-brand { display:flex; align-items:center; gap:10px; min-width:0; }
+  .sidebar-logo-icon { width:34px; height:34px; border-radius:10px; flex-shrink:0;
+    background:linear-gradient(135deg,var(--accent),#ff7a59); display:grid; place-items:center;
+    font-size:16px; font-weight:800; color:#fff; }
+  .sidebar-logo-text .title { font-family:var(--font-display); font-size:20px; letter-spacing:.5px; font-weight:400; color:var(--text); white-space:nowrap; }
+  .sidebar-logo-text .sub { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .theme-btn { background:var(--surface2); border:1px solid var(--border); border-radius:8px; width:32px; height:32px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:15px; transition:all .2s; flex-shrink:0; }
+  .theme-btn:hover { border-color:var(--accent); }
+  .sidebar-nav { flex:1; padding:14px 10px; }
+  .nav-section-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; padding:8px 10px 6px; font-weight:700; }
+  .nav-item { display:flex; align-items:center; gap:9px; padding:9px 12px; border-radius:8px; font-size:13px; font-weight:600;
+    color:var(--text2); cursor:pointer; margin-bottom:2px; border:none; background:none; width:100%; text-align:left;
+    font-family:var(--font-body); transition:all .15s; text-decoration:none; }
+  .nav-item:hover { background:var(--surface2); color:var(--text); }
+  .nav-item.active { background:var(--accent-dim); color:var(--accent); }
+  .nav-badge { margin-left:auto; background:var(--accent); color:#fff; font-size:10px; font-weight:800; border-radius:20px;
+    padding:1px 7px; min-width:16px; text-align:center; }
+  .toggle-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 4px; cursor:pointer;
+    border-bottom:1px solid var(--border); }
+  .toggle-row:last-child { border-bottom:none; }
+  .toggle-title { font-size:14px; font-weight:600; }
+  .toggle-sub { font-size:12px; color:var(--text2); margin-top:2px; }
+  .toggle-row input[type="checkbox"] { width:42px; height:24px; appearance:none; -webkit-appearance:none; background:var(--surface2);
+    border:1px solid var(--border); border-radius:20px; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0; }
+  .toggle-row input[type="checkbox"]::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px;
+    border-radius:50%; background:var(--muted); transition:all .2s; }
+  .toggle-row input[type="checkbox"]:checked { background:var(--accent-dim); }
+  .toggle-row input[type="checkbox"]:checked::after { left:20px; background:var(--accent); }
+  .sidebar-bottom { padding:12px 10px; border-top:1px solid var(--border); }
+  .btn-logout { width:100%; background:none; border:1px solid var(--border); border-radius:8px; padding:8px; font-size:12px;
+    color:var(--muted); cursor:pointer; font-family:var(--font-body); transition:all .2s; }
+  .btn-logout:hover { color:var(--accent); border-color:var(--accent); }
+
+  .main { margin-left:250px; padding:28px 32px 60px; }
+  .page { display:none; }
+  .page.active { display:block; }
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+  .page-title { font-family:var(--font-display); font-size:34px; font-weight:400; letter-spacing:.5px; color:var(--text); margin-bottom:2px; }
+  .page-sub { font-size:13px; color:var(--text2); }
+  .header-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+  .btn-add, .btn-outline-sm { display:flex; align-items:center; gap:6px; border-radius:7px; padding:8px 14px; font-size:12px;
+    font-weight:700; font-family:var(--font-body); cursor:pointer; transition:all .2s; text-decoration:none; }
+  .btn-add { background:var(--accent-dim); border:1px solid rgba(229,62,62,0.2); color:var(--accent); }
+  .btn-add:hover { background:var(--accent); color:#fff; }
+  .btn-outline-sm { background:none; border:1px solid var(--border); color:var(--text2); }
+  .btn-outline-sm:hover { color:var(--text); border-color:var(--text2); }
+
+  .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
+  .stat-card { position:relative; overflow:hidden; border-radius:16px; padding:18px 20px;
+    background:var(--surface); border:1px solid var(--border);
+    display:flex; flex-direction:column; gap:4px;
+    transition:border-color .2s, transform .2s; }
+  .stat-card::after { content:''; position:absolute; top:-45%; right:-18%; width:150px; height:150px; border-radius:50%;
+    background:radial-gradient(circle, var(--card-glow,rgba(229,62,62,.16)), transparent 70%); pointer-events:none; }
+  .stat-card:hover { transform:translateY(-2px); border-color:rgba(229,62,62,.25); }
+  .stat-card.c-red { --card-glow:rgba(229,62,62,.26); --card-icon-bg:rgba(229,62,62,.14); }
+  .stat-card.c-blue { --card-glow:rgba(96,165,250,.26); --card-icon-bg:rgba(96,165,250,.14); }
+  .stat-card.c-purple { --card-glow:rgba(167,139,250,.26); --card-icon-bg:rgba(167,139,250,.14); }
+  .stat-card.c-green { --card-glow:rgba(72,187,120,.26); --card-icon-bg:rgba(72,187,120,.14); }
+  .stat-card.c-orange { --card-glow:rgba(245,158,11,.26); --card-icon-bg:rgba(245,158,11,.14); }
+  .stat-card.c-blue2 { --card-glow:rgba(56,189,248,.26); --card-icon-bg:rgba(56,189,248,.14); }
+  .stat-card.c-red2 { --card-glow:rgba(230,57,70,.26); --card-icon-bg:rgba(230,57,70,.14); }
+  .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1.1px; font-weight:700; }
+  .stat-value { font-size:34px; font-weight:700; color:var(--text); line-height:1.05;
+    font-family:var(--font-mono); letter-spacing:.5px; padding-right:44px; }
+  .stat-icon { position:absolute; top:16px; right:16px; width:34px; height:34px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+    background:var(--card-icon-bg,rgba(229,62,62,.12)); }
+  .stat-hint { font-size:12px; color:var(--text2); margin-top:2px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .cache-badge { display:inline-flex; align-items:center; gap:6px;
+    font-size:11px; padding:3px 10px; border-radius:20px;
+    border:1px solid var(--border); color:var(--text2); }
+  .cache-badge .dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .cache-badge.ok { color:var(--green); border-color:rgba(72,187,120,.4); background:rgba(72,187,120,.08); }
+  .cache-badge.stale { color:var(--warn); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.08); }
+  .cache-badge.old { color:var(--error); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.08); }
+
+  .ov-grid-2 { display:grid; grid-template-columns:1.6fr 1fr; gap:20px; margin-bottom:20px; }
+  .ov-chart-wrap { width:100%; }
+  .ov-chart { width:100%; height:auto; display:block; }
+  .ov-chart-grid { stroke:var(--border); stroke-width:1; stroke-dasharray:3 5; }
+  .ov-chart-xlabel { font-size:9px; fill:var(--muted); font-family:var(--font-body); }
+  .ov-split { display:flex; align-items:center; gap:24px; padding:8px 4px; }
+  .ov-donut { width:132px; height:132px; flex-shrink:0; }
+  .ov-donut-total { font-size:20px; font-weight:700; fill:var(--text); font-family:var(--font-mono); }
+  .ov-donut-sub { font-size:8px; fill:var(--muted); text-transform:uppercase; letter-spacing:1px; font-weight:700; font-family:var(--font-body); }
+  .ov-split-legend { display:flex; flex-direction:column; gap:10px; }
+  .ov-legend-item { display:flex; align-items:center; gap:9px; font-size:13px; color:var(--text2); font-weight:600; }
+  .ov-legend-item b { margin-left:auto; font-family:var(--font-mono); font-size:16px; color:var(--text); }
+  .ov-legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+  .chart-bar-row { display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:12px; }
+  .chart-bar-row .chart-label { font-size:13px; color:var(--text2); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chart-bar-row .chart-bar { height:18px; background:var(--surface2); border-radius:6px; overflow:hidden; }
+  .chart-bar-row .chart-fill { height:100%; border-radius:6px; width:0; background:var(--accent); opacity:.85; transition:width .8s cubic-bezier(.22,1,.36,1); }
+  .chart-bar-row .chart-count { font-size:12px; color:var(--text2); text-align:right; font-family:var(--font-mono); }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-bottom:20px; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border);
+    flex-wrap:wrap; gap:8px; background:linear-gradient(180deg, rgba(230,57,70,0.05), rgba(230,57,70,0)); }
+  .card-title { font-size:15px; font-weight:800; color:var(--text); letter-spacing:.01em; }
+  .card-body { padding:20px; }
+  .card-desc { font-size:12px; color:var(--text2); margin-top:2px; }
+
+  .search-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .search-bar input[type="search"], .search-bar input[type="text"] { flex:1; min-width:180px; background:var(--input-bg);
+    border:1px solid var(--border); border-radius:8px; padding:9px 13px; color:var(--text); font-size:13px; font-family:var(--font-body); }
+  .search-bar input:focus, .search-bar select:focus { outline:none; border-color:var(--accent); }
+  .search-bar select:disabled { opacity:.45; cursor:not-allowed; }
+  .search-bar select { background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:9px 12px;
+    color:var(--text); cursor:pointer; font-family:var(--font-body); font-size:13px; }
+  /* Sélecteur de source (segmented) */
+  .tabs { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:3px; }
+  .tab { border:none; background:transparent; color:var(--muted); font-size:12px; font-weight:800;
+    padding:7px 16px; border-radius:8px; cursor:pointer; font-family:var(--font-body); transition:all .15s; letter-spacing:.2px; }
+  .tab:hover { color:var(--text); }
+  .tab.active { background:var(--accent); color:#fff; box-shadow:0 2px 10px rgba(229,62,62,.35); }
+
+  /* Barre de recherche catalogue */
+  .catalog-search { position:relative; flex:1; min-width:220px; }
+  .catalog-search .search-ico { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.55; pointer-events:none; }
+  .catalog-search input[type="search"] { width:100%; background:var(--input-bg); border:1px solid var(--border);
+    border-radius:10px; padding:10px 14px 10px 34px; color:var(--text); font-size:13px; font-family:var(--font-body); }
+  .catalog-search input:focus { outline:none; border-color:var(--accent); }
+  .catalog-subbar { display:flex; align-items:center; gap:10px; padding:10px 20px; border-bottom:1px solid var(--border);
+    flex-wrap:wrap; background:linear-gradient(180deg, rgba(229,62,62,0.04), rgba(229,62,62,0)); }
+  .catalog-subbar select { background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px;
+    color:var(--text); cursor:pointer; font-family:var(--font-body); font-size:12px; font-weight:600; }
+  .catalog-subbar select:focus { outline:none; border-color:var(--accent); }
+  .catalog-subbar select:disabled { opacity:.45; cursor:not-allowed; }
+
+  .channel-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; }
+  .list-count { font-size:12px; color:var(--muted); font-weight:600; }
+
+  /* Cartes chaînes (vignette poster/logo + nom) */
+  .chan-card { display:block; border-radius:14px; border:1px solid var(--border); background:var(--surface);
+    overflow:hidden; text-decoration:none; color:var(--text); cursor:pointer;
+    transition:transform .18s cubic-bezier(.22,1,.36,1), border-color .18s, box-shadow .18s; }
+  .chan-card:hover { transform:translateY(-4px); border-color:rgba(229,62,62,.45); box-shadow:0 12px 30px rgba(0,0,0,.35); }
+  .chan-tile { position:relative; aspect-ratio:16/9;
+    background:radial-gradient(120% 140% at 20% 0%, #1d1d21 0%, var(--surface2) 60%, var(--surface) 100%);
+    overflow:hidden; }
+  .chan-logo { width:100%; height:100%; object-fit:contain; transition:transform .25s cubic-bezier(.22,1,.36,1); }
+  .chan-card:hover .chan-logo { transform:scale(1.06); }
+  .chan-play { position:absolute; inset:0; display:grid; place-items:center; background:rgba(10,10,11,0);
+    opacity:0; transition:opacity .18s, background .18s; }
+  .chan-card:hover .chan-play { opacity:1; background:rgba(10,10,11,0.55); }
+  .play-badge { width:46px; height:46px; border-radius:50%; background:var(--accent); color:#fff; display:grid;
+    place-items:center; font-size:16px; box-shadow:0 8px 24px rgba(229,62,62,.5); transform:scale(.8); transition:transform .18s; }
+  .chan-card:hover .play-badge { transform:scale(1); }
+  .chan-check { position:absolute; top:8px; left:8px; font-size:10px; font-weight:800; padding:3px 8px; border-radius:8px;
+    background:rgba(0,0,0,.5); color:#aaa; cursor:pointer; z-index:2; font-family:var(--font-mono); transition:all .18s; letter-spacing:.3px; }
+  .chan-check.ok { color:#48bb78; }
+  .chan-check.ko { color:#ef4444; }
+  .chan-check.busy { opacity:.6; pointer-events:none; }
+  .chan-body { padding:11px 12px 13px; }
+  .chan-name { font-size:13px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chan-meta { font-size:11px; color:var(--muted); margin-top:3px; font-family:var(--font-mono); }
+  .fav-empty { grid-column:1/-1; text-align:center; padding:26px; color:var(--muted); font-size:13px; }
+  .fav-empty a { color:var(--accent); }
+
+/* Sources manuelles */
+  .manual-channels-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin-top:16px; }
+  .manual-channel-card { display:flex; flex-direction:column; background:var(--surface2); border:1px solid var(--border);
+    border-radius:12px; overflow:hidden; text-decoration:none; color:var(--text); transition:all .18s; }
+  .manual-channel-card:hover { transform:translateY(-2px); border-color:var(--accent); box-shadow:0 10px 26px rgba(0,0,0,.35); }
+  .manual-tile { position:relative; aspect-ratio:16/9; background:var(--surface3); display:grid; place-items:center; overflow:hidden; }
+  .manual-logo { width:62%; max-height:62%; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+  .manual-badge { position:absolute; top:8px; left:8px; display:flex; align-items:center; gap:5px; font-size:9px; font-weight:800;
+    color:#fff; background:rgba(100,100,110,.9); padding:3px 9px; border-radius:999px; letter-spacing:.4px; }
+  .manual-body { padding:11px 13px 13px; display:flex; flex-direction:column; gap:5px; flex:1; }
+  .manual-name { font-size:13px; font-weight:700; color:var(--text); line-height:1.3;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .manual-meta { font-size:11px; color:var(--muted); font-family:var(--font-mono); }
+  .manual-actions { display:flex; gap:8px; margin-top:6px; padding-top:8px; border-top:1px solid var(--border); }
+  .manual-actions button { flex:1; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:600;
+    border:none; cursor:pointer; transition:all .15s; }
+  .manual-test { background:var(--accent); color:#fff; }
+  .manual-test:hover { background:#c53030; }
+  .manual-test.busy { opacity:.6; pointer-events:none; }
+  .manual-del { background:rgba(239,68,68,.1); color:var(--error); border:1px solid var(--error); }
+  .manual-del:hover { background:rgba(239,68,68,.2); }
+  .add-source-box { background:var(--input-bg); border:2px dashed var(--border);
+    border-radius:12px; padding:20px; margin-bottom:14px; transition:all .3s; }
+  .add-source-box:hover { border-color:var(--accent); }
+  .add-source-input { width:100%; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:12px 16px; color:var(--text);
+    font-size:13px; font-family:var(--font-mono); margin-bottom:12px; transition:all .3s; }
+  .add-source-input:focus { outline:none; border-color:var(--accent); }
+  .add-source-btn { padding:12px 24px; background:var(--accent); border:none; border-radius:10px; color:#fff;
+    font-weight:700; cursor:pointer; transition:all .2s; width:100%; }
+  .add-source-btn:hover { background:#c53030; }
+  .add-source-btn:disabled { opacity:.6; cursor:not-allowed; }
+  .add-source-result { margin-top:12px; font-size:13px; }
+  .add-source-preview { margin-top:12px; max-height:200px; overflow-y:auto; }
+  .add-source-preview-item { padding:8px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    margin-bottom:6px; font-size:12px; display:flex; justify-content:space-between; gap:8px; }
+  .add-source-preview-name { font-weight:600; color:var(--text); }
+  .add-source-preview-id { color:var(--muted); font-family:var(--font-mono); }
+  .alert { padding:10px 14px; border-radius:8px; margin-top:8px; font-size:12px; }
+  .alert-success { background:rgba(72,187,120,0.12); border:1px solid var(--green); color:var(--green); }
+  .alert-error { background:rgba(239,68,68,0.12); border:1px solid var(--error); color:var(--error); }
+
+  .player-modal { position:fixed; top:0; left:0; right:0; bottom:0;
+    background:rgba(0,0,0,0.95); z-index:1000;
+    display:none; align-items:center; justify-content:center; padding:20px; }
+  .player-modal.active { display:flex; }
+  .player-container { width:100%; max-width:1200px; background:var(--surface);
+    border:1px solid var(--border); border-radius:16px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+  .player-header { display:flex; justify-content:space-between; align-items:center;
+    padding:16px 20px; border-bottom:1px solid var(--border); }
+  .player-header h3 { margin:0; font-size:15px; font-weight:700; }
+  .player-close { background:none; border:none; color:var(--text2); font-size:24px; cursor:pointer; width:32px; height:32px;
+    display:grid; place-items:center; border-radius:6px; transition:all .2s; }
+  .player-close:hover { background:var(--surface2); color:var(--text); }
+  .player-body { padding:20px; }
+  .player-frame { width:100%; aspect-ratio:16/9; background:#000; border-radius:8px; border:none; }
+
+  /* LOGS — cartes propres */
+  .logs-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .logs-stats { display:flex; align-items:center; gap:12px; margin-right:auto; }
+  .log-stat { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .log-stat b { font-size:13px; color:var(--text); }
+  .log-stat.ok b { color:var(--green); }
+  .log-stat.warn b { color:var(--warn); }
+  .log-stat.err b { color:var(--error); }
+  .logs-group { display:flex; align-items:center; gap:6px; }
+  .logs-group label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:700; }
+  .logs-select, .logs-search input { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:7px 10px;
+    font-size:12px; font-weight:600; color:var(--text); font-family:var(--font-body); cursor:pointer; }
+  .logs-search { position:relative; }
+  .logs-search .search-ico { position:absolute; right:10px; top:50%; transform:translateY(-50%); opacity:.5; pointer-events:none; }
+  .logs-search input { cursor:text; min-width:200px; font-weight:500; padding-right:32px; }
+  .logs-search input:focus, .logs-select:focus { outline:none; border-color:var(--accent); }
+  .logs-pausebtn { display:flex; align-items:center; gap:6px; background:var(--surface2); border:1px solid var(--border); border-radius:7px;
+    padding:7px 12px; font-size:12px; font-weight:700; color:var(--text2); cursor:pointer; font-family:var(--font-body); transition:all .15s; }
+  .logs-pausebtn:hover { color:var(--text); border-color:var(--text2); }
+  .logs-pausebtn.paused { background:var(--accent-dim); border-color:rgba(229,62,62,0.3); color:var(--accent); }
+  .logs-status { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+  .logs-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:logsPulse 1.6s infinite; flex-shrink:0; }
+  .logs-dot.paused { background:var(--muted); animation:none; }
+  @keyframes logsPulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .logs-list { max-height:520px; overflow-y:auto; font-family:var(--font-mono); font-size:13px; }
+  .logs-list::-webkit-scrollbar { width:8px; }
+  .logs-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:8px; }
+  .log-entry { display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--border); transition:background .15s; }
+  .log-entry:last-child { border-bottom:none; }
+  .log-entry:hover { background:var(--card-hover); }
+  .log-entry.warn { background:rgba(245,158,11,0.03); }
+  .log-entry.err { background:rgba(230,57,70,0.04); }
+  .log-time { font-size:13px; color:var(--muted); white-space:nowrap; flex-shrink:0; }
+  .log-method { display:inline-flex; align-items:center; justify-content:center; min-width:56px; height:26px; border-radius:4px; font-size:11px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; }
+  .log-method.get { background:rgba(72,187,120,.15); color:var(--green); }
+  .log-method.post { background:rgba(59,130,246,.15); color:#3b82f6; }
+  .log-method.delete { background:rgba(239,68,68,.15); color:var(--error); }
+  .log-code { display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:26px; border-radius:4px; font-size:12px; font-weight:800; }
+  .log-code.ok { background:rgba(72,187,120,.15); color:var(--green); }
+  .log-code.warn { background:rgba(245,158,11,.15); color:var(--warn); }
+  .log-code.err { background:rgba(239,68,68,.15); color:var(--error); }
+  .log-ip { font-size:13px; color:var(--text2); font-family:var(--font-mono); flex-shrink:0; }
+  .log-path { font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; cursor:pointer; }
+  .log-path:hover { color:var(--accent); }
+  .logs-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; color:var(--muted); text-align:center; }
+  .logs-empty .icon { font-size:36px; opacity:.4; margin-bottom:10px; }
+
+  /* Stremio table */
+  .stremio-table { display:flex; flex-direction:column; gap:6px; }
+  .stremio-row { display:grid; grid-template-columns: 80px 1fr 1fr auto; gap:10px; align-items:center;
+    padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; }
+  .stremio-row-head { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
+    background:var(--surface3); border:1px solid var(--border); }
+  .stremio-cell { display:flex; align-items:center; gap:8px; }
+  .stremio-cell input { flex:1; background:var(--input-bg); border:1px solid var(--border); border-radius:6px;
+    padding:8px 10px; color:var(--text); font-size:12px; font-family:var(--font-body); }
+  .stremio-cell input:focus { outline:none; border-color:var(--accent); }
+  .stremio-cell .stremio-del { padding:6px 10px; background:rgba(239,68,68,.1); color:var(--error); border:1px solid var(--error);
+    border-radius:6px; cursor:pointer; font-size:12px; transition:all .15s; }
+  .stremio-cell .stremio-del:hover { background:rgba(239,68,68,.2); }
+  .stremio-empty { text-align:center; color:var(--muted); padding:20px; font-size:13px; }
+
+  /* Stremio channel editor table */
+  .stremio-ch-table { display:flex; flex-direction:column; gap:4px; }
+  .stremio-ch-row { display:grid; grid-template-columns: 60px 1fr 100px 120px 160px 80px; gap:10px; align-items:center;
+    padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    transition:background .15s; }
+  .stremio-ch-row:hover { background:var(--card-hover); }
+  .stremio-ch-head { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
+    background:var(--surface3); border:1px solid var(--border); }
+  .stremio-ch-row img { border-radius:4px; }
+  .stremio-ch-row .btn-outline-sm { padding:4px 10px; font-size:11px; height:auto; }
+
+  /* TV Channels table */
+  .tv-ch-table { display:flex; flex-direction:column; gap:4px; }
+  .tv-ch-row { display:grid; grid-template-columns: 50px 1fr 100px 90px 90px 80px; gap:10px; align-items:center;
+    padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    transition:background .15s; cursor:pointer; }
+  .tv-ch-row:hover { background:var(--card-hover); }
+  .tv-ch-head { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
+    background:var(--surface3); border:1px solid var(--border); cursor:default; }
+  .tv-ch-row img { border-radius:4px; }
+  .tv-epg.ok { color:var(--green); font-weight:700; }
+  .tv-epg.warn { color:var(--warn); font-weight:700; }
+  .tv-epg.missing { color:var(--muted); font-size:11px; }
+  .tv-stream.ok { color:var(--accent); font-family:var(--font-mono); font-size:11px; }
+  .tv-stream.missing { color:var(--muted); font-size:11px; }
+  .tv-name.custom { color:var(--accent); font-weight:700; }
+  .tv-name.auto { color:var(--text2); }
+
+  /* Generic modal */
+  .modal { position:fixed; top:0; left:0; right:0; bottom:0;
+    background:rgba(0,0,0,0.6); z-index:1000;
+    display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal.active { display:flex; }
+  .modal-content { width:100%; max-width:560px; background:var(--surface);
+    border:1px solid var(--border); border-radius:16px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+  .modal-header { display:flex; justify-content:space-between; align-items:center;
+    padding:16px 20px; border-bottom:1px solid var(--border); }
+  .modal-header h3 { margin:0; font-size:15px; font-weight:700; }
+  .modal-close { background:none; border:none; color:var(--text2); font-size:24px; cursor:pointer; width:32px; height:32px;
+    display:grid; place-items:center; border-radius:6px; transition:all .2s; }
+  .modal-close:hover { background:var(--surface2); color:var(--text); }
+  .modal-body { padding:20px; max-height:70vh; overflow-y:auto; }
+
+  /* TV Modal */
+  .tv-modal { max-width:560px; }
+  .form-row { margin-bottom:14px; }
+  .form-row label { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+  .form-row input { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-size:13px; }
+  .form-row input:focus { outline:none; border-color:var(--accent); }
+  .form-row input[readonly] { background:var(--surface2); color:var(--text2); }
+  .form-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; padding-top:16px; border-top:1px solid var(--border); }
+
+  .update-time { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; white-space:nowrap; font-weight:600; }
+  .update-time .spinner { width:13px; height:13px; border:2px solid var(--border);
+    border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; opacity:0; }
+  .update-time.loading .spinner { opacity:1; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .status-indicator { display:flex; align-items:center; gap:8px;
+    padding:6px 12px; border-radius:20px;
+    background:rgba(72,187,120,0.08); border:1px solid rgba(72,187,120,.4);
+    color:var(--green); font-size:12px; font-weight:600; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  .toast { position:fixed; bottom:24px; right:24px; background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-size:13px; font-weight:600; color:var(--text); box-shadow:0 8px 32px rgba(0,0,0,0.3);
+    opacity:0; transform:translateY(10px); transition:all .3s; z-index:200; }
+  .toast.show { opacity:1; transform:translateY(0); }
+  .toast.success { border-color:var(--green); }
+  .toast.error { border-color:var(--error); }
+  .toast.warn { border-color:var(--warn); }
+
+  footer { margin-top:40px; color:var(--muted); font-size:12px; text-align:center; }
+
+  /* Raccourcis & Liens sidebar */
+  .nav-shortcut { display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:8px;
+    font-size:12px; font-weight:600; color:var(--text2); cursor:pointer; margin-bottom:2px;
+    border:none; background:none; width:100%; text-align:left; font-family:var(--font-body); transition:all .15s; }
+  a.nav-shortcut { text-decoration:none; }
+  .nav-shortcut:hover { background:var(--surface2); color:var(--text); }
+  .nav-shortcut.active { background:var(--surface2); color:var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+  .nav-shortcut .sc-ico { width:20px; text-align:center; flex-shrink:0; font-size:13px; }
+  .nav-shortcut .sc-txt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nav-shortcut .sc-count { font-size:10px; font-weight:800; color:var(--muted); background:var(--surface2);
+    border:1px solid var(--border); border-radius:20px; padding:1px 7px; font-family:var(--font-mono); flex-shrink:0; }
+  .nav-shortcut.active .sc-count { color:var(--accent); border-color:rgba(229,62,62,.35); background:rgba(229,62,62,.08); }
+
+  /* Sélecteur de plage du graphique trafic */
+  .chart-range { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; }
+  .range-btn { border:none; background:transparent; color:var(--muted); font-size:11px; font-weight:800;
+    padding:5px 11px; border-radius:6px; cursor:pointer; font-family:var(--font-body); transition:all .15s; }
+  .range-btn:hover { color:var(--text); }
+  .range-btn.active { background:var(--accent); color:#fff; }
+
+  /* Top chaînes */
+  .top-row { display:grid; grid-template-columns:30px minmax(0,1fr) 1.2fr 44px; align-items:center; gap:12px;
+    padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+  .top-row:last-child { border-bottom:none; }
+  .top-row:hover { background:var(--card-hover); }
+  .top-logo { width:28px; height:28px; border-radius:6px; object-fit:cover; background:#000; flex-shrink:0; }
+  .top-name { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .top-bar { height:8px; background:var(--surface2); border-radius:6px; overflow:hidden; }
+  .top-bar-fill { height:100%; background:var(--accent); border-radius:6px; opacity:.85; transition:width .8s cubic-bezier(.22,1,.36,1); }
+  .top-plays { font-size:12px; color:var(--text2); text-align:right; font-family:var(--font-mono); font-weight:700; }
+  .top-time { font-size:12px; color:var(--text2); font-weight:600; }
+
+  /* État des services */
+  .svc-row { display:flex; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid var(--border); }
+  .svc-row:last-child { border-bottom:none; }
+  .svc-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .svc-dot.ok { background:var(--green); box-shadow:0 0 8px rgba(72,187,120,.6); }
+  .svc-dot.stale { background:var(--warn); box-shadow:0 0 8px rgba(245,158,11,.5); }
+  .svc-dot.ko { background:var(--error); box-shadow:0 0 8px rgba(239,68,68,.6); }
+  .svc-name { font-size:13px; font-weight:600; color:var(--text); flex-shrink:0; }
+  .svc-desc { font-size:12px; color:var(--muted); margin-left:auto; text-align:right; }
+  .svc-count { font-family:var(--font-mono); font-weight:800; }
+  .svc-count.ok { color:var(--green); }
+  .svc-count.part { color:var(--warn); }
+  .svc-count.ko { color:var(--error); }
+  .svc-foot { border-top:1px solid var(--border); }
+
+  /* En ce moment (lectures live) */
+  .live-item { display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid var(--border);
+    text-decoration:none; color:var(--text); }
+  .live-item:last-child { border-bottom:none; }
+  .live-item:hover { background:var(--card-hover); }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px rgba(72,187,120,.7);
+    animation:pulse 1.6s infinite; flex-shrink:0; }
+  .live-name { flex:1; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .live-time { font-size:11px; color:var(--muted); font-family:var(--font-mono); flex-shrink:0; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  /* Programmes en cours (mini-EPG) */
+  .now-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+  .now-card { display:flex; flex-direction:column; background:var(--surface2); border:1px solid var(--border);
+    border-radius:12px; overflow:hidden; text-decoration:none; color:var(--text); transition:all .18s; }
+  .now-card:hover { transform:translateY(-2px); border-color:var(--accent); box-shadow:0 10px 26px rgba(0,0,0,.35); }
+  .now-tile { position:relative; aspect-ratio:16/9; background:var(--surface3); display:grid; place-items:center; overflow:hidden; }
+  .now-logo { width:62%; max-height:62%; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+  .now-live { position:absolute; top:8px; left:8px; display:flex; align-items:center; gap:5px; font-size:9px; font-weight:800;
+    color:#fff; background:rgba(229,62,62,.92); padding:3px 9px; border-radius:999px; letter-spacing:.4px; }
+  .now-live i { width:6px; height:6px; border-radius:50%; background:#fff; animation:pulse 1.4s infinite; }
+  .now-body { padding:11px 13px 13px; display:flex; flex-direction:column; gap:5px; flex:1; }
+  .now-ch { font-size:11px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:.5px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .now-prog-title { font-size:13px; font-weight:700; color:var(--text); line-height:1.3;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .now-prog-desc { font-size:11px; color:var(--muted); line-height:1.35;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .now-bar { height:4px; border-radius:999px; background:var(--surface3); overflow:hidden; margin-top:2px; }
+  .now-fill { height:100%; border-radius:999px; background:var(--accent); transition:width .4s; }
+  .now-ends { font-size:10px; color:var(--muted); font-family:var(--font-mono); }
+  .now-next { font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .now-next b { color:var(--accent); font-weight:700; }
+
+  /* Page Système */
+  .sys-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+  .sys-row { display:flex; justify-content:space-between; gap:12px; padding:10px 14px;
+    background:var(--surface2); border:1px solid var(--border); border-radius:10px; }
+  .sys-key { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .sys-val { font-size:13px; color:var(--text); font-weight:700; font-family:var(--font-mono); text-align:right; word-break:break-all; }
+  .btn-danger { display:inline-flex; align-items:center; gap:6px; background:rgba(239,68,68,0.12);
+    border:1px solid var(--error); color:var(--error); border-radius:8px; padding:10px 18px;
+    font-size:13px; font-weight:700; cursor:pointer; font-family:var(--font-body); transition:all .2s; }
+  .btn-danger:hover { background:var(--error); color:#fff; }
+  .btn-danger:disabled { opacity:.6; cursor:not-allowed; }
+
+  .mobile-topbar { display:none; }
+  .sidebar-backdrop { display:none; }
+  @media (max-width:900px) {
+    .sidebar { position:fixed; top:0; left:0; height:100%; z-index:200; transform:translateX(-100%);
+               transition:transform .25s ease; box-shadow:2px 0 24px rgba(0,0,0,.4); }
+    .sidebar.open { transform:translateX(0); }
+    .sidebar-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:150; }
+    .sidebar-backdrop.open { display:block; }
+    .mobile-topbar { display:flex; align-items:center; gap:12px; padding:11px 14px; position:sticky; top:0;
+                     z-index:100; background:var(--surface); border-bottom:1px solid var(--border); }
+    .mobile-topbar .burger { background:var(--surface2); border:1px solid var(--border); color:var(--text);
+                             border-radius:9px; padding:6px 13px; font-size:18px; line-height:1; cursor:pointer; }
+    .mobile-topbar .mt-title { font-family:var(--font-display); font-size:19px; letter-spacing:.5px; }
+    .main { margin-left:0; padding:16px 16px 60px; }
+    .stats-grid { grid-template-columns:repeat(2,1fr); }
+    .ov-grid-2 { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-icon">▶</div>
+        <div class="login-title">dlstreams</div>
+      </div>
+      <div class="login-sub">Accès dashboard</div>
+      <div class="login-error" id="login-error">Mot de passe incorrect</div>
+      <div class="field">
+        <label>Mot de passe</label>
+        <input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')handleLogin(event)">
+      </div>
+      <button class="btn-primary" onclick="handleLogin(event)">Se connecter</button>
+    </div>
+  </div>
+
+  <div id="dashboard">
+    <div class="layout">
+      <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+      <div class="sidebar">
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-brand">
+            <div class="sidebar-logo-icon">▶</div>
+            <div class="sidebar-logo-text">
+              <div class="title">dlstreams</div>
+              <div class="sub">Dashboard</div>
+            </div>
+          </div>
+          <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Basculer le thème">🌙</button>
+        </div>
+        <div class="sidebar-nav">
+          <div class="nav-section-label">Menu</div>
+          <button class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">📊 Vue d'ensemble</button>
+          <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
+          <button class="nav-item" data-page="programs" onclick="navigateTo('programs')">📺 Programmes</button>
+          <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
+          <button class="nav-item" data-page="channels" onclick="navigateTo('channels')">📺 Chaînes TV</button>
+          <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
+          <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages</button>
+        </div>
+        <div class="sidebar-bottom">
+          <button class="btn-logout" onclick="logout()">Déconnexion</button>
+        </div>
+      </div>
+
+      <div class="main">
+        <div class="mobile-topbar">
+          <button class="burger" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button>
+          <div class="mt-title">dlstreams</div>
+        </div>
+
+        <!-- PAGE: OVERVIEW -->
+        <div class="page active" id="page-dashboard">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Vue d'ensemble</div>
+              <div class="page-sub">Statistiques de votre proxy de chaînes</div>
+            </div>
+            <div class="header-actions">
+              <span class="update-time" id="update-time"><div class="spinner"></div><span id="update-label">Mise à jour…</span></span>
+              <div class="status-indicator"><div class="status-dot"></div><span>En ligne</span></div>
+              <button class="btn-outline-sm" onclick="refreshAll()">↻ Actualiser</button>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card c-red">
+              <div class="stat-icon">📡</div>
+              <div class="stat-label">Chaînes dlstreams</div>
+              <div class="stat-value" id="c-dl">—</div>
+              <div class="stat-hint" id="c-dl-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+            </div>
+            <div class="stat-card c-blue">
+              <div class="stat-icon">📺</div>
+              <div class="stat-label">Chaînes Vavoo</div>
+              <div class="stat-value" id="c-vv">—</div>
+              <div class="stat-hint" id="c-vv-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+            </div>
+            <div class="stat-card c-green">
+              <div class="stat-icon">➕</div>
+              <div class="stat-label">Sources manuelles</div>
+              <div class="stat-value" id="c-manual">0</div>
+              <div class="stat-hint">ajoutées par vous</div>
+            </div>
+            <div class="stat-card c-purple">
+              <div class="stat-icon">⏱️</div>
+              <div class="stat-label">Uptime</div>
+              <div class="stat-value" id="c-up">—</div>
+              <div class="stat-hint">depuis démarrage</div>
+            </div>
+            <div class="stat-card c-blue2">
+              <div class="stat-icon">🔁</div>
+              <div class="stat-label">Requêtes</div>
+              <div class="stat-value" id="c-req">—</div>
+              <div class="stat-hint">total depuis démarrage</div>
+            </div>
+            <div class="stat-card c-red2">
+              <div class="stat-icon">⚠️</div>
+              <div class="stat-label">Erreurs</div>
+              <div class="stat-value" id="c-err">—</div>
+              <div class="stat-hint" id="c-err-h">requêtes en échec</div>
+            </div>
+          </div>
+
+          <div class="ov-grid-2">
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title">Trafic</div>
+                <div class="chart-range">
+                  <button class="range-btn active" data-range="60" onclick="setChartRange(60)">1h</button>
+                  <button class="range-btn" data-range="1440" onclick="setChartRange(1440)">24h</button>
+                  <button class="range-btn" data-range="10080" onclick="setChartRange(10080)">7j</button>
+                </div>
+                <span class="card-desc" id="chart-total"></span>
+              </div>
+              <div class="card-body"><div class="ov-chart-wrap" id="traffic-chart"></div></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><div class="card-title">🩺 État des services</div><span class="card-desc" id="svc-total"></span></div>
+              <div class="card-body" id="svc-services" style="padding-top:8px">
+                <div class="fav-empty">chargement…</div>
+              </div>
+              <div class="card-head svc-foot" style="justify-content:flex-end">
+                <button class="btn-outline-sm" id="svc-check-btn" onclick="checkServices()">↻ Vérifier maintenant</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ov-grid-2">
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title">Erreurs</div>
+                <div class="chart-range">
+                  <button class="range-btn active" data-range="60" onclick="setChartRange(60)">1h</button>
+                  <button class="range-btn" data-range="1440" onclick="setChartRange(1440)">24h</button>
+                  <button class="range-btn" data-range="10080" onclick="setChartRange(10080)">7j</button>
+                </div>
+                <span class="card-desc" id="err-total"></span>
+              </div>
+              <div class="card-body"><div class="ov-chart-wrap" id="err-chart"><div class="fav-empty">aucune donnée</div></div></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><div class="card-title">📡 En ce moment</div></div>
+              <div class="card-body" id="live-list" style="padding-top:8px">
+                <div class="fav-empty">aucune lecture en cours — ouvre une chaîne !</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">🔥 Lectures</div>
+              <div class="chart-range">
+                <button class="range-btn active" data-chtab="top" onclick="setChTab('top')">Top</button>
+                <button class="range-btn" data-chtab="recent" onclick="setChTab('recent')">Récents</button>
+              </div>
+              <span class="card-desc" id="top-total"></span>
+            </div>
+            <div class="card-body" id="top-channels">
+              <div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>
+            </div>
+            <div class="card-body" id="top-more-wrap" style="display:none;padding-top:0">
+              <button class="btn-outline-sm" id="top-more" onclick="toggleTopLimit()" style="width:100%">Voir plus</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: PROGRAMMES -->
+        <div class="page" id="page-programs">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Programmes</div>
+              <div class="page-sub">Ce qui passe en ce moment sur les chaînes populaires</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head" style="gap:12px">
+              <div class="catalog-search">
+                <span class="search-ico">🔍</span>
+                <input type="search" id="now-q" placeholder="Rechercher une chaîne ou un programme…" oninput="renderNow()">
+              </div>
+              <span class="card-desc" id="now-total" style="white-space:nowrap"></span>
+              <button class="btn-outline-sm" onclick="loadNow(true)" title="Rafraîchir les programmes">↻</button>
+            </div>
+            <div class="card-body" id="now-list" style="padding-top:8px">
+              <div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: LOGS -->
+        <div class="page" id="page-logs">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Logs</div>
+              <div class="page-sub">Journal en direct des requêtes — 300 dernières entrées</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head logs-toolbar">
+              <div class="logs-stats" id="logs-stats">
+                <span class="log-stat" id="stat-total"><b>0</b> total</span>
+                <span class="log-stat ok" id="stat-2xx"><b>0</b> 2xx</span>
+                <span class="log-stat warn" id="stat-4xx"><b>0</b> 4xx</span>
+                <span class="log-stat err" id="stat-5xx"><b>0</b> 5xx</span>
+              </div>
+              <div class="logs-group logs-search">
+                <input type="search" id="logs-search" placeholder="Filtrer chemin, IP, méthode…" oninput="renderLogs()">
+                <span class="search-ico">🔍</span>
+              </div>
+              <div class="logs-group">
+                <label>Méthode</label>
+                <select class="logs-select" id="logs-method" onchange="renderLogs()">
+                  <option value="">Toutes</option>
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+              </div>
+              <div class="logs-group">
+                <label>Auto-refresh</label>
+                <select class="logs-select" id="logs-interval" onchange="restartLogPolling()">
+                  <option value="2000">2s</option>
+                  <option value="5000" selected>5s</option>
+                  <option value="10000">10s</option>
+                  <option value="0">Off</option>
+                </select>
+              </div>
+              <button class="logs-pausebtn" id="logs-pausebtn" onclick="toggleLogPause()">⏸️ Pause</button>
+              <button class="btn-outline-sm" onclick="exportLogs()">⬇️ Exporter</button>
+              <button class="btn-outline-sm" onclick="clearLogs()">🗑️ Vider</button>
+              <div class="logs-status" style="margin-left:auto">
+                <div class="logs-dot" id="logs-dot"></div>
+                <span id="logs-statustext">Live</span>
+              </div>
+            </div>
+            <div class="card-body" style="padding:0">
+              <div class="logs-list" id="logs-list">
+                <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs…</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: CHAÎNES TV -->
+        <div class="page" id="page-channels">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Chaînes TV</div>
+              <div class="page-sub">Gestion complète : nom, logo, flux, EPG</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="tabs" style="margin-bottom:8px">
+                <button class="tab active" data-tv-tab="all" onclick="switchTvTab('all')">📺 Toutes</button>
+                <button class="tab" data-tv-tab="custom" onclick="switchTvTab('custom')">⭐ Personnalisées</button>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div class="catalog-search" style="min-width:280px;flex:1">
+                  <span class="search-ico">🔍</span>
+                  <input type="search" id="tv-ch-search" placeholder="Filtrer (nom, ID, source, EPG)…" oninput="renderTvChannels()">
+                </div>
+                <span class="card-desc" id="tv-ch-count"></span>
+                <button class="btn-outline-sm" onclick="loadTvChannels()">↻ Rafraîchir</button>
+                <button class="add-source-btn" id="tv-add-custom-btn" style="display:none" onclick="openAddCustomChannel()">➕ Ajouter chaîne</button>
+              </div>
+            </div>
+            <div class="card-body" style="padding-top:8px">
+              <div class="tv-ch-table" id="tv-ch-list">
+                <div class="tv-empty">Chargement…</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modal édition chaîne (existantes) -->
+          <div class="modal" id="tv-ch-modal">
+            <div class="modal-content tv-modal">
+              <div class="modal-header">
+                <h3 id="tv-modal-title">Éditer la chaîne</h3>
+                <button class="modal-close" onclick="closeTvModal()">&times;</button>
+              </div>
+              <div class="modal-body">
+                <input type="hidden" id="tv-modal-id">
+                <input type="hidden" id="tv-modal-src">
+                
+                <div class="form-row">
+                  <label>ID (lecture seule)</label>
+                  <input type="text" id="tv-modal-id-input" readonly style="background:var(--surface2);color:var(--text2)">
+                </div>
+                <div class="form-row">
+                  <label>Source</label>
+                  <input type="text" id="tv-modal-src-input" readonly style="background:var(--surface2);color:var(--text2);text-transform:uppercase">
+                </div>
+                
+                <div class="form-row">
+                  <label>Nom de la chaîne</label>
+                  <input type="text" id="tv-modal-name" placeholder="Nom personnalisé (vide = auto)">
+                  <span id="tv-modal-orig-name" style="font-size:11px;color:var(--muted)"></span>
+                </div>
+                
+                <div class="form-row">
+                  <label>Logo (URL png/jpg)</label>
+                  <input type="url" id="tv-modal-logo" placeholder="https://.../logo.png (vide = auto)">
+                  <img id="tv-modal-logo-preview" src="" alt="" style="width:48px;height:27px;object-fit:cover;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
+                  <span id="tv-modal-orig-logo" style="font-size:11px;color:var(--muted)"></span>
+                </div>
+                
+                <div class="form-row">
+                  <label>Flux personnalisés (m3u8/mpd) — texte + lien, plusieurs possibles</label>
+                  <div id="tv-modal-streams"></div>
+                  <button type="button" class="btn-outline-sm" onclick="addTvStreamRow()" style="margin-top:6px">➕ Ajouter un flux</button>
+                  <span id="tv-modal-orig-stream" style="font-size:11px;color:var(--muted);display:block;margin-top:5px"></span>
+                </div>
+                
+                <div class="form-row">
+                  <label>EPG (ID xmltv)</label>
+                  <input type="text" id="tv-modal-epg" placeholder="ID xmltv pour l'EPG (vide = auto)">
+                  <span id="tv-modal-orig-epg" style="font-size:11px;color:var(--muted)"></span>
+                </div>
+                
+                <div class="form-actions">
+                  <button class="btn-outline-sm" onclick="resetTvModal()">↺ Réinitialiser</button>
+                  <button class="btn-outline-sm" onclick="deleteTvChannel()">🗑️ Supprimer override</button>
+                  <button class="add-source-btn" onclick="saveTvChannel()">💾 Enregistrer</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: REGLAGES -->
+        <div class="page" id="page-settings">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Réglages</div>
+              <div class="page-sub">Logos, EPG et catégories personnalisables</div>
+            </div>
+            <div class="header-actions">
+              <button class="btn-outline-sm" onclick="loadSettings()">↻ Actualiser</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🎨 Affichage</div></div>
+            <div class="card-body">
+              <label class="toggle-row">
+                <div>
+                  <div class="toggle-title">Logos réels des chaînes</div>
+                  <div class="toggle-sub">Vraies logos des chaînes populaires, sinon posters générés</div>
+                </div>
+                <input type="checkbox" id="set-logos" onchange="saveSettings()">
+              </label>
+              <label class="toggle-row">
+                <div>
+                  <div class="toggle-title">EPG — programme en cours</div>
+                  <div class="toggle-sub">Affiche « Maintenant / À suivre » sur les chaînes couvertes</div>
+                </div>
+                <input type="checkbox" id="set-epg" onchange="saveSettings()">
+              </label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">📡 Source EPG (XMLTV)</div></div>
+            <div class="card-body">
+              <input class="add-source-input" id="set-epg-url" type="url" placeholder="URL du fichier XMLTV (.xml ou .xml.gz)">
+              <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
+                <button class="add-source-btn" onclick="saveSettings()">💾 Enregistrer</button>
+                <button class="btn-outline-sm" onclick="refreshEpg()">↻ Rafraîchir l'EPG</button>
+                <span id="epg-status" style="color:var(--text2);font-size:13px">chargement…</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🗂️ Catégories</div></div>
+            <div class="card-body">
+              <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Attribuez une catégorie aux chaînes populaires. Elles alimentent le filtre « genre » de Stremio.</p>
+              <div id="genre-edit" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">chargement…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: SOURCES -->
+        <div class="page" id="page-sources">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Sources</div>
+              <div class="page-sub">Ajoutez vos propres chaînes via le scraper dlstreams</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">📡 Ajouter une source</div></div>
+            <div class="card-body">
+              <div class="add-source-box">
+                <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page dlstreams (ex: https://dlstreams.st/watch.php?id=121)">
+                <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
+                <div class="add-source-result" id="add-source-result"></div>
+                <div class="add-source-preview" id="add-source-preview" style="display:none"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">📋 Sources ajoutées manuellement</div>
+              <span class="card-desc" id="manual-count" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+            <div class="card-body">
+              <div class="manual-channels-list" id="manual-channels-list">
+                <div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🕒 Activité récente</div></div>
+            <div class="card-body">
+              <div id="activity-list-src" style="font-size:13px;color:var(--text2)">chargement…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: CATALOG -->
+        <div class="page" id="page-catalog">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Catalogue</div>
+              <div class="page-sub">Explorer toutes les chaînes disponibles</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head" style="gap:12px">
+              <div class="catalog-search">
+                <span class="search-ico">🔍</span>
+                <input type="search" id="q" placeholder="Rechercher une chaîne…">
+              </div>
+              <div class="tabs">
+                <button class="tab active" data-src="dlstreams">dlstreams</button>
+                <button class="tab" data-src="vavoo">Vavoo</button>
+              </div>
+            </div>
+            <div class="catalog-subbar">
+              <select id="lang-filter">
+                <option value="all" selected>🌍 Toutes langues</option>
+                <option value="fr">🇫🇷 Français</option>
+                <option value="en">🇬🇧 English</option>
+                <option value="es">🇪🇸 Español</option>
+                <option value="de">🇩🇪 Deutsch</option>
+                <option value="it">🇮🇹 Italiano</option>
+                <option value="ar">🇸🇦 Arabe</option>
+                <option value="pt">🇵🇹 Português</option>
+                <option value="other">📺 Autres</option>
+              </select>
+              <select id="catalog-sort" onchange="setCatalogSort()">
+                <option value="name">Tri : Nom</option>
+                <option value="plays">Tri : Lectures</option>
+              </select>
+              <span class="list-count" id="catalog-count"></span>
+              <span style="flex:1"></span>
+              <button class="btn-outline-sm" onclick="exportCatalogM3U()">⬇️ M3U</button>
+            </div>
+            <div class="card-body">
+              <div class="channel-list" id="list"><div class="fav-empty">chargement…</div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="player-modal" id="player-modal">
+    <div class="player-container">
+      <div class="player-header">
+        <h3 id="player-title">Lecture</h3>
+        <button class="player-close" id="player-close">×</button>
+      </div>
+      <div class="player-body">
+        <video class="player-frame" id="player-frame" controls autoplay></video>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const BASE = location.origin;
+const $ = s => document.querySelector(s);
+const fmtDur = s => {
+    if (s === null) return "—";
+    const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
+    return (d?d+"j ":"")+(h?h+"h ":"")+(m+"m");
+};
+const fmtAge = s => s === null ? "pas encore chargé" : (s<60?s+"s":Math.floor(s/60)+"min");
+
+// Theme clair/sombre, persisté en localStorage
+function applyTheme(t){
+    document.body.classList.toggle("light", t==="light");
+    localStorage.setItem("dl_theme", t);
+    $("#theme-btn").textContent = t==="light" ? "☀️" : "🌙";
+}
+function toggleTheme(){
+    applyTheme(localStorage.getItem("dl_theme")==="light" ? "dark" : "light");
+}
+applyTheme(localStorage.getItem("dl_theme") || "dark");
+
+// Session verifiee cote serveur via cookie httponly
+async function checkSession() {
+    try {
+        const r = await fetch("/api/stats");
+        if (r.ok) {
+            $('#login-screen').style.display = 'none';
+            $('#dashboard').classList.add('active');
+            await boot();
+        }
+    } catch (e) { /* pas connecte */ }
+}
+
+async function apiFetch(url, opts) {
+    const r = await fetch(url, opts);
+    if (r.status === 401) {
+        $('#dashboard').classList.remove('active');
+        $('#login-screen').style.display = 'flex';
+        toast('Session expirée, reconnecte-toi', 'error');
+        throw new Error('unauthenticated');
+    }
+    return r;
+}
+
+function toast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (type ? ' ' + type : '');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function handleLogin(e) {
+    if (e) e.preventDefault();
+    const password = $('#login-password').value;
+    const err = document.getElementById('login-error');
+    err.style.display = 'none';
+    fetch('/api/auth', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password})
+    })
+        .then(r => r.json().then(data => ({ok: r.ok, data})))
+        .then(({ok, data}) => {
+            if (ok && data.success) {
+                err.innerHTML = '';
+                $('#login-screen').style.display = 'none';
+                $('#dashboard').classList.add('active');
+                toast('✅ Connecté avec succès', 'success');
+                boot();
+            } else {
+                err.textContent = data.message || 'Mot de passe incorrect';
+                err.style.display = 'block';
+                const card = document.querySelector('.login-card');
+                card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+            }
+        })
+        .catch(() => { err.textContent = 'Erreur réseau'; err.style.display = 'block'; });
+}
+
+function logout() {
+    fetch('/api/logout').finally(() => {
+        $('#dashboard').classList.remove('active');
+        $('#login-screen').style.display = 'flex';
+        $('#login-password').value = '';
+        toast('👋 Déconnecté');
+    });
+}
+
+let _lastPage = null;
+function toggleSidebar() {
+    document.querySelector('.sidebar')?.classList.toggle('open');
+    document.querySelector('.sidebar-backdrop')?.classList.toggle('open');
+}
+function closeSidebar() {
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.querySelector('.sidebar-backdrop')?.classList.remove('open');
+}
+function navigateTo(page) {
+    _lastPage = page;
+    try { if (location.pathname !== '/dashboard/' + page) history.pushState(null, '', '/dashboard/' + page); } catch(e){}
+    closeSidebar();
+    try {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+        const pageEl = $(`#page-${page}`);
+        const navEl = document.querySelector(`[data-page="${page}"]`);
+        
+        pageEl.classList.add('active');
+        navEl?.classList.add('active');
+        
+        // Force page visibility as fallback
+        pageEl.style.display = 'block';
+        pageEl.style.visibility = 'visible';
+        pageEl.style.opacity = '1';
+
+        const subtitles = {
+            dashboard: 'Statistiques de votre proxy de chaînes',
+            sources: 'Gérer vos sources personnalisées',
+            catalog: 'Explorer toutes les chaînes disponibles',
+            logs: 'Journal en direct des requêtes passées sur votre proxy',
+            settings: 'Logos, EPG et catégories personnalisables',
+            programs: 'Programme en cours des chaînes populaires',
+            channels: 'Gestion complète : nom, logo, flux, EPG'
+        };
+        const subEl = document.querySelector('.page.active .page-sub');
+        if (subEl) subEl.textContent = subtitles[page] || '';
+
+        if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
+        if (page === 'logs') { loadLogs(); }
+        if (page === 'settings') { loadSettings(); }
+        if (page === 'channels') { loadTvChannels(); }
+        if (page === 'programs') { loadNow(); }
+        if (page === 'catalog') {
+            console.log('navigateTo: catalog page, ALL.dlstreams.length=', ALL?.dlstreams?.length);
+            if (!ALL.dlstreams.length) { 
+                loadCatalog('dlstreams').then(render).catch(e => toast('Erreur chargement catalogue: ' + e.message, 'error')); 
+            } else { 
+                try { 
+                    console.log('Calling render()'); 
+                    render(); 
+                } catch(e) { 
+                    console.error('Erreur render:', e); 
+                    toast('Erreur render: ' + e.message, 'error'); 
+                } 
+            }
+        }
+    } catch(err) {
+        console.error('navigateTo error:', err);
+        toast('Erreur navigation: ' + err.message, 'error');
+    }
+    
+    // Fallback: ensure page is visible after a short delay
+    setTimeout(() => {
+        const activePage = document.querySelector('.page.active');
+        if (activePage) {
+            activePage.style.display = 'block';
+            activePage.style.visibility = 'visible';
+            activePage.style.opacity = '1';
+        }
+    }, 100);
+}
+window.addEventListener('popstate', () => {
+    const p = (location.pathname.split('/dashboard/')[1] || 'dashboard').replace(/\/+$/, '');
+    if (p && p !== _lastPage && document.getElementById('page-' + p)) navigateTo(p);
+});
+
+async function refreshStats(){
+    try{
+        const r = await apiFetch("/api/stats");
+        const d = await r.json();
+        animateNumber($("#c-dl"), d.dlstreams.count);
+        setCacheBadge($("#c-dl-h"), d.dlstreams.age_seconds);
+        animateNumber($("#c-vv"), d.vavoo.count);
+        setCacheBadge($("#c-vv-h"), d.vavoo.age_seconds);
+        $("#c-up").textContent = fmtDur(d.uptime);
+        animateNumber($("#c-manual"), d.manual_channels || 0);
+        animateNumber($("#c-req"), d.requests||0);
+        animateNumber($("#c-err"), d.errors || 0);
+        const errH = $("#c-err-h");
+        if(errH) errH.textContent = (d.requests && d.errors)
+            ? Math.min(100, (d.errors / d.requests * 100)).toFixed(1) + '% des requêtes'
+            : 'requêtes en échec';
+        renderAreaChart(d.history || []);
+        renderErrChart(d.hist_err || []);
+        renderServices(d.health || {});
+        LAST_TOP = d.top_channels || [];
+        LAST_REC = d.recent_plays || [];
+        renderChannelsCard();
+        loadNow();
+        const ut = $("#update-time");
+        ut.classList.remove("loading");
+        $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Stats error:", e);
+    }
+}
+
+function animateNumber(el, target) {
+    if (!el) return;
+    const startVal = parseInt(el.textContent.replace(/\D/g,''), 10) || 0;
+    const dur = 500;
+    const t0 = performance.now();
+    function frame(now) {
+        const t = Math.min((now - t0) / dur, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        el.textContent = Math.round(startVal + (target - startVal) * eased).toLocaleString('fr-FR');
+        if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+}
+
+function setCacheBadge(el, age){
+    if(age === null){ el.innerHTML = '<span class="cache-badge old"><span class="dot"></span>pas encore chargé</span>'; return; }
+    let cls = "ok", label = "il y a " + fmtAge(age);
+    if(age > 3600){ cls = "old"; label = "périmé (" + fmtAge(age) + ")"; }
+    else if(age > 600){ cls = "stale"; }
+    el.innerHTML = `<span class="cache-badge ${cls}"><span class="dot"></span>${label}</span>`;
+}
+
+// Graphique en aires (SVG) du trafic, range 1h / 24h / 7j
+let CHART_RANGE = 60;
+let LAST_HIST = [], LAST_HIST_ERR = [];
+function setChartRange(mins){
+    CHART_RANGE = mins;
+    document.querySelectorAll('.range-btn').forEach(b=>b.classList.toggle('active', Number(b.dataset.range)===mins));
+    renderAreaChart(LAST_HIST);
+    renderErrChart(LAST_HIST_ERR);
+}
+function _areaChart(el, history, totalEl, accent, unit, gid){
+    if(!el) return;
+    if(!history || !history.length){ el.innerHTML = '<div class="fav-empty">aucune donnée</div>'; return; }
+    const nowMin = Date.now() / 1000;
+    const windowMin = CHART_RANGE === 10080 ? 10080 : (CHART_RANGE === 1440 ? 1440 : 60);
+    const arr = history.filter(h => nowMin - h[0] <= windowMin + 1);
+    if(totalEl) totalEl.textContent = arr.length ? arr.reduce((a,h)=>a+h[1], 0).toLocaleString('fr-FR') + ' ' + unit : '';
+    if(!arr.length){ el.innerHTML = '<div class="fav-empty">aucune donnée sur cette période</div>'; return; }
+    const counts = arr.map(h => h[1]);
+    const W = 600, H = 170, PX = 12, PY = 24, PB = 28;
+    let maxV = 1;
+    for(let i=0;i<counts.length;i++) if(counts[i] > maxV) maxV = counts[i];
+    const n = counts.length;
+    const stepX = n > 1 ? (W - PX * 2) / (n - 1) : 0;
+    const yOf = v => H - PB - (v / maxV) * (H - PY - PB);
+    const pts = counts.map((v, i) => ({ x: PX + i * stepX, y: yOf(v), v, t: arr[i][0] }));
+    const baseY = H - PB;
+    const line = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+    const area = line + ' L' + pts[pts.length-1].x.toFixed(1) + ' ' + baseY + ' L' + pts[0].x.toFixed(1) + ' ' + baseY + ' Z';
+    const last = pts[pts.length-1];
+    const grid = [0.25, 0.5, 0.75, 1].map(f => {
+        const gy = baseY - f * (H - PY - PB);
+        return '<line x1="'+PX+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PX)+'" y2="'+gy.toFixed(1)+'" class="ov-chart-grid"/>';
+    }).join('');
+    const labelEvery = Math.max(1, Math.round(n / 6));
+    const labels = pts.map((p, i) => {
+        if (i !== n-1 && i % labelEvery !== 0) return '';
+        const t = new Date(p.t * 1000);
+        const fmt = windowMin >= 1440
+            ? t.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})
+            : t.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        return '<text x="'+p.x.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" class="ov-chart-xlabel"'+(i===n-1?' style="fill:'+accent+';font-weight:800"':'')+'>'+
+            fmt+'</text>';
+    }).join('');
+    const dots = pts.filter((_,i)=>i%Math.max(1,Math.round(n/40))===0).map(p => '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.5" style="fill:var(--surface);stroke:'+accent+';stroke-width:2"><title>'+p.v+' '+unit+'</title></circle>').join('');
+    el.innerHTML = '<svg class="ov-chart" viewBox="0 0 '+W+' '+H+'">' +
+        '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" style="stop-color:'+accent+';stop-opacity:0.32"/>' +
+        '<stop offset="100%" style="stop-color:'+accent+';stop-opacity:0"/>' +
+        '</linearGradient></defs>' + grid +
+        '<path d="'+area+'" fill="url(#'+gid+')"/>' +
+        '<path d="'+line+'" fill="none" style="stroke:'+accent+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="9" fill="'+accent+'" opacity="0.18"/>' +
+        '<circle cx="'+last.x.toFixed(1)+'" cy="'+last.y.toFixed(1)+'" r="4" fill="'+accent+'"/>' +
+        dots + labels + '</svg>';
+}
+function renderAreaChart(history){
+    LAST_HIST = history || [];
+    _areaChart($("#traffic-chart"), LAST_HIST, $("#chart-total"), 'var(--accent)', 'requêtes', 'ov-fill');
+}
+function renderErrChart(history){
+    LAST_HIST_ERR = history || [];
+    _areaChart($("#err-chart"), LAST_HIST_ERR, $("#err-total"), 'var(--error)', 'erreurs', 'ov-fill-err');
+}
+
+// Card "Lectures" : Top chaînes / Récents
+let CH_TAB = 'top', LAST_TOP = [], LAST_REC = [], _topLimit = 10;
+function setChTab(t){
+    CH_TAB = t;
+    document.querySelectorAll('.card [data-chtab]').forEach(b=>b.classList.toggle('active', b.dataset.chtab===t));
+    renderChannelsCard();
+}
+function toggleTopLimit(){
+    _topLimit = _topLimit === 10 ? 30 : 10;
+    renderChannelsCard();
+}
+function fmtAgo(t){
+    const s = Math.max(1, Math.round((Date.now()/1000 - t)));
+    if (s < 60) return 'à l\'instant';
+    if (s < 3600) return 'il y a ' + Math.floor(s/60) + ' min';
+    if (s < 86400) return 'il y a ' + Math.floor(s/3600) + ' h';
+    return 'il y a ' + Math.floor(s/86400) + ' j';
+}
+function renderChannelsCard(){
+    const el = $("#top-channels");
+    if(!el) return;
+    const moreWrap = $("#top-more-wrap");
+    const tot = $("#top-total");
+    const isTop = CH_TAB === 'top';
+    const list = isTop ? LAST_TOP : LAST_REC;
+    if(!list.length){
+        el.innerHTML = '<div class="fav-empty">aucune lecture pour le moment — ouvre une chaîne !</div>';
+        if(moreWrap) moreWrap.style.display = 'none';
+        if(tot) tot.textContent = '';
+        return;
+    }
+    const shown = isTop ? list.slice(0, _topLimit) : list.slice(0, 12);
+    const max = isTop ? Math.max(...list.map(t=>t.plays)) : 1;
+    el.innerHTML = shown.map(t => {
+        const href = t.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(t.id))}` : `${BASE}/hls/${t.id}/index.m3u8`;
+        const logoUrl = t.src==="vavoo"
+            ? `${BASE}/logo/vavoo/${encodeURIComponent(b64u(t.id))}.png`
+            : `${BASE}/logo/dlstreams/${t.id}.png`;
+        const logo = `<img class="top-logo" src="${logoUrl}" alt="" loading="lazy" onerror="this.style.display='none'">`;
+        const bar = isTop ? Math.round((t.plays / max) * 100) : 0;
+        return `<div class="top-row" data-play="${href}" title="${escapeHtml(t.name)}">
+            ${logo}
+            <div class="top-name">${escapeHtml(t.name)}</div>
+            ${isTop
+                ? `<div class="top-bar"><div class="top-bar-fill" style="width:${bar}%"></div></div><div class="top-plays">${t.plays}</div>`
+                : `<div class="top-bar"><span class="top-time">${fmtAgo(t.t)}</span></div><div class="top-plays" style="color:var(--accent)">▶</div>`}
+        </div>`;
+    }).join('');
+    if(tot){
+        tot.textContent = isTop
+            ? (LAST_TOP.reduce((a,t)=>a+t.plays, 0) + ' lecture' + (LAST_TOP.length>1?'s':''))
+            : 'dernière : ' + fmtAgo(LAST_REC[0].t);
+    }
+    if(moreWrap){
+        moreWrap.style.display = isTop && list.length > 10 ? 'block' : 'none';
+        const btn = $("#top-more");
+        if(btn) btn.textContent = _topLimit === 10 ? `Voir plus (${list.length})` : 'Voir moins';
+    }
+}
+
+// Carte "État des services"
+function renderServices(h){
+    const el = $("#svc-services");
+    if(!el) return;
+    if(!h || !h.at){ el.innerHTML = '<div class="fav-empty">vérification…</div>'; return; }
+    const fmtMs = s => s && s.ms != null ? ` · ${s.ms} ms` : '';
+    const rows = [
+        ['dlstreams.st', h.dlstreams, h.dlstreams ? (h.dlstreams.ok ? 'OK' : 'KO') + fmtMs(h.dlstreams) : '…'],
+        ['API Vavoo', h.vavoo, h.vavoo ? (h.vavoo.ok ? 'OK' : 'KO') + fmtMs(h.vavoo) : '…'],
+        ['EPG', h.epg, h.epg ? (h.epg.ok ? `${h.epg.channels} chaînes` : h.epg.channels ? 'périmé' : 'non chargé')
+            + (h.epg.age != null ? ' · ' + fmtAge(h.epg.age) : '') : '…'],
+        ['Logos', h.logos, h.logos ? `${h.logos.loaded}/${h.logos.total} chargés` : '…'],
+    ];
+    el.innerHTML = rows.map(r => {
+        const st = r[1] && r[1].ok ? 'ok' : 'ko';
+        return `<div class="svc-row"><span class="svc-dot ${st}"></span><span class="svc-name">${r[0]}</span><span class="svc-desc">${r[2]}</span></div>`;
+    }).join('');
+    const okN = rows.filter(r => r[1] && r[1].ok).length;
+    $("#svc-total").textContent = `${okN}/${rows.length} opérationnels`;
+}
+async function checkServices(){
+    const btn = $("#svc-check-btn");
+    if(btn){ btn.disabled = true; btn.textContent = "⏳ Vérification…"; }
+    try{
+        await apiFetch('/api/health', {method: 'POST'});
+        await refreshStats();
+        toast('🩺 Services vérifiés', 'success');
+    }catch(e){
+        if (e.message !== 'unauthenticated') toast('❌ Échec de la vérification', 'error');
+    }
+    if(btn){ btn.disabled = false; btn.textContent = "↻ Vérifier maintenant"; }
+}
+
+// En ce moment : lectures live (poll 5s)
+async function loadLive(){
+    try{
+        const r = await apiFetch('/api/live');
+        renderLive(await r.json());
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Live error:", e);
+    }
+}
+function renderLive(list){
+    const el = $("#live-list");
+    if(!el) return;
+    if(!list.length){
+        el.innerHTML = '<div class="fav-empty">aucune lecture en cours — ouvre une chaîne !</div>';
+        return;
+    }
+    el.innerHTML = list.map(t => {
+        const href = t.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(t.id))}` : `${BASE}/hls/${t.id}/index.m3u8`;
+        return `<a class="live-item" href="${href}" target="_blank" title="${escapeHtml(t.name)}">
+            <span class="live-dot"></span>
+            <span class="live-name">${escapeHtml(t.name)}</span>
+            <span class="live-time">${fmtAgo(t.last)}</span>
+        </a>`;
+    }).join('');
+}
+
+// Programmes en cours : mini-EPG des chaînes populaires
+let _NOW_CACHE = [];
+async function loadNow(force){
+    try{
+        if(force){
+            const el = $("#now-list");
+            if(el && !el.innerHTML.includes('chargement')) el.innerHTML = '<div class="fav-empty">chargement…</div>';
+        }
+        const r = await apiFetch('/api/now');
+        _NOW_CACHE = await r.json();
+        renderNow();
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Now error:", e);
+    }
+}
+function renderNow(){
+    const el = $("#now-list");
+    if(!el) return;
+    const tot = $("#now-total");
+    const q = ($("#now-q").value || "").toLowerCase().trim();
+    let list = _NOW_CACHE;
+    if(!list || !list.length){
+        el.innerHTML = '<div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>';
+        if(tot) tot.textContent = '';
+        return;
+    }
+    if(q) list = list.filter(n => (n.name||"").toLowerCase().includes(q)
+        || ((n.cur&&n.cur.title)||"").toLowerCase().includes(q)
+        || ((n.nxt&&n.nxt.title)||"").toLowerCase().includes(q));
+    if(!list.length){
+        el.innerHTML = '<div class="fav-empty">aucun résultat — essaie un autre filtre</div>';
+        if(tot) tot.textContent = '0 chaîne';
+        return;
+    }
+    if(tot) tot.textContent = list.length + (list.length>1 ? ' chaînes guidées' : ' chaîne guidée');
+    el.innerHTML = '<div class="now-grid">' + list.map(n => {
+        const href = `${BASE}/hls/${n.id}/index.m3u8`;
+        const cur = n.cur || {};
+        const nxt = n.nxt || {};
+        const now = n.now || Math.floor(Date.now()/1000);
+        const st = cur.start ? new Date(cur.start*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        const en = cur.stop ? new Date(cur.stop*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        let pct = 0, rem = 0;
+        if(cur.start && cur.stop && cur.stop>cur.start){
+            pct = Math.min(100, Math.max(0, Math.round((now-cur.start)/(cur.stop-cur.start)*100)));
+            rem = Math.max(0, Math.round((cur.stop-now)/60));
+        }
+        const nxT = nxt.start ? new Date(nxt.start*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        return `<a class="now-card" href="${href}" target="_blank" title="${escapeHtml(n.name)} — ${escapeHtml(cur.title||'')}">
+            <div class="now-tile">
+                <img class="now-logo" src="${BASE}${n.logo}" alt="" loading="lazy" onerror="this.style.display='none'">
+                <span class="now-live"><i></i> EN DIRECT</span>
+            </div>
+            <div class="now-body">
+                <div class="now-ch">${escapeHtml(n.name)}</div>
+                <div class="now-prog-title">${escapeHtml(cur.title || '—')}</div>
+                ${cur.desc ? `<div class="now-prog-desc">${escapeHtml(cur.desc)}</div>` : ''}
+                <div class="now-bar"><div class="now-fill" style="width:${pct}%"></div></div>
+                <div class="now-ends">${st}–${en} · ${rem} min restantes</div>
+                ${nxt.title ? `<div class="now-next">Suivant · <b>${escapeHtml(nxt.title)}</b>${nxT ? ' ('+nxT+')' : ''}</div>` : ''}
+            </div>
+        </a>`;
+    }).join('') + '</div>';
+}
+
+async function loadActivity(targetId) {
+    try {
+        const r = await apiFetch("/api/activity");
+        const log = await r.json();
+        const el = $("#" + (targetId || "activity-list"));
+        if(!el) return;
+        if (!log.length) { el.innerHTML = "aucune activité pour le moment"; return; }
+        el.innerHTML = log.slice(0, 20).map(e =>
+            `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text)">${escapeHtml(e.action)}</span>
+                ${e.details ? ' — ' + escapeHtml(e.details) : ''}
+                <span style="float:right;color:var(--muted)">${e.time}</span>
+            </div>`
+        ).join("");
+    } catch(e) {
+        if (e.message !== 'unauthenticated') console.error("Activity error:", e);
+    }
+}
+
+// Sources manuelles
+async function loadManualChannels(){
+    try{
+        const r = await apiFetch("/api/manual-channels");
+        const channels = await r.json();
+        const list = $("#manual-channels-list");
+        const cnt = $("#manual-count");
+        if(cnt) cnt.textContent = channels.length + (channels.length>1 ? " sources" : " source");
+        if(channels.length === 0){
+            list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>';
+            return;
+        }
+        list.innerHTML = channels.map(ch => {
+            const href = `${BASE}/hls/${ch.id}/index.m3u8`;
+            const added = ch.added_at ? ' · ' + ch.added_at : '';
+            return `<a class="manual-channel-card" href="${href}" target="_blank" title="${escapeHtml(ch.name)}">
+                <div class="manual-tile">
+                    <img class="manual-logo" src="${BASE}/logo/dlstreams/${ch.id}.png" alt="" loading="lazy" onerror="this.style.display='none'">
+                    <span class="manual-badge">MANUEL</span>
+                </div>
+                <div class="manual-body">
+                    <div class="manual-name">${escapeHtml(ch.name)}</div>
+                    <div class="manual-meta">ID: ${escapeHtml(ch.id)}${added}</div>
+                    <div class="manual-actions">
+                        <button class="manual-test" onclick="event.preventDefault();event.stopPropagation();testManual('${escapeHtml(ch.id)}', this)">▶ Test</button>
+                        <button class="manual-del" onclick="event.preventDefault();event.stopPropagation();removeChannel('${escapeHtml(ch.id)}')">🗑️ Supprimer</button>
+                    </div>
+                </div>
+            </a>`;
+        }).join('');
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Load manual channels error:", e);
+    }
+}
+async function testManual(id, btn){
+    if(CHECKED[id] && CHECKED[id].state==="busy") return;
+    if(btn) btn.classList.add("busy");
+    CHECKED[id] = {state:"busy"};
+    render();
+    try{
+        const r = await apiFetch(`/api/check?src=dlstreams&id=${encodeURIComponent(id)}`);
+        const d = await r.json();
+        CHECKED[id] = {state: d.ok ? "ok" : "ko", ms: d.ms, url: d.url};
+        saveChecked();
+    }catch(e){
+        if (e.message !== 'unauthenticated') CHECKED[id] = {state:"ko", ms:0};
+    }
+    if(btn) btn.classList.remove("busy");
+    render();
+}
+
+async function removeChannel(id) {
+    if (!confirm('Supprimer cette chaîne ?')) return;
+    try {
+        const r = await apiFetch('/api/remove-channel', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id})
+        });
+        const d = await r.json();
+        if (d.success) {
+            toast('✅ Chaîne supprimée', 'success');
+            await loadManualChannels();
+            await refreshStats();
+        } else {
+            toast('❌ Erreur: ' + d.message, 'error');
+        }
+    } catch(e) {
+        if (e.message !== 'unauthenticated') toast('❌ Erreur: ' + e.message, 'error');
+    }
+}
+
+async function refreshAll() {
+    try {
+        const r = await apiFetch("/api/refresh-cache");
+        const d = await r.json();
+        await refreshStats();
+        toast(`✅ Cache rafraîchi : ${d.dlstreams} dlstreams / ${d.vavoo} vavoo`, 'success');
+    } catch(e) {
+        if (e.message !== 'unauthenticated') toast('❌ Erreur de rafraîchissement', 'error');
+    }
+}
+
+let CURRENT = "dlstreams", ALL = {dlstreams:[], vavoo:[]};
+let LANG_FILTER = localStorage.getItem("dl_lang") || "all";
+const _LANG_FLAGS = {fr:"🇫🇷",en:"🇬🇧",es:"🇪🇸",de:"🇩🇪",it:"🇮🇹",ar:"🇸🇦",pt:"🇵🇹"};
+function langFlag(l){ return _LANG_FLAGS[l] || "🌐"; }
+let SORT = localStorage.getItem("dl_sort") || "name";
+let PLAYS = {};
+
+async function loadPlays(){
+    try{
+        const r = await apiFetch("/api/plays");
+        PLAYS = await r.json();
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Plays error:", e);
+    }
+}
+function setCatalogSort(){
+    SORT = $("#catalog-sort").value;
+    localStorage.setItem("dl_sort", SORT);
+    render();
+}
+
+async function loadCatalog(src){
+    const url = src==="vavoo" ? "/api/vavoo-channels" : "/api/channels";
+    try{
+        const r = await apiFetch(url);
+        ALL[src] = await r.json();
+    }catch(e){
+        ALL[src]=[];
+    }
+}
+
+function render(){
+    try {
+        console.log('render() called, CURRENT=', CURRENT, 'ALL.dlstreams.length=', ALL?.dlstreams?.length, 'list element:', document.getElementById('list'));
+        const q = $("#q").value.toLowerCase().trim();
+    const words = q ? q.split(/\s+/) : [];
+    const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
+
+    const matches = (ALL[CURRENT]||[]).filter(c => {
+        if (lang && c.lang !== lang) return false;
+        return words.every(w => (c.name||"").toLowerCase().includes(w));
+    });
+    if (SORT === "plays") {
+        matches.sort((a,b) => (PLAYS[(CURRENT==="vavoo"?"vavoo:":"dlstreams:")+b.id]||0) - (PLAYS[(CURRENT==="vavoo"?"vavoo:":"dlstreams:")+a.id]||0));
+    } else {
+        matches.sort((a,b) => (a.name||"").localeCompare(b.name||"", 'fr', {sensitivity:'base'}));
+    }
+    const items = matches.slice(0, 300);
+
+    const count = $("#catalog-count");
+    if(count){
+        count.textContent = matches.length
+            ? (items.length < matches.length ? `${items.length} / ${matches.length} chaînes affichées` : `${matches.length} chaînes`)
+            : "aucun résultat";
+    }
+
+    const list = $("#list");
+    if(!list){
+        console.error('render(): #list element not found');
+        // Try to find it again
+        const list2 = document.getElementById('list');
+        if(!list2){
+            console.error('render(): #list element still not found after document.getElementById');
+            return;
+        }
+        list = list2;
+    }
+    // Ensure list is visible
+    list.style.display = 'block';
+    list.style.visibility = 'visible';
+    if(!items.length){
+        list.innerHTML = '<div class="fav-empty">aucun résultat — essaie un autre filtre</div>';
+        return;
+    }
+    list.innerHTML = items.map(c => {
+        const encodedId = CURRENT==="vavoo" ? b64u(c.id) : c.id;
+        const href = CURRENT==="vavoo"
+            ? `${BASE}/vhls?v=${encodeURIComponent(encodedId)}`
+            : `${BASE}/hls/${c.id}/index.m3u8`;
+        const key = (CURRENT==="vavoo"?"vavoo:":"dlstreams:")+c.id;
+        const logoUrl = CURRENT==="vavoo"
+            ? `${BASE}/logo/vavoo/${encodeURIComponent(encodedId)}.png`
+            : `${BASE}/logo/dlstreams/${c.id}.png`;
+        const plays = PLAYS[key] || 0;
+        const flag = langFlag(c.lang);
+        const meta = plays
+            ? `${flag} · ${plays} lecture${plays>1?'s':''}`
+            : `${flag} · ${CURRENT==="vavoo" ? 'Vavoo' : '#' + c.id}`;
+        return `<a class="chan-card" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
+            <div class="chan-tile">
+                <img class="chan-logo" src="${logoUrl}" alt="" loading="lazy">
+                <span class="chan-check ${checkCls(key)}" onclick="event.preventDefault();event.stopPropagation();checkStream('${escapeHtml(key)}')">${checkLabel(key)}</span>
+                <span class="chan-play"><span class="play-badge">▶</span></span>
+            </div>
+            <div class="chan-body">
+                <div class="chan-name">${escapeHtml(c.name)}</div>
+                <div class="chan-meta">${escapeHtml(meta)}</div>
+            </div>
+        </a>`;
+    }).join("");
+    } catch(err) {
+        console.error('render() error:', err);
+        toast('Erreur render: ' + err.message, 'error');
+    }
+}
+
+const CHECKED = (()=>{ try{ return JSON.parse(localStorage.getItem("dl_checked")||"{}"); }catch(e){ return {}; } })();
+function saveChecked(){ try{ localStorage.setItem("dl_checked", JSON.stringify(CHECKED)); }catch(e){} }
+function checkCls(key){ const s = CHECKED[key]; return s ? (s.state==="busy"?"busy":s.state) : ""; }
+function checkLabel(key){
+    const s = CHECKED[key];
+    if(!s) return '▶ test';
+    if(s.state==="busy") return '⏳…';
+    if(s.state==="ok") return '✓ '+(s.ms||0)+'ms';
+    return '✗ KO';
+}
+async function checkStream(key){
+    if(CHECKED[key] && CHECKED[key].state==="busy") return;
+    CHECKED[key] = {state:"busy"};
+    render();
+    const src = key.split(":")[0];
+    const id = key.slice(key.indexOf(":")+1);
+    try{
+        const enc = src==="vavoo" ? b64u(id) : id;
+        const r = await apiFetch(`/api/check?src=${src}&id=${encodeURIComponent(enc)}`);
+        const d = await r.json();
+        CHECKED[key] = {state: d.ok ? "ok" : "ko", ms: d.ms, url: d.url};
+        saveChecked();
+    }catch(e){
+        if (e.message !== 'unauthenticated') CHECKED[key] = {state:"ko", ms:0};
+    }
+    render();
+}
+
+// Export M3U
+function downloadText(filename, text){
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+}
+function buildM3U(chans){
+    const lines = ['#EXTM3U'];
+    chans.forEach(ch => {
+        const href = ch.src==="vavoo" ? `${BASE}/vhls?v=${encodeURIComponent(b64u(ch.id))}` : `${BASE}/hls/${ch.id}/index.m3u8`;
+        const grp = (ch.lang && ch.lang !== "other") ? ch.lang.toUpperCase() : "Autres";
+        lines.push(`#EXTINF:-1 tvg-id="${ch.src}:${ch.id}" group-title="${grp}",${escapeHtml(ch.name)}`);
+        lines.push(href);
+    });
+    return lines.join('\n');
+}
+async function exportCatalogM3U(){
+    if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
+    const q = ($("#q").value||"").toLowerCase().trim();
+    const words = q ? q.split(/\s+/) : [];
+    const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
+    const chans = (ALL[CURRENT]||[]).filter(c => {
+        if (lang && c.lang !== lang) return false;
+        return words.every(w => (c.name||"").toLowerCase().includes(w));
+    });
+    if(!chans.length){ toast('⚠️ Aucune chaîne à exporter', 'warn'); return; }
+    downloadText('dlstreams-' + CURRENT + '.m3u', buildM3U(chans.map(c => Object.assign({}, c, {src: CURRENT}))));
+    toast(`✅ ${chans.length} chaînes exportées`, 'success');
+}
+
+// ===== REGLAGES =====
+let _settings = null;
+
+async function loadSettings(){
+    try{
+        const r = await apiFetch("/api/settings");
+        const d = await r.json();
+        _settings = d.settings;
+        $('#set-logos').checked = !!_settings.logos;
+        $('#set-epg').checked = !!_settings.epg;
+        $('#set-epg-url').value = _settings.epg_url || '';
+        const e = d.epg || {};
+        $('#epg-status').textContent = e.at
+            ? `Dernière MAJ ${new Date(e.at*1000).toLocaleTimeString('fr-FR')} · ${e.covered}/${e.channels} chaînes`
+            : 'EPG pas encore chargé';
+        renderGenreEditor(d);
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur de chargement des réglages','error'); }
+}
+
+function renderGenreEditor(d){
+    const box = $('#genre-edit');
+    box.innerHTML = '';
+    const choices = d.genre_choices || [];
+    const overrides = (_settings && _settings.genres) || {};
+    const popular = d.popular || [];
+    if(!popular.length){ box.innerHTML = '<div class="fav-empty">aucune chaîne</div>'; return; }
+    popular.forEach(c => {
+        const key = c.name.toLowerCase();
+        const cur = (overrides[key] && overrides[key][0]) || c.genre || '';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;justify-content:space-between;font-size:13px;min-width:0';
+        row.innerHTML =
+            `<span style="color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.name)}</span>` +
+            `<select style="max-width:160px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 6px" ` +
+            `onchange="setGenre('${key.replace(/[\\']/g, "\\'")}', this.value)">` +
+            choices.map(g => `<option value="${escapeHtml(g)}" ${g===cur?'selected':''}>${escapeHtml(g)}</option>`).join('') +
+            `</select>`;
+        box.appendChild(row);
+    });
+}
+
+async function setGenre(key, value){
+    if(!_settings) return;
+    const g = Object.assign({}, _settings.genres || {});
+    g[key] = [value];
+    _settings.genres = g;
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({genres:g})});
+    if(r.ok) toast('Catégorie enregistrée','success'); else toast('Erreur d\'enregistrement','error');
+}
+
+async function saveSettings(){
+    const body = {logos: $('#set-logos').checked, epg: $('#set-epg').checked, epg_url: $('#set-epg-url').value.trim()};
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if(r.ok){ toast('Réglages enregistrés','success'); } else toast('Erreur d\'enregistrement','error');
+}
+
+// ===== STREMIO CHANNEL EDITOR =====
+let _STREMIO_CHANNELS = [];
+async function loadStremioChannels(){
+    try{
+        const r = await apiFetch("/api/settings");
+        const d = await r.json();
+        const s = d.settings.stremio || {};
+        $('#stremio-manifest-name').value = s.manifest_name || '';
+        $('#stremio-manifest-desc').value = s.manifest_desc || '';
+        $('#stremio-default-lang').value = s.default_lang || 'fr';
+        $('#stremio-inc-dl').checked = s.include_dlstreams !== false;
+        $('#stremio-inc-vv').checked = s.include_vavoo !== false;
+        updateStremioManifestUrl();
+
+        // Build unified channel list with overrides
+        const names = s.channel_names || {};
+        const logos = s.channel_logos || {};
+        const streams = s.channel_streams || {};
+
+        _STREMIO_CHANNELS = [];
+        [...(ALL.dlstreams||[]), ...(ALL.vavoo||[])].forEach(c => {
+            const id = c.id;
+            _STREMIO_CHANNELS.push({
+                id,
+                src: 'dlstreams',
+                name: c.name,
+                orig_name: c.name,
+                override_name: names[id],
+                override_logo: logos[id],
+                override_stream: streams[id],
+            });
+        });
+        [...(ALL.vavoo||[])].forEach(c => {
+            // Avoid duplicates if same ID exists in both
+            if (!_STREMIO_CHANNELS.some(x => x.id === c.id && x.src === 'vavoo')) {
+                _STREMIO_CHANNELS.push({
+                    id: c.id,
+                    src: 'vavoo',
+                    name: c.name,
+                    orig_name: c.name,
+                    override_name: names[c.id],
+                    override_logo: logos[c.id],
+                    override_stream: streams[c.id],
+                });
+            }
+        });
+        renderStremioChannels();
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement Stremio','error'); }
+}
+
+function updateStremioManifestUrl(){
+    const base = window.location.origin;
+    const lang = $('#stremio-default-lang').value;
+    const url = lang === 'all' ? `${base}/manifest.json` : `${base}/manifest.json?lang=${lang}`;
+    $('#stremio-manifest-url').textContent = url;
+}
+
+async function saveStremioSettings(){
+    const s = {
+        manifest_name: $('#stremio-manifest-name').value.trim(),
+        manifest_desc: $('#stremio-manifest-desc').value.trim(),
+        default_lang: $('#stremio-default-lang').value,
+        include_dlstreams: $('#stremio-inc-dl').checked,
+        include_vavoo: $('#stremio-inc-vv').checked,
+    };
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:s})});
+    if(r.ok){
+        toast('Manifest Stremio enregistré','success');
+        updateStremioManifestUrl();
+    }else toast('Erreur enregistrement','error');
+}
+
+function renderStremioChannels(){
+    const q = ($('#stremio-ch-search').value || '').toLowerCase().trim();
+    const list = $('#stremio-ch-list');
+    const cnt = $('#stremio-ch-count');
+    let channels = _STREMIO_CHANNELS;
+    if(q) channels = channels.filter(c =>
+        (c.id||'').toLowerCase().includes(q) ||
+        (c.name||'').toLowerCase().includes(q) ||
+        (c.src||'').toLowerCase().includes(q)
+    );
+    if(cnt) cnt.textContent = channels.length + (channels.length>1?' chaînes':' chaîne');
+    if(!channels.length){
+        list.innerHTML = '<div class="stremio-empty">Aucune chaîne</div>';
+        return;
+    }
+    list.innerHTML = '<div class="stremio-ch-row stremio-ch-head"><div style="width:60px">ID</div><div>Nom</div><div style="width:100px">Source</div><div style="width:120px">Logo</div><div style="width:160px">Flux</div><div style="width:80px"></div></div>' +
+        channels.map(c => {
+            const hasName = !!c.override_name;
+            const hasLogo = !!c.override_logo;
+            const hasStream = !!c.override_stream;
+            const logoPreview = c.override_logo ? `<img src="${escapeHtml(c.override_logo)}" style="width:32px;height:18px;object-fit:cover;border-radius:3px;border:1px solid var(--border)" onerror="this.style.display='none'">` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
+            const streamPreview = c.override_stream ? `<span style="color:var(--accent);font-family:var(--font-mono);font-size:11px">${escapeHtml(c.override_stream).substring(0,50)}…</span>` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
+            const nameDisplay = c.override_name ? `<span style="color:var(--accent)">${escapeHtml(c.override_name)}</span>` : `<span style="color:var(--text2)">${escapeHtml(c.orig_name)}</span>`;
+            return `<div class="stremio-ch-row" data-id="${escapeHtml(c.id)}" data-src="${escapeHtml(c.src)}">
+                <div style="width:60px;font-family:var(--font-mono);font-size:11px;color:var(--text2)">${escapeHtml(c.id)}</div>
+                <div>${nameDisplay}</div>
+                <div style="width:100px;text-transform:uppercase;font-size:11px;color:var(--muted)">${c.src}</div>
+                <div style="width:120px">${logoPreview}</div>
+                <div style="width:160px">${streamPreview}</div>
+                <div style="width:80px"><button class="btn-outline-sm" onclick="editStremioChannel('${escapeHtml(c.id)}','${escapeHtml(c.src)}')" style="padding:4px 10px;font-size:11px">✏️</button></div>
+            </div>`;
+        }).join('');
+}
+
+function editStremioChannel(id, src){
+    const c = _STREMIO_CHANNELS.find(x => x.id === id && x.src === src);
+    if(!c) return;
+    document.getElementById('stremio-channel-form').style.display = 'block';
+    $('#stremio-ch-id').value = c.id;
+    $('#stremio-ch-src').value = c.src;
+    $('#stremio-ch-name').value = c.override_name || '';
+    $('#stremio-ch-orig-name').textContent = c.orig_name ? `Original: ${c.orig_name}` : '';
+    $('#stremio-ch-logo').value = c.override_logo || '';
+    $('#stremio-ch-logo-preview').src = c.override_logo || '';
+    $('#stremio-ch-logo-preview').style.display = c.override_logo ? 'inline-block' : 'none';
+    $('#stremio-ch-orig-logo').textContent = c.override_logo ? '' : `Auto: /logo/${c.src}/${c.id}.png`;
+    $('#stremio-ch-stream').value = c.override_stream || '';
+    $('#stremio-ch-orig-stream').style.display = c.override_stream ? 'none' : 'inline';
+    window._editingStremio = {id: c.id, src: c.src};
+    $('#stremio-ch-name').focus();
+}
+
+function resetStremioChannel(){
+    if(!window._editingStremio) return;
+    const c = _STREMIO_CHANNELS.find(x => x.id === window._editingStremio.id && x.src === window._editingStremio.src);
+    if(!c) return;
+    $('#stremio-ch-name').value = c.override_name || '';
+    $('#stremio-ch-logo').value = c.override_logo || '';
+    $('#stremio-ch-logo-preview').src = c.override_logo || '';
+    $('#stremio-ch-logo-preview').style.display = c.override_logo ? 'inline-block' : 'none';
+    $('#stremio-ch-stream').value = c.override_stream || '';
+    $('#stremio-ch-name').focus();
+}
+
+async function saveStremioChannel(){
+    const e = window._editingStremio;
+    if(!e) return;
+    const name = $('#stremio-ch-name').value.trim();
+    const logo = $('#stremio-ch-logo').value.trim();
+    const stream = $('#stremio-ch-stream').value.trim();
+
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+        stremio: {
+            channel_names: { ...(_settings.stremio?.channel_names||{}), [e.id]: name || undefined },
+            channel_logos: { ...(_settings.stremio?.channel_logos||{}), [e.id]: logo || undefined },
+            channel_streams: { ...(_settings.stremio?.channel_streams||{}), [e.id]: stream || undefined },
+        }
+    })});
+    if(r.ok){
+        toast('Chaîne enregistrée','success');
+        await loadStremioChannels();
+        cancelStremioChannel();
+    }else toast('Erreur','error');
+}
+
+async function deleteStremioChannel(){
+    if(!window._editingStremio) return;
+    if(!confirm('Supprimer l\'override de cette chaîne ?')) return;
+    const e = window._editingStremio;
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+        stremio: {
+            channel_names: Object.fromEntries(Object.entries(_settings.stremio?.channel_names||{}).filter(([k])=>k!==e.id)),
+            channel_logos: Object.fromEntries(Object.entries(_settings.stremio?.channel_logos||{}).filter(([k])=>k!==e.id)),
+            channel_streams: Object.fromEntries(Object.entries(_settings.stremio?.channel_streams||{}).filter(([k])=>k!==e.id)),
+        }
+    })});
+    if(r.ok){
+        toast('Override supprimé','success');
+        await loadStremioChannels();
+        cancelStremioChannel();
+    }else toast('Erreur','error');
+}
+
+function cancelStremioChannel(){
+    document.getElementById('stremio-channel-form').style.display = 'none';
+    window._editingStremio = null;
+}
+
+function testStremioChannelStream(){
+    const url = $('#stremio-ch-stream').value.trim();
+    if(url) window.open(url, '_blank');
+}
+
+async function saveStremioObj(patch){
+    const s = { ...(_settings.stremio||{}), ...patch };
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:s})});
+    if(r.ok){
+        _settings.stremio = s;
+        toast('Enregistré','success');
+    }else toast('Erreur','error');
+}
+
+function tvStreamRowHtml(url, label){
+    return `<div class="tv-stream-row" style="display:flex;gap:6px;margin-bottom:6px">
+        <input type="url" class="tv-stream-url" value="${escapeHtml(url||'')}" placeholder="https://.../flux.m3u8" style="flex:2">
+        <input type="text" class="tv-stream-label" value="${escapeHtml(label||'')}" placeholder="Texte (ex: HD, Source 2)" style="flex:1">
+        <button type="button" class="btn-outline-sm" onclick="this.parentElement.remove()" title="Retirer ce flux">🗑️</button>
+    </div>`;
+}
+function renderTvStreamRows(streams){
+    const box = document.getElementById('tv-modal-streams');
+    box.innerHTML = (streams && streams.length)
+        ? streams.map(s => tvStreamRowHtml(typeof s === 'string' ? s : (s.url||''),
+                                           typeof s === 'string' ? '' : (s.label||''))).join('')
+        : '';
+}
+function addTvStreamRow(){
+    document.getElementById('tv-modal-streams').insertAdjacentHTML('beforeend', tvStreamRowHtml('',''));
+}
+function collectTvStreams(){
+    return [...document.querySelectorAll('#tv-modal-streams .tv-stream-row')].map(r => ({
+        url: r.querySelector('.tv-stream-url').value.trim(),
+        label: r.querySelector('.tv-stream-label').value.trim(),
+    })).filter(s => s.url);
+}
+async function saveTvChannel(){
+    const id = $('#tv-modal-id').value;
+    const src = $('#tv-modal-src').value;
+    if(!id || !src) return;
+
+    const name = $('#tv-modal-name').value.trim();
+    const logo = $('#tv-modal-logo').value.trim();
+    const streams = collectTvStreams();
+    const epg = $('#tv-modal-epg').value.trim();
+
+    const patch = {
+        channel_names: { ...(_settings.stremio?.channel_names||{}), [id]: name || undefined },
+        channel_logos: { ...(_settings.stremio?.channel_logos||{}), [id]: logo || undefined },
+        channel_streams: { ...(_settings.stremio?.channel_streams||{}), [id]: streams.length ? streams : undefined },
+        channel_epg: { ...(_settings.stremio?.channel_epg||{}), [id]: epg || undefined },
+    };
+
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:patch})});
+    if(r.ok){
+        toast('Chaîne enregistrée','success');
+        closeTvModal();
+        await loadTvChannels();
+    }else toast('Erreur','error');
+}
+
+async function deleteTvChannel(){
+    const id = $('#tv-modal-id').value;
+    const src = $('#tv-modal-src').value;
+    if(!id || !src) return;
+    if(!confirm('Supprimer l\'override de cette chaîne ?')) return;
+
+    const patch = {
+        channel_names: Object.fromEntries(Object.entries(_settings.stremio?.channel_names||{}).filter(([k])=>k!==id)),
+        channel_logos: Object.fromEntries(Object.entries(_settings.stremio?.channel_logos||{}).filter(([k])=>k!==id)),
+        channel_streams: Object.fromEntries(Object.entries(_settings.stremio?.channel_streams||{}).filter(([k])=>k!==id)),
+        channel_epg: Object.fromEntries(Object.entries(_settings.stremio?.channel_epg||{}).filter(([k])=>k!==id)),
+    };
+
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:patch})});
+    if(r.ok){
+        toast('Override supprimé','success');
+        closeTvModal();
+        loadTvChannels();
+    }else toast('Erreur','error');
+}
+
+function resetTvModal(){
+    if(!window._editingTvChannel) return;
+    const c = _TV_CHANNELS.find(x => x.id === window._editingTvChannel.id && x.src === window._editingTvChannel.src);
+    if(!c) return;
+    $('#tv-modal-name').value = c.override_name || '';
+    $('#tv-modal-logo').value = c.override_logo || '';
+    $('#tv-modal-logo-preview').src = c.override_logo || '';
+    $('#tv-modal-logo-preview').style.display = c.override_logo ? 'block' : 'none';
+    renderTvStreamRows(c.override_streams);
+    $('#tv-modal-epg').value = c.override_epg || '';
+    $('#tv-modal-name').focus();
+}
+
+function closeTvModal(){
+    document.getElementById('tv-ch-modal').classList.remove('active');
+    window._editingTvChannel = null;
+}
+
+function openTvModal(id, src){
+    const c = _TV_CHANNELS.find(x => x.id === id && x.src === src);
+    if(!c) return;
+    window._editingTvChannel = {id: c.id, src: c.src};
+
+    $('#tv-modal-title').textContent = `Éditer : ${c.name}`;
+    $('#tv-modal-id').value = c.id;
+    $('#tv-modal-src').value = c.src;
+    $('#tv-modal-id-input').value = c.id;
+    $('#tv-modal-src-input').value = c.src;
+    
+    // Pre-fill with override or auto value
+    const nameVal = c.override_name || c.name;
+    $('#tv-modal-name').value = nameVal;
+    $('#tv-modal-orig-name').textContent = c.override_name ? `Original: ${c.name}` : 'Auto (nom d\'origine)';
+    
+    const logoVal = c.override_logo || c.auto_logo;
+    $('#tv-modal-logo').value = logoVal;
+    $('#tv-modal-logo-preview').src = logoVal;
+    $('#tv-modal-logo-preview').style.display = logoVal ? 'block' : 'none';
+    $('#tv-modal-orig-logo').textContent = c.override_logo ? `Override` : `Auto: ${c.auto_logo}`;
+    
+    renderTvStreamRows(c.override_streams);
+    $('#tv-modal-orig-stream').textContent = (c.override_streams && c.override_streams.length)
+        ? `${c.override_streams.length} flux perso` : `Auto: ${c.auto_stream}`;
+    
+    const epgVal = c.override_epg || c.auto_epg;
+    $('#tv-modal-epg').value = epgVal;
+    $('#tv-modal-orig-epg').textContent = c.override_epg ? `Override` : `Auto: ${c.auto_epg || '—'}`;
+
+    document.getElementById('tv-ch-modal').classList.add('active');
+    $('#tv-modal-name').focus();
+}
+
+let _TV_CHANNELS = [];
+async function loadTvChannels(){
+    try{
+        // Ensure catalog is loaded
+        if(!ALL.dlstreams.length) await loadCatalog('dlstreams');
+        if(!ALL.vavoo.length) await loadCatalog('vavoo');
+
+        const r = await apiFetch("/api/settings");
+        if(!r.ok) throw new Error('Settings API failed: ' + r.status);
+        const d = await r.json();
+        window._EPG_MAP = d.epg_map || {};
+        const s = d.settings.stremio || {};
+
+        _TV_CHANNELS = [];
+        [...(ALL.dlstreams||[]), ...(ALL.vavoo||[])].forEach(c => {
+            const id = c.id;
+            const autoLogo = `/logo/dlstreams/${id}.png`;
+            const autoStream = `/hls/${id}/index.m3u8`;
+            const autoEpg = window._EPG_MAP[id] || '';
+            _TV_CHANNELS.push({
+                id,
+                src: 'dlstreams',
+                name: c.name,
+                orig_name: c.name,
+                override_name: s.channel_names?.[id],
+                override_logo: s.channel_logos?.[id],
+                override_streams: s.channel_streams?.[id] || [],
+                override_epg: s.channel_epg?.[id],
+                auto_logo: autoLogo,
+                auto_stream: autoStream,
+                auto_epg: autoEpg,
+            });
+        });
+        [...(ALL.vavoo||[])].forEach(c => {
+            if (!_TV_CHANNELS.some(x => x.id === c.id && x.src === 'vavoo')) {
+                const autoLogo = `/logo/vavoo/${b64u(c.id)}.png`;
+                const autoStream = `/vhls?v=${b64u(c.id)}`;
+                const autoEpg = window._EPG_MAP[c.id] || '';
+                _TV_CHANNELS.push({
+                    id: c.id,
+                    src: 'vavoo',
+                    name: c.name,
+                    orig_name: c.name,
+                    override_name: s.channel_names?.[c.id],
+                    override_logo: s.channel_logos?.[c.id],
+                    override_streams: s.channel_streams?.[c.id] || [],
+                    override_epg: s.channel_epg?.[c.id],
+                    auto_logo: autoLogo,
+                    auto_stream: autoStream,
+                    auto_epg: autoEpg,
+                });
+            }
+        });
+        // Custom channels
+        const custom = s.custom_channels || {};
+        for(const [cid, cc] of Object.entries(custom)){
+            _TV_CHANNELS.push({
+                id: cid,
+                src: 'custom',
+                name: cc.name,
+                orig_name: cc.name,
+                override_name: cc.name,
+                override_logo: cc.logo,
+                override_stream: (cc.streams || [])[0] || '',
+                override_epg: cc.epg,
+                auto_logo: cc.logo || '',
+                auto_stream: (cc.streams || [])[0] || '',
+                auto_epg: cc.epg || '',
+            });
+}
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement chaînes: ' + err.message,'error'); }
+}
+let _TV_TAB = 'all';
+function switchTvTab(tab){
+    _TV_TAB = tab;
+    document.querySelectorAll('.tab[data-tv-tab]').forEach(b=>{
+        b.classList.toggle('active', b.dataset.tvTab === tab);
+    });
+    $('#tv-add-custom-btn').style.display = tab === 'custom' ? 'inline-flex' : 'none';
+    renderTvChannels();
+}
+
+function renderTvChannels(){
+    const q = ($('#tv-ch-search').value || '').toLowerCase().trim();
+    const list = $('#tv-ch-list');
+    const cnt = $('#tv-ch-count');
+    let channels = _TV_CHANNELS;
+    if(_TV_TAB === 'custom'){
+        channels = channels.filter(c => c.src === 'custom');
+    }
+    if(q) channels = channels.filter(c =>
+        (c.id||'').toLowerCase().includes(q) ||
+        (c.name||'').toLowerCase().includes(q) ||
+        (c.src||'').toLowerCase().includes(q) ||
+        (c.epg_id||'').toLowerCase().includes(q)
+    );
+    if(cnt) cnt.textContent = channels.length + (channels.length>1?' chaînes':' chaîne');
+    if(!channels.length){
+        list.innerHTML = '<div class="tv-empty">Aucune chaîne</div>';
+        return;
+    }
+    list.innerHTML = '<div class="tv-ch-row tv-ch-head"><div style="width:50px">Logo</div><div>Nom</div><div style="width:100px">Source</div><div style="width:90px">EPG</div><div style="width:90px">Flux</div><div style="width:80px"></div></div>' +
+        channels.map(c => {
+            const hasName = !!c.override_name;
+            const hasLogo = !!c.override_logo;
+            const hasStream = !!c.override_stream;
+            const hasEpg = !!c.override_epg;
+            const logoHtml = c.override_logo ? `<img src="${escapeHtml(c.override_logo)}" style="width:36px;height:20px;object-fit:cover;border-radius:3px;border:1px solid var(--border)">` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
+            const streamHtml = c.override_stream ? `<span class="tv-stream ok">${escapeHtml(c.override_stream).substring(0,35)}…</span>` : `<span class="tv-stream missing">Auto</span>`;
+            const epgHtml = c.override_epg ? `<span class="tv-epg ok">${escapeHtml(c.override_epg)}</span>` : (c.epg_id ? `<span class="tv-epg warn">${escapeHtml(c.epg_id)}</span>` : `<span class="tv-epg missing">—</span>`);
+            const nameHtml = c.override_name ? `<span class="tv-name custom">${escapeHtml(c.override_name)}</span>` : `<span class="tv-name auto">${escapeHtml(c.name)}</span>`;
+            return `<div class="tv-ch-row" data-id="${escapeHtml(c.id)}" data-src="${escapeHtml(c.src)}" onclick="openTvModal('${escapeHtml(c.id)}','${escapeHtml(c.src)}')">
+                <div style="width:50px">${logoHtml}</div>
+                <div>${nameHtml}</div>
+                <div style="width:100px;text-transform:uppercase;font-size:11px;color:var(--muted)">${c.src}</div>
+                <div style="width:90px;text-align:center">${epgHtml}</div>
+                <div style="width:90px;text-align:center">${streamHtml}</div>
+                <div style="width:80px;text-align:center"><span style="color:var(--muted);font-size:11px">✏️</span></div>
+            </div>`;
+        }).join('');
+}
+
+function testStremioStream(url){
+    window.open(url, '_blank');
+}
+
+// Custom channel management
+let _editingCustomId = null;
+
+function openAddCustomChannel(){
+    _editingCustomId = null;
+    $('#tv-custom-modal-title').textContent = 'Ajouter chaîne personnalisée';
+    $('#tv-custom-id').value = '';
+    $('#tv-custom-id-input').value = '';
+    $('#tv-custom-name').value = '';
+    $('#tv-custom-logo').value = '';
+    $('#tv-custom-logo-preview').src = '';
+    $('#tv-custom-logo-preview').style.display = 'none';
+    $('#tv-custom-streams').value = '';
+    $('#tv-custom-epg').value = '';
+    $('#tv-custom-id-input').readOnly = false;
+    document.getElementById('tv-custom-modal').classList.add('active');
+    $('#tv-custom-id-input').focus();
+}
+
+function closeCustomChannelModal(){
+    document.getElementById('tv-custom-modal').classList.remove('active');
+    _editingCustomId = null;
+}
+
+async function saveCustomChannel(){
+    const id = $('#tv-custom-id-input').value.trim();
+    const name = $('#tv-custom-name').value.trim();
+    const logo = $('#tv-custom-logo').value.trim();
+    const streams = $('#tv-custom-streams').value.trim().split('\n').map(s=>s.trim()).filter(Boolean);
+    const epg = $('#tv-custom-epg').value.trim();
+    
+    if(!id || !name || !streams.length){
+        toast('ID, nom et au moins un flux requis','error');
+        return;
+    }
+    if(!/^[a-zA-Z0-9_-]+$/.test(id)){
+        toast('ID: lettres, chiffres, _ et - uniquement','error');
+        return;
+    }
+    
+    const st = _settings.stremio || {};
+    const custom = st.custom_channels || {};
+    
+    if(!_editingCustomId && custom[id]){
+        toast('Cet ID existe déjà','error');
+        return;
+    }
+    if(_editingCustomId && _editingCustomId !== id && custom[id]){
+        toast('Cet ID existe déjà','error');
+        return;
+    }
+    
+    // Remove old if renaming
+    if(_editingCustomId && _editingCustomId !== id){
+        delete custom[_editingCustomId];
+    }
+    
+    custom[id] = { name, logo, streams, epg };
+    
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:{...st, custom_channels:custom}})});
+    if(r.ok){
+        toast('Chaîne personnalisée enregistrée','success');
+        closeCustomChannelModal();
+        await loadTvChannels();
+    }else toast('Erreur','error');
+}
+
+function editCustomChannel(id){
+    const st = _settings.stremio || {};
+    const cc = (st.custom_channels || {})[id];
+    if(!cc) return;
+    _editingCustomId = id;
+    $('#tv-custom-modal-title').textContent = `Éditer: ${cc.name}`;
+    $('#tv-custom-id').value = id;
+    $('#tv-custom-id-input').value = id;
+    $('#tv-custom-id-input').readOnly = true;
+    $('#tv-custom-name').value = cc.name || '';
+    $('#tv-custom-logo').value = cc.logo || '';
+    $('#tv-custom-logo-preview').src = cc.logo || '';
+    $('#tv-custom-logo-preview').style.display = cc.logo ? 'block' : 'none';
+    $('#tv-custom-streams').value = (cc.streams || []).join('\n');
+    $('#tv-custom-epg').value = cc.epg || '';
+    document.getElementById('tv-custom-modal').classList.add('active');
+}
+
+async function deleteCustomChannel(){
+    if(!_editingCustomId) return;
+    if(!confirm('Supprimer cette chaîne personnalisée ?')) return;
+    const st = _settings.stremio || {};
+    const custom = { ...(st.custom_channels || {}) };
+    delete custom[_editingCustomId];
+    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:{...st, custom_channels:custom}})});
+    if(r.ok){
+        toast('Chaîne personnalisée supprimée','success');
+        closeCustomChannelModal();
+        await loadTvChannels();
+    }else toast('Erreur','error');
+}
+
+function closeCustomChannelModal(){
+    document.getElementById('tv-custom-modal').classList.remove('active');
+    _editingCustomId = null;
+}
+
+async function refreshEpg(){
+    const st = $('#epg-status');
+    st.textContent = 'Rafraîchissement en cours…';
+    try{
+        const r = await apiFetch("/api/epg/refresh", {method:'POST'});
+        if(r.ok){ toast('Rafraîchissement EPG lancé','success'); setTimeout(loadSettings, 4000); }
+        else toast('Erreur','error');
+    }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur','error'); }
+}
+
+function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+let _hls = null;
+function closePlayer(){
+    const video = $("#player-frame");
+    video.pause();
+    video.src = "";
+    if (_hls) { _hls.destroy(); _hls = null; }
+    $("#player-modal").classList.remove("active");
+}
+function openPlayer(url, title){
+    $("#player-title").textContent = title;
+    const video = $("#player-frame");
+    if (_hls) { _hls.destroy(); _hls = null; }
+    if (window.Hls && Hls.isSupported()) {
+        _hls = new Hls();
+        _hls.loadSource(url);
+        _hls.attachMedia(video);
+        _hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+    } else {
+        video.src = url;
+        video.play().catch(()=>{});
+    }
+    $("#player-modal").classList.add("active");
+}
+$("#player-close").addEventListener("click", closePlayer);
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closePlayer(); });
+$("#player-modal").addEventListener("click", e=>{ if(e.target === e.currentTarget) closePlayer(); });
+document.addEventListener("click", (e)=>{
+    const card = e.target.closest(".chan-card, .channel-item");
+    if(card && card.dataset.play){
+        e.preventDefault();
+        const name = (card.querySelector(".chan-name") || card.querySelector(".name")).textContent;
+        openPlayer(card.dataset.play, name);
+    }
+});
+document.addEventListener("click", (e)=>{
+    const row = e.target.closest(".top-row");
+    if(row && row.dataset.play){
+        const name = row.querySelector(".top-name").textContent;
+        openPlayer(row.dataset.play, name);
+    }
+});
+
+$("#add-source-btn").addEventListener("click", async ()=>{
+    const url = $("#source-url").value.trim();
+    const out = $("#add-source-result");
+    const preview = $("#add-source-preview");
+    if(!url){
+        out.innerHTML = '<div class="alert alert-error">Veuillez entrer une URL</div>';
+        return;
+    }
+    $("#add-source-btn").disabled = true;
+    $("#add-source-btn").textContent = "⏳ Scraping...";
+    out.innerHTML = "";
+    preview.style.display = "none";
+    preview.innerHTML = "";
+    try{
+        const r = await apiFetch(`/api/add-source?url=${encodeURIComponent(url)}`);
+        const d = await r.json();
+        if(d.success){
+            out.innerHTML = `<div class="alert alert-success">${d.message}</div>`;
+            if(d.channels && d.channels.length){
+                preview.style.display = "block";
+                preview.innerHTML = d.channels.map(ch => `
+                    <div class="add-source-preview-item">
+                        <div class="add-source-preview-name">${escapeHtml(ch.name)}</div>
+                        <div class="add-source-preview-id">ID: ${escapeHtml(ch.id)}</div>
+                    </div>`).join('');
+            }
+            $("#source-url").value = "";
+            toast(d.message, 'success');
+            await loadManualChannels();
+            await refreshStats();
+        }else{
+            out.innerHTML = `<div class="alert alert-error">${d.message}</div>`;
+            toast(d.message, 'error');
+        }
+    }catch(e){
+        if (e.message !== 'unauthenticated') {
+            out.innerHTML = `<div class="alert alert-error">Erreur: ${e.message}</div>`;
+            toast('Erreur: ' + e.message, 'error');
+        }
+    }finally{
+        $("#add-source-btn").disabled = false;
+        $("#add-source-btn").textContent = "🔍 Scraper & Ajouter";
+    }
+});
+
+$("#q").addEventListener("input", (()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,120);}})());
+$("#lang-filter").addEventListener("change", (e) => {
+    LANG_FILTER = e.target.value;
+    localStorage.setItem("dl_lang", e.target.value);
+    render();
+});
+if($("#lang-filter")) $("#lang-filter").value = LANG_FILTER;
+if($("#catalog-sort")) $("#catalog-sort").value = SORT;
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    CURRENT = b.dataset.src;
+    if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
+    render();
+}));
+
+// ---- LOGS live (terminal) ----
+let allLogs = [];
+let logsInterval = null;
+let logsPaused = false;
+
+function restartLogPolling() {
+    if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
+    if (logsPaused) return;
+    const ms = Number(document.getElementById('logs-interval').value);
+    if (ms > 0) logsInterval = setInterval(loadLogs, ms);
+}
+
+function toggleLogPause() {
+    logsPaused = !logsPaused;
+    const btn = document.getElementById('logs-pausebtn');
+    const dot = document.getElementById('logs-dot');
+    const text = document.getElementById('logs-statustext');
+    if (logsPaused) {
+        if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
+        btn.textContent = '▶️ Reprendre'; btn.classList.add('paused');
+        dot.classList.add('paused'); text.textContent = 'Paused';
+    } else {
+        btn.textContent = '⏸️ Pause'; btn.classList.remove('paused');
+        dot.classList.remove('paused'); text.textContent = 'Live';
+        restartLogPolling();
+    }
+}
+
+async function loadLogs() {
+    if (logsPaused) return;
+    try {
+        const res = await apiFetch('/api/logs');
+        if (!res.ok) { return; }
+        allLogs = await res.json();
+        renderLogs();
+        updateLogsBadge();
+    } catch (e) { /* silencieux */ }
+}
+
+function updateLogsBadge() {
+    const badge = document.getElementById('logs-badge');
+    if (!badge) return;
+    const errs = allLogs.filter(l => l.code >= 400).length;
+    if (errs) { badge.style.display = 'inline-block'; badge.textContent = errs; }
+    else badge.style.display = 'none';
+}
+
+function updateLogsStats() {
+    const total = allLogs.length;
+    const c2 = allLogs.filter(l => l.code >= 200 && l.code < 300).length;
+    const c4 = allLogs.filter(l => l.code >= 400 && l.code < 500).length;
+    const c5 = allLogs.filter(l => l.code >= 500).length;
+    const eTotal = document.getElementById('stat-total');
+    const e2xx = document.getElementById('stat-2xx');
+    const e4xx = document.getElementById('stat-4xx');
+    const e5xx = document.getElementById('stat-5xx');
+    if (eTotal) eTotal.querySelector('b').textContent = total;
+    if (e2xx) e2xx.querySelector('b').textContent = c2;
+    if (e4xx) e4xx.querySelector('b').textContent = c4;
+    if (e5xx) e5xx.querySelector('b').textContent = c5;
+}
+
+function renderLogs() {
+    const methodFilter = document.getElementById('logs-method').value;
+    const search = document.getElementById('logs-search').value.trim().toLowerCase();
+
+    let filtered = [...allLogs].reverse();
+    if (methodFilter) filtered = filtered.filter(l => l.method === methodFilter);
+    if (search) filtered = filtered.filter(l =>
+        String(l.path||'').toLowerCase().includes(search)
+        || String(l.ip||'').toLowerCase().includes(search)
+        || String(l.method||'').toLowerCase().includes(search));
+
+    updateLogsStats();
+
+    const list = document.getElementById('logs-list');
+    if (!filtered.length) {
+        list.innerHTML = '<div class="logs-empty"><div class="icon">📋</div><p>Aucun log ne correspond</p></div>';
+        return;
+    }
+    const wasAtBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 40;
+    list.innerHTML = filtered.slice(0, 300).map(l => {
+        const warn = l.code >= 400 && l.code < 500;
+        const err = l.code >= 500;
+        const methodCls = String(l.method||'').toLowerCase();
+        const codeCls = l.code >= 500 ? 'err' : (l.code >= 400 ? 'warn' : 'ok');
+        return `<div class="log-entry ${warn?'warn':''} ${err?'err':''}">
+            <span class="log-time">${escapeHtml(l.t)}</span>
+            <span class="log-method ${methodCls}">${escapeHtml(l.method)}</span>
+            <span class="log-code ${codeCls}">${l.code}</span>
+            <span class="log-ip">${escapeHtml(l.ip)}</span>
+            <span class="log-path" title="${escapeHtml(l.path)}">${escapeHtml(l.path)}</span>
+        </div>`;
+    }).join('');
+    if (wasAtBottom) list.scrollTop = list.scrollHeight;
+}
+
+function exportLogs() {
+    if (!allLogs.length) { toast('⚠️ Aucun log à exporter', 'warn'); return; }
+    const lines = [...allLogs].reverse().map(l => `[${l.t}] ${l.method} ${l.code} ${l.ip} ${l.path}`);
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'dlstreams-logs.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('✅ Export téléchargé', 'success');
+}
+
+async function clearLogs() {
+    if (!confirm('Vider tous les logs ? Cette action est irréversible.')) return;
+    try {
+        const res = await fetch('/api/logs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
+        if (res.ok) { toast('✅ Logs vidés', 'success'); await loadLogs(); }
+        else toast('❌ Erreur lors du reset', 'error');
+    } catch (e) { toast('❌ ' + e.message, 'error'); }
+}
+
+// ---- PAGE SYSTEME ----
+function fmtBytes(b){
+    if(b === null) return "—";
+    if(b >= 1073741824) return (b/1073741824).toFixed(1) + " Go";
+    if(b >= 1048576) return (b/1048576).toFixed(1) + " Mo";
+    if(b >= 1024) return (b/1024).toFixed(1) + " Ko";
+    return b + " o";
+}
+function sysRows(rows){
+    return rows.map(([k,v]) => `<div class="sys-row"><div class="sys-key">${escapeHtml(k)}</div><div class="sys-val">${escapeHtml(String(v))}</div></div>`).join('');
+}
+async function boot(){
+    await Promise.all([refreshStats(), loadCatalog("dlstreams"), loadPlays()]);
+    render();
+    loadLogs();
+    loadLive();
+    restartLogPolling();
+    setInterval(() => { if (!document.hidden) refreshStats(); }, 30000);
+    setInterval(() => { if (!document.hidden) loadLive(); }, 5000);
+    const hp = (location.pathname.split('/dashboard/')[1] || '').replace(/\/+$/, '');
+    if (hp && hp !== 'dashboard' && document.getElementById('page-' + hp)) navigateTo(hp);
+}
+
+checkSession();
+</script>
+</body>
+</html>"""
+
+CONFIGURE_HTML = r"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dlstreams — configuration</title>
+<style>
+    :root{--primary:#6366f1;--secondary:#ec4899;--bg:#0f172a;--bg2:#1e293b;--card:#1e293b;--border:#334155;--text:#f1f5f9;--muted:#94a3b8;--ok:#10b981;--gradient:linear-gradient(135deg,#6366f1 0%,#ec4899 100%)}
+    *{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);background-image:radial-gradient(circle at 20% 50%,rgba(99,102,241,0.15) 0%,transparent 50%),radial-gradient(circle at 80% 80%,rgba(236,72,153,0.15) 0%,transparent 50%);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+    header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px}
+    header .logo{width:40px;height:40px;border-radius:10px;background:var(--gradient);display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(99,102,241,.3)}
+    header h1{margin:0;font-size:20px;letter-spacing:.3px;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    main{padding:24px;max-width:800px;margin:0 auto}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
+    .card h2{margin:0 0 16px;color:var(--muted);font-size:15px;text-transform:uppercase;letter-spacing:.1em}
+    .lang-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
+    .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
+    .lang-btn:hover{border-color:var(--primary);transform:translateY(-2px)}
+    .lang-btn.selected{border-color:var(--ok);background:rgba(16,185,129,.1)}
+    .lang-flag{font-size:24px}.lang-name{font-weight:600}.lang-count{color:var(--muted);font-size:12px;margin-top:2px}
+    .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
+    .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
+    .copy:hover{color:var(--text);border-color:var(--primary)}
+    .info{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}
+    .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(99,102,241,.15);color:var(--primary);margin-left:6px}
+    a{color:var(--primary);text-decoration:none}a:hover{color:var(--secondary)}
+</style>
+</head>
+<body>
+<header><div class="logo">▶</div><div><h1>Configuration <span class="badge">langue</span></h1></div></header>
+<main>
+  <div class="card"><h2>🌍 Choisir votre langue</h2><p style="margin:0 0 12px;color:var(--muted)">Sélectionnez la langue des chaînes à afficher dans Stremio :</p>
+    <div class="lang-grid" id="lang-grid">
+      <button class="lang-btn" data-lang="all"><span class="lang-flag">🌍</span><div><div class="lang-name">Toutes langues</div><div class="lang-count">Affiche tout le catalogue</div></div></button>
+      <button class="lang-btn selected" data-lang="fr"><span class="lang-flag">🇫🇷</span><div><div class="lang-name">Français</div><div class="lang-count">Chaînes FR uniquement</div></div></button>
+      <button class="lang-btn" data-lang="en"><span class="lang-flag">🇬🇧</span><div><div class="lang-name">English</div><div class="lang-count">Chaînes anglaises</div></div></button>
+      <button class="lang-btn" data-lang="es"><span class="lang-flag">🇪🇸</span><div><div class="lang-name">Español</div><div class="lang-count">Chaînes espagnoles</div></div></button>
+      <button class="lang-btn" data-lang="de"><span class="lang-flag">🇩🇪</span><div><div class="lang-name">Deutsch</div><div class="lang-count">Chaînes allemandes</div></div></button>
+      <button class="lang-btn" data-lang="it"><span class="lang-flag">🇮🇹</span><div><div class="lang-name">Italiano</div><div class="lang-count">Chaînes italiennes</div></div></button>
+      <button class="lang-btn" data-lang="ar"><span class="lang-flag">🇸🇦</span><div><div class="lang-name">Arabe</div><div class="lang-count">Chaînes arabes</div></div></button>
+      <button class="lang-btn" data-lang="pt"><span class="lang-flag">🇵🇹</span><div><div class="lang-name">Português</div><div class="lang-count">Chaînes portugaises</div></div></button>
+    </div>
+  </div>
+  <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
+    <div class="manifest-box" id="manifest-url">—</div>
+    <button class="copy" id="copy-btn">📋 Copier l'URL</button>
+    <div class="info"><strong>Comment faire :</strong><br>1. Choisissez votre langue ci-dessus<br>2. Copiez l'URL du manifest<br>3. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>4. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE les chaînes de la langue sélectionnée.</em></div>
+  </div>
+  <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
+    <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
+    <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
+    <div><a href="/">→ Retour accueil</a></div>
+  </div></div>
+</main>
+<script>
+const BASE = location.origin;
+const $ = s => document.querySelector(s);
+let CURRENT_LANG = "fr";
+document.querySelectorAll(".lang-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    CURRENT_LANG = btn.dataset.lang;
+    updateManifest();
+  });
+});
+function updateManifest() {
+  const url = CURRENT_LANG === "all" 
+    ? `${BASE}/manifest.json`
+    : `${BASE}/manifest.json?lang=${CURRENT_LANG}`;
+  $("#manifest-url").textContent = url;
+}
+$("#copy-btn").addEventListener("click", () => {
+  const url = $("#manifest-url").textContent;
+  navigator.clipboard.writeText(url).then(() => {
+    const old = $("#copy-btn").textContent;
+    $("#copy-btn").textContent = "✓ Copié !";
+    setTimeout(() => $("#copy-btn").textContent = old, 2000);
+  });
+});
+updateManifest();
+</script>
+</body>
+</html>
+"""
 
 if __name__ == "__main__":
     main()
