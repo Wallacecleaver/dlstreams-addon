@@ -44,6 +44,11 @@
     .hero-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(52px, 8vw, 96px); line-height: 0.9; letter-spacing: 4px; color: #fff; margin-bottom: 8px; }
     .hero-title span { color: var(--red); display: block; }
     .hero-sub { font-size: 15px; color: var(--muted); max-width: 480px; margin: 20px auto 0; line-height: 1.6; font-weight: 300; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 32px; max-width: 780px; margin-left: auto; margin-right: auto; padding: 0 24px; }
+    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+    .stat-value { font-family: 'Rajdhani', monospace; font-size: 28px; font-weight: 700; color: var(--text); line-height: 1.2; }
+    .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; }
+    .stat-card.accent .stat-value { color: var(--red); }
     main { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; padding: 0 24px 140px; }
     .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; margin-top: 40px; }
     .section-line { flex: 1; height: 1px; background: var(--border); }
@@ -124,6 +129,13 @@
     </div>
     <h1 class="hero-title">W Addon TV<span>Français</span></h1>
     <p class="hero-sub">Chaînes TV en direct (TNT, Sport, Cinéma, Info) via dlstreams + Vavoo. Proxy HLS intégré, zero dépendance, prêt pour Stremio.</p>
+  </div>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Chaînes total</div></div>
+    <div class="stat-card"><div class="stat-value" id="stat-dl">—</div><div class="stat-label">dlstreams</div></div>
+    <div class="stat-card"><div class="stat-value" id="stat-vv">—</div><div class="stat-label">Vavoo</div></div>
+    <div class="stat-card accent"><div class="stat-value" id="stat-uptime">—</div><div class="stat-label">Uptime</div></div>
   </div>
 
   <main>
@@ -275,6 +287,23 @@
       setTimeout(() => t.classList.remove('show'), 2500);
     }
 
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/public-stats');
+        const data = await res.json();
+        document.getElementById('stat-total').textContent = data.channels_total || '—';
+        document.getElementById('stat-dl').textContent = data.dlstreams_count || '—';
+        document.getElementById('stat-vv').textContent = data.vavoo_count || '—';
+        document.getElementById('stat-uptime').textContent = formatUptime(data.uptime);
+      } catch (e) { /* silencieux */ }
+    }
+
+    function formatUptime(sec) {
+      if (!sec) return '—';
+      const d = Math.floor(sec/86400), h = Math.floor(sec%86400/3600), m = Math.floor(sec%3600/60);
+      return (d?d+'j ':'')+(h?h+'h ':'')+m+'m';
+    }
+
     async function checkServicesStatus() {
       try {
         const res = await fetch('/api/health');
@@ -290,6 +319,7 @@
       } catch (e) { /* réseau down -> points restent en pulse neutre */ }
     }
     checkServicesStatus();
+    loadStats();
   </script>
 </body>
 </html>

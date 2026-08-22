@@ -848,12 +848,12 @@ def _vavoo_post(action: str, body: dict):
 
 def vavoo_channels(country: str = "France") -> list[dict]:
     if _vavoo_cache["list"] and time.time() - _vavoo_cache["at"] < 6 * 3600:
-        return _vavoo_cache["list"]
+        return [c for c in _vavoo_cache["list"] if c.get("lang") == country.lower() or country == "France"]
     items, cursor, pages = [], 0, 0
     while cursor is not None and pages < 40:
         d = _vavoo_post("catalog", {"language": "fr", "region": "FR", "catalogId": "iptv", "id": "",
             "adult": False, "search": "", "sort": "name",
-            "filter": {"group": country}, "cursor": cursor, "clientVersion": "3.1.0"})
+            "cursor": cursor, "clientVersion": "3.1.0"})
         if not d:
             break
         batch = d.get("items") or []
@@ -865,7 +865,10 @@ def vavoo_channels(country: str = "France") -> list[dict]:
                 continue
             name = x.get("name") or ""
             logo = x.get("logo") or ""
-            items.append({"id": url, "name": name, "logo": logo, "lang": "fr"})
+            lang = _detect_lang(name)
+            if country == "France" and lang != "fr":
+                continue
+            items.append({"id": url, "name": name, "logo": logo, "lang": lang})
             if logo and name:
                 key = _norm_name(name)
                 if key and key not in _LOGO_BY_NAME:
@@ -873,7 +876,7 @@ def vavoo_channels(country: str = "France") -> list[dict]:
         cursor, pages = d.get("nextCursor"), pages + 1
     if items:
         _vavoo_cache.update(at=time.time(), list=items)
-    return _vavoo_cache["list"]
+    return [c for c in items if c.get("lang") == "fr"]
 
 def vavoo_resolve(vurl: str) -> str:
     if not vurl:
@@ -959,12 +962,13 @@ def _stats() -> dict:
 
 def _public_stats() -> dict:
     all_ch = channels()
+    vavoo_ch = vavoo_channels()
     return {
         "version": _VERSION,
         "uptime": int(time.time() - _START_TIME),
-        "channels_total": len(all_ch),
+        "channels_total": len(all_ch) + len(vavoo_ch),
         "dlstreams_count": len(_ch_cache.get("list") or []),
-        "vavoo_count": len(_vavoo_cache.get("list") or []),
+        "vavoo_count": len(vavoo_ch),
         "manual_count": len(_manual_channels),
     }
 
