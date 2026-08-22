@@ -120,51 +120,90 @@ _POPULAR_CHANNELS = [
 # Sources : static.epg.best (EPG/logo iptv-org) + Wikimedia. Servees via le
 # proxy /logo/... avec fallback poster genere si indisponible.
 _CH_LOGO = {
+    # Canal+
     "121": "https://static.epg.best/fr/CanalPlus.fr.png",
     "122": "https://static.epg.best/fr/CanalPlusSport.fr.png",
-    "123": "https://upload.wikimedia.org/wikipedia/fr/thumb/e/eb/C%2B_Cin%C3%A9ma%28s%29.png/500px-C%2B_Cin%C3%A9ma%28s%29.png",
-    "124": "https://upload.wikimedia.org/wikipedia/fr/thumb/e/e3/C%2B_S%C3%A9ries.png/500px-C%2B_S%C3%A9ries.png",
+    "123": "https://static.epg.best/fr/CanalPlusCinema.fr.png",
+    "124": "https://static.epg.best/fr/CanalPlusSeries.fr.png",
     "125": "https://static.epg.best/fr/CanalPlusFamily.fr.png",
+    # RMC Sport
     "211": "https://static.epg.best/fr/RMCSport1.fr.png",
     "212": "https://static.epg.best/fr/RMCSport2.fr.png",
     "213": "https://static.epg.best/fr/RMCSport3.fr.png",
     "214": "https://static.epg.best/fr/RMCSport4.fr.png",
+    # Eurosport
     "301": "https://static.epg.best/fr/Eurosport1.fr.png",
     "302": "https://static.epg.best/fr/Eurosport2.fr.png",
+    # TNT
     "401": "https://static.epg.best/fr/TF1.fr.png",
     "402": "https://static.epg.best/fr/France2.fr.png",
     "403": "https://static.epg.best/fr/France3.fr.png",
     "404": "https://static.epg.best/fr/France4.fr.png",
     "405": "https://static.epg.best/fr/France5.fr.png",
     "406": "https://static.epg.best/fr/M6.fr.png",
-    "407": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Arte_Logo_2017.svg/500px-Arte_Logo_2017.svg.png",
+    "407": "https://static.epg.best/fr/Arte.fr.png",
     "408": "https://static.epg.best/fr/C8.fr.png",
     "409": "https://static.epg.best/fr/W9.fr.png",
     "410": "https://static.epg.best/fr/TMC.fr.png",
     "411": "https://static.epg.best/fr/TFX.fr.png",
     "412": "https://static.epg.best/fr/NRJ12.fr.png",
     "413": "https://static.epg.best/fr/LCP.fr.png",
+    "414": "https://static.epg.best/fr/FranceInfo.fr.png",
     "415": "https://static.epg.best/fr/BFMTV.fr.png",
     "416": "https://static.epg.best/fr/CNews.fr.png",
     "417": "https://static.epg.best/fr/CStar.fr.png",
     "418": "https://static.epg.best/fr/Gulli.fr.png",
     "419": "https://static.epg.best/fr/TF1SeriesFilms.fr.png",
+    "420": "https://static.epg.best/fr/LEquipe.fr.png",
     "421": "https://static.epg.best/fr/6ter.fr.png",
     "422": "https://static.epg.best/fr/RMCStory.fr.png",
-    "423": "https://commons.wikimedia.org/wiki/Special:FilePath/Logo_de_RMC_d%C3%A9couverte_depuis_le_08-11-2025.png",
+    "423": "https://static.epg.best/fr/RMCDecouverte.fr.png",
     "424": "https://static.epg.best/fr/Cherie25.fr.png",
-    "414": "https://static.epg.best/fr/FranceInfo.fr.png",
-    "420": "https://static.epg.best/fr/LEquipe21.fr.png",
-    "645": "https://static.epg.best/fr/LEquipe21.fr.png",
+    # beIN Sports
     "201": "https://static.epg.best/fr/BeinSports1.fr.png",
     "202": "https://static.epg.best/fr/BeinSports2.fr.png",
     "203": "https://static.epg.best/fr/BeinSports3.fr.png",
     "116": "https://static.epg.best/fr/BeinSports1.fr.png",
+    # L'Equipe / Eurosport extras
     "772": "https://static.epg.best/fr/Eurosport1.fr.png",
-    "960": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
-    "68": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
-    "76": "https://commons.wikimedia.org/wiki/Special:FilePath/Ligue1%20logo.png",
+    "645": "https://static.epg.best/fr/LEquipe.fr.png",
+    # Ligue 1 / DAZN
+    "960": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
+    "68": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
+    "76": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
+    "970": "https://static.epg.best/fr/DAZN1.fr.png",
+    "971": "https://static.epg.best/fr/DAZN2.fr.png",
+    "972": "https://static.epg.best/fr/DAZN3.fr.png",
+    "973": "https://static.epg.best/fr/DAZN4.fr.png",
+    "974": "https://static.epg.best/fr/DAZN5.fr.png",
 }
+
+def _norm_name(name: str) -> str:
+    """Normalise un nom de chaine pour matching cross-source."""
+    import unicodedata, re
+    s = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    for w in ("hd", "fhd", "uhd", "4k", "hevc", "h264", "h265", "fr", "france", "live", "direct"):
+        s = re.sub(rf"\b{w}\b", "", s)
+    return s.strip()
+
+# Mapping unifie : nom normalise -> URL logo (rempli au demarrage + runtime)
+_LOGO_BY_NAME: dict[str, str] = {}
+
+def _init_logo_mapping():
+    """Initialise le mapping unifie depuis _CH_LOGO + _POPULAR_CHANNELS."""
+    global _LOGO_BY_NAME
+    _LOGO_BY_NAME.clear()
+    for cid, url in _CH_LOGO.items():
+        for ch in _POPULAR_CHANNELS:
+            if str(ch.get("id")) == str(cid):
+                key = _norm_name(ch["name"])
+                if key and url:
+                    _LOGO_BY_NAME[key] = url
+                break
+
+_init_logo_mapping()
 
 # ============================ REGLAGES ============================
 _SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_settings.json")
@@ -652,6 +691,10 @@ def channels(lang_filter: str | None = None) -> list[dict]:
             lg = _CH_LOGO.get(str(ch.get("id")))
             if lg:
                 ch["logo"] = lg
+                # Populate unified mapping
+                key = _norm_name(ch.get("name", ""))
+                if key and key not in _LOGO_BY_NAME:
+                    _LOGO_BY_NAME[key] = lg
 
     out = _ch_cache["list"]
     if lang_filter and lang_filter != "all":
@@ -878,8 +921,18 @@ def vavoo_channels(country: str = "France") -> list[dict]:
         batch = d.get("items") or []
         if not batch:
             break
-        items += [{"id": x.get("url"), "name": x.get("name") or "", "logo": x.get("logo") or "", "lang": "fr"}
-                  for x in batch if x.get("url")]
+        for x in batch:
+            url = x.get("url")
+            if not url:
+                continue
+            name = x.get("name") or ""
+            logo = x.get("logo") or ""
+            items.append({"id": url, "name": name, "logo": logo, "lang": "fr"})
+            # Populate unified mapping for cross-source sync
+            if logo and name:
+                key = _norm_name(name)
+                if key and key not in _LOGO_BY_NAME:
+                    _LOGO_BY_NAME[key] = logo
         cursor, pages = d.get("nextCursor"), pages + 1
     if items:
         _vavoo_cache.update(at=time.time(), list=items)
@@ -1208,10 +1261,36 @@ def _now_playing() -> list[dict]:
     return out
 
 def _logo_bytes(src: str, c: dict) -> bytes:
-    """Logo reel (proxye) si dispo, sinon poster genere. Jamais de tile cassee."""
+    """Logo reel si dispo, sinon poster genere. Simple et robuste."""
     if not _settings.get("logos", True):
         return _poster_get(c.get("name") or "TV")
-    url = _CH_LOGO.get(str(c.get("id")), "") if src == "dlstreams" else (c.get("logo") or "").strip()
+
+    name = c.get("name") or ""
+    cid = str(c.get("id") or "")
+
+    # 1. Override manuel (settings)
+    st = _settings.get("stremio", {})
+    manual = st.get("channel_logos", {}).get(cid)
+    if manual:
+        url = manual.strip()
+    elif src == "dlstreams":
+        # 2. Logo natif dlstreams par ID
+        url = _CH_LOGO.get(cid, "")
+    else:
+        # 3. Logo natif vavoo (depuis le catalogue)
+        url = (c.get("logo") or "").strip()
+
+    # 4. Fallback mapping unifie par nom normalise (sync cross-source)
+    if not url and name:
+        url = _LOGO_BY_NAME.get(_norm_name(name), "")
+
+    # 5. Enregistre pour l'autre source si on a un logo valide
+    if url and name:
+        key = _norm_name(name)
+        if key and key not in _LOGO_BY_NAME:
+            _LOGO_BY_NAME[key] = url
+
+    # 6. Fetch + cache
     if url:
         png = _logo_cache.get(url)
         if png is None and url not in _logo_bad:
@@ -1221,7 +1300,7 @@ def _logo_bytes(src: str, c: dict) -> bytes:
                     png = r.read()
                 if png[:3] not in (b"\xff\xd8\xff", b"\x89PN"):
                     raise ValueError("pas une image")
-            except Exception as e:
+            except Exception:
                 png = None
                 _logo_bad.add(url)
             if png is not None:
@@ -1230,7 +1309,8 @@ def _logo_bytes(src: str, c: dict) -> bytes:
                 _logo_cache[url] = png
         if png:
             return png
-    return _poster_get(c.get("name") or "TV")
+
+    return _poster_get(name or "TV")
 
 def _warm_logos():
     for url in _CH_LOGO.values():
