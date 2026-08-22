@@ -1691,8 +1691,11 @@ class Handler(BaseHTTPRequestHandler):
                 src, _, cid = seg.partition("/")
                 if src == "vavoo":
                     url = _unb64u(cid)
-                    c = next((x for x in vavoo_channels() if x["id"] == url),
-                             {"id": url, "name": "Vavoo", "logo": ""})
+                    c = next((x for x in vavoo_channels() if x["id"] == url), None)
+                    if c is None:
+                        # Fallback: essaie de retrouver la chaîne par nom (si cid est une play URL résolue)
+                        # On ne peut pas inverser la résolution, donc on retourne un fallback générique
+                        c = {"id": url, "name": "Vavoo", "logo": ""}
                 else:
                     c = next((x for x in channels() if str(x.get("id")) == str(cid)),
                              {"id": cid, "name": f"dlstreams {cid}", "logo": ""})
