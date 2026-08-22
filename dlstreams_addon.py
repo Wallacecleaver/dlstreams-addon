@@ -900,6 +900,15 @@ def _decode_config(config_b64: str) -> dict:
     except Exception:
         return {}
 
+def _extract_config_from_path(path: str) -> tuple[dict, str]:
+    if path.startswith("/") and "/" in path[1:]:
+        first, rest = path[1:].split("/", 1)
+        # Only treat as config if it decodes to valid JSON with expected keys
+        config = _decode_config(first)
+        if config and isinstance(config, dict) and any(k in config for k in ("pseudo", "device", "epg", "vavoo", "dlstreams", "logos", "quality", "lang", "adult")):
+            return config, "/" + rest
+    return {}, path
+
 _PROXY_SECRET = secrets.token_bytes(32)
 
 def _proxy_sign(u_b64: str, h_b64: str) -> str:
@@ -1352,6 +1361,11 @@ class Handler(BaseHTTPRequestHandler):
             return json.loads(_unb64u(cfg_b64))
         except Exception:
             return {}
+    def _extract_addon_config(self, path: str) -> tuple[dict, str]:
+        user_config, clean_path = _extract_config_from_path(path)
+        if not user_config:
+            user_config = self._user_config()
+        return user_config, clean_path
     def _authed(self) -> bool:
         tok = self._cookie("dl_session")
         if not tok:
@@ -1787,9 +1801,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path in ("/", "/manifest.json"):
                 return self._send(200, json.dumps(self._manifest(lang_filter="fr")).encode(), "application/json", True)
-            if path.startswith("/catalog/tv/"):
-                user_config = self._user_config()
-                extra = path[len("/catalog/tv/"):].removesuffix(".json")
+            user_config, clean_path = self._extract_addon_config(path)
+            if clean_path.startswith("/catalog/tv/"):
+                extra = clean_path[len("/catalog/tv/"):].removesuffix(".json")
                 catid = extra.split("/", 1)[0]
                 params = {}
                 if "/" in extra:
@@ -1832,19 +1846,19 @@ class Handler(BaseHTTPRequestHandler):
                 skip = int(params.get("skip") or 0)
                 metas = [self._meta(c, catid, user_config) for c in chans[skip:skip + 100]]
                 return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
-            if path.startswith("/meta/tv/"):
-                seg = urllib.parse.unquote(path.rsplit("/", 1)[1].removesuffix(".json"))
+            user_config, clean_path = self._extract_addon_config(path)
+            if clean_path.startswith("/meta/tv/"):
+                seg = urllib.parse.unquote(clean_path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 if source == "vavoo":
                     url = _unb64u(cid)
                     c = next((x for x in vavoo_channels() if x["id"] == url), {"id": url, "name": "Vavoo"})
                 else:
                     c = next((x for x in channels() if x["id"] == cid), {"id": cid, "name": f"dlstreams {cid}"})
-                return self._send(200, json.dumps({"meta": self._meta(c, source)}).encode(),
+                return self._send(200, json.dumps({"meta": self._meta(c, source, user_config)}).encode(),
                     "application/json", True)
-            if path.startswith("/stream/tv/"):
-                user_config = self._user_config()
-                seg = urllib.parse.unquote(path.rsplit("/", 1)[1].removesuffix(".json"))
+            if clean_path.startswith("/stream/tv/"):
+                seg = urllib.parse.unquote(clean_path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
