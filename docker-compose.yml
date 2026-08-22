@@ -1,10 +1,9 @@
 services:
   waddontv:
-    build: .
-    image: waddontv
+    image: ghcr.io/wallacecleaver/dlstreams-addon:latest
     container_name: waddontv
     ports:
-      - "8781:8781"        # Stremio/VLC accedent via http://<ip-hote>:8781
+      - "8781:8781"
     restart: unless-stopped
     env_file:
       - .env
@@ -15,3 +14,24 @@ services:
       - ./dlstreams_epg.json:/app/dlstreams_epg.json
       - ./dashboard.html:/app/dashboard.html
       - ./configure.html:/app/configure.html
+
+# Profil dev : build local depuis les sources
+# Usage: docker compose --profile dev up -d --build
+  waddontv-dev:
+    build: .
+    image: waddontv-dev
+    container_name: waddontv-dev
+    ports:
+      - "8781:8781"
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./dlstreams_settings.json:/app/dlstreams_settings.json
+      - ./dlstreams_sessions.json:/app/dlstreams_sessions.json
+      - ./dlstreams_hist.json:/app/dlstreams_hist.json
+      - ./dlstreams_epg.json:/app/dlstreams_epg.json
+      - ./dashboard.html:/app/dashboard.html
+      - ./configure.html:/app/configure.html
+    profiles:
+      - dev
