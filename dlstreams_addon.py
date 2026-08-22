@@ -1931,7 +1931,7 @@ class Handler(BaseHTTPRequestHandler):
             _log_activity("Logs effacés")
             return self._send(200, json.dumps({"success": True}).encode(), "application/json")
 
-def _manifest(self, lang_filter: str | None = None) -> dict:
+    def _manifest(self, lang_filter: str | None = None) -> dict:
         _extra = [{"name": "search", "isRequired": False},
                   {"name": "skip", "isRequired": False},
                   {"name": "genre", "isRequired": False,
@@ -1967,7 +1967,7 @@ def _manifest(self, lang_filter: str | None = None) -> dict:
             "id": "st.waddontv.proxy" + (f".{lang_filter}" if lang_filter and lang_filter != "all" else ""),
             "version": _VERSION,
             "name": name,
-            "description": desc,
+"description": desc,
             "resources": ["catalog", "meta", "stream"],
             "types": ["tv"],
             "idPrefixes": ["dlstreams:", "vavoo:", "custom:"],
@@ -1975,7 +1975,7 @@ def _manifest(self, lang_filter: str | None = None) -> dict:
             "behaviorHints": {
                 "configurable": True,
                 "configurationRequired": False,
-"adultContent": False,
+                "adultContent": False,
                 "p2p": False
             }
         }
