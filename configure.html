@@ -3,67 +3,120 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>W Addon TV — configuration</title>
+<title>W Addon TV — Configuration</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-    :root{--primary:#6366f1;--secondary:#ec4899;--bg:#0f172a;--bg2:#1e293b;--card:#1e293b;--border:#334155;--text:#f1f5f9;--muted:#94a3b8;--ok:#10b981;--gradient:linear-gradient(135deg,#6366f1 0%,#ec4899 100%)}
-    *{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);background-image:radial-gradient(circle at 20% 50%,rgba(99,102,241,0.15) 0%,transparent 50%),radial-gradient(circle at 80% 80%,rgba(236,72,153,0.15) 0%,transparent 50%);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
-    header{padding:28px 24px 8px;display:flex;align-items:center;gap:14px}
-    header .logo{width:40px;height:40px;border-radius:10px;background:var(--gradient);display:grid;place-items:center;font-weight:800;color:#0b0f1a;box-shadow:0 8px 24px rgba(99,102,241,.3)}
-    header h1{margin:0;font-size:20px;letter-spacing:.3px;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    main{padding:24px;max-width:800px;margin:0 auto}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;backdrop-filter:blur(8px)}
-    .card h2{margin:0 0 16px;color:var(--muted);font-size:15px;text-transform:uppercase;letter-spacing:.1em}
-    .lang-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
-    .lang-btn{padding:16px;border:2px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--text);cursor:pointer;text-align:left;transition:.2s;display:flex;align-items:center;gap:12px}
-    .lang-btn:hover{border-color:var(--primary);transform:translateY(-2px)}
-    .lang-btn.selected{border-color:var(--ok);background:rgba(16,185,129,.1)}
-    .lang-flag{font-size:24px}.lang-name{font-weight:600}.lang-count{color:var(--muted);font-size:12px;margin-top:2px}
-    .manifest-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:16px;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px}
-    .copy{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
-    .copy:hover{color:var(--text);border-color:var(--primary)}
-    .info{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}
-    .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:rgba(99,102,241,.15);color:var(--primary);margin-left:6px}
-    a{color:var(--primary);text-decoration:none}a:hover{color:var(--secondary)}
+  :root {
+    --bg:#0a0a0b; --surface:#111113; --surface2:#18181b; --border:rgba(255,255,255,0.06);
+    --accent:#e53e3e; --accent-dim:rgba(229,62,62,0.08); --green:#48bb78;
+    --text:#f0f0f0; --text2:#888; --muted:#666; --input-bg:#0a0a0b; --card-hover:rgba(255,255,255,0.02);
+    --warn:#f59e0b; --error:#ef4444; --info:#60a5fa;
+    --font-display:'Bebas Neue',sans-serif; --font-mono:'Rajdhani',monospace; --font-body:'DM Sans',sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; }
+  
+  .container { max-width:520px; margin:0 auto; padding:40px 20px; }
+  
+  .header { text-align:center; margin-bottom:32px; }
+  .header .logo-icon { width:72px; height:72px; margin:0 auto 16px; border-radius:18px;
+    background:linear-gradient(135deg,var(--accent),#ff7a59); display:grid; place-items:center;
+    font-size:32px; font-weight:800; color:#fff; box-shadow:0 12px 40px rgba(229,62,62,.4); }
+  .header h1 { font-family:var(--font-display); font-size:36px; font-weight:400; letter-spacing:1px; color:var(--text); margin-bottom:4px; }
+  .header .sub { font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
+  
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; margin-bottom:20px; }
+  .card-title { font-size:16px; font-weight:700; color:var(--text); margin-bottom:8px; }
+  .card-desc { font-size:13px; color:var(--text2); margin-bottom:20px; line-height:1.5; }
+  
+  .badge-fr { display:inline-flex; align-items:center; gap:8px; padding:10px 16px;
+    background:rgba(16,185,129,.1); border:1px solid #10b981; border-radius:8px;
+    color:#10b981; font-size:13px; font-weight:600; }
+  .badge-fr .flag { font-size:20px; }
+  
+  .manifest-box { background:var(--input-bg); border:1px solid var(--border); border-radius:10px; padding:14px 16px;
+    font-family:var(--font-mono); font-size:12px; color:var(--text); word-break:break-all; margin-bottom:16px; }
+  
+  .btn-primary { width:100%; background:var(--accent); color:#fff; border:none; border-radius:10px; padding:14px;
+    font-family:var(--font-body); font-size:14px; font-weight:700; cursor:pointer; transition:background .2s; }
+  .btn-primary:hover { background:#c53030; }
+  .btn-primary:active { transform:scale(0.98); }
+  
+  .btn-secondary { width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:12px;
+    font-family:var(--font-body); font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+  .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+  
+  .info { font-size:12px; color:var(--muted); line-height:1.7; margin-top:16px; }
+  .info strong { color:var(--text); }
+  
+  .footer { text-align:center; margin-top:32px; color:var(--muted); font-size:12px; }
+  
+  .toast { position:fixed; bottom:24px; right:24px; background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-size:13px; font-weight:600; color:var(--text); box-shadow:0 8px 32px rgba(0,0,0,0.3);
+    opacity:0; transform:translateY(10px); transition:all .3s; z-index:200; }
+  .toast.show { opacity:1; transform:translateY(0); }
+  .toast.success { border-color:var(--green); }
 </style>
 </head>
 <body>
-<header><div class="logo">▶</div><div><h1>W Addon TV <span class="badge">configuration</span></h1></div></header>
-<main>
-  <div class="card"><h2>🇫🇷 Addon 100% Français</h2>
-    <p style="margin:0 0 12px;color:var(--muted)">Cet addon ne diffuse que des chaînes françaises (TF1, France 2, Canal+, beIN Sports, RMC Sport, etc.).</p>
-    <div style="background:rgba(16,185,129,.1);border:1px solid #10b981;border-radius:8px;padding:16px;display:flex;align-items:center;gap:12px">
-      <span style="font-size:32px">🇫🇷</span>
-      <div><strong style="font-size:16px">Français uniquement</strong><br><span style="color:var(--muted)">Toutes les autres langues sont désactivées</span></div>
-    </div>
+
+<div class="container">
+  <header class="header">
+    <div class="logo-icon">▶</div>
+    <h1>W Addon TV</h1>
+    <div class="sub">Configuration</div>
+  </header>
+
+  <div class="card">
+    <div class="card-title">🇫🇷 Addon 100% Français</div>
+    <div class="card-desc">Cet addon ne diffuse que des chaînes françaises (TF1, France 2, Canal+, beIN Sports, RMC Sport, L'Équipe, etc.). Toutes les autres langues sont désactivées.</div>
+    <div class="badge-fr"><span class="flag">🇫🇷</span>Français uniquement</div>
   </div>
-  <div class="card"><h2>📥 Installer dans Stremio</h2><p style="margin:0 0 12px;color:var(--muted)">URL du manifest à copier dans Stremio (Addons → Install via URL) :</p>
+
+  <div class="card">
+    <div class="card-title">📥 Installer dans Stremio</div>
+    <div class="card-desc">Copiez l'URL du manifest ci-dessous et collez-la dans Stremio.</div>
     <div class="manifest-box" id="manifest-url">—</div>
-    <button class="copy" id="copy-btn">📋 Copier l'URL</button>
-    <div class="info"><strong>Comment faire :</strong><br>1. Copiez l'URL du manifest ci-dessus<br>2. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>3. Collez l'URL et validez<br><br><em>L'addon n'affichera QUE des chaînes françaises.</em></div>
+    <button class="btn-primary" id="copy-btn">📋 Copier l'URL du manifest</button>
+    <a class="btn-secondary" href="/dashboard" style="margin-top:10px">← Ouvrir le Dashboard</a>
   </div>
-  <div class="card"><h2>🔗 Liens rapides</h2><div style="display:grid;gap:8px">
-    <div><a href="/dashboard">→ Dashboard</a> — Voir et tester les chaînes</div>
-    <div><a href="/manifest.json">→ Manifest standard</a> — Toutes langues</div>
-    <div><a href="/">→ Retour accueil</a></div>
-  </div></div>
-</main>
+
+  <div class="info">
+    <strong>Comment faire :</strong><br>
+    1. Cliquez sur "Copier l'URL du manifest"<br>
+    2. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>
+    3. Collez l'URL et validez<br><br>
+    <em>L'addon n'affichera QUE des chaînes françaises.</em>
+  </div>
+
+  <div class="footer">
+    W Addon TV · <a href="/dashboard" style="color:var(--accent)">Dashboard</a> · <a href="/manifest.json?lang=fr" style="color:var(--accent)">Manifest FR</a>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copié !</div>
+
 <script>
 const BASE = location.origin;
 const $ = s => document.querySelector(s);
-// Addon forcé en français uniquement
-const CURRENT_LANG = "fr";
+
+function showToast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show", "success");
+  setTimeout(() => t.classList.remove("show", "success"), 2000);
+}
+
 function updateManifest() {
   const url = `${BASE}/manifest.json?lang=fr`;
   $("#manifest-url").textContent = url;
 }
+
 $("#copy-btn").addEventListener("click", () => {
   const url = $("#manifest-url").textContent;
-  navigator.clipboard.writeText(url).then(() => {
-    const old = $("#copy-btn").textContent;
-    $("#copy-btn").textContent = "✓ Copié !";
-    setTimeout(() => $("#copy-btn").textContent = old, 2000);
-  });
+  navigator.clipboard.writeText(url).then(() => showToast("✓ URL copiée !"));
 });
+
 updateManifest();
 </script>
 </body>
