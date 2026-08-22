@@ -1957,8 +1957,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not st.get("manifest_desc"):
                     desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
 
-            catalogs = []
-if st.get("include_dlstreams", True):
+catalogs = []
+            if st.get("include_dlstreams", True):
                 catalogs.append({"type": "tv", "id": "dlstreams", "name": "W Addon TV",
                                "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
             if st.get("include_vavoo", True):
