@@ -16,7 +16,7 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; }
   
-  .container { max-width:520px; margin:0 auto; padding:40px 20px; }
+  .container { max-width:560px; margin:0 auto; padding:40px 20px; }
   
   .header { text-align:center; margin-bottom:32px; }
   .header .logo-icon { width:72px; height:72px; margin:0 auto 16px; border-radius:18px;
@@ -37,14 +37,27 @@
   .manifest-box { background:var(--input-bg); border:1px solid var(--border); border-radius:10px; padding:14px 16px;
     font-family:var(--font-mono); font-size:12px; color:var(--text); word-break:break-all; margin-bottom:16px; }
   
+  .field { margin-bottom:16px; }
+  .field label { display:block; font-size:12px; color:var(--text2); margin-bottom:6px; font-weight:600; }
+  .field input, .field select { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:11px 14px;
+    color:var(--text); font-family:var(--font-mono); font-size:14px; transition:border-color .2s; }
+  .field input:focus, .field select:focus { outline:none; border-color:var(--accent); }
+  .field small { display:block; margin-top:6px; font-size:11px; color:var(--muted); }
+  
   .btn-primary { width:100%; background:var(--accent); color:#fff; border:none; border-radius:10px; padding:14px;
     font-family:var(--font-body); font-size:14px; font-weight:700; cursor:pointer; transition:background .2s; }
   .btn-primary:hover { background:#c53030; }
   .btn-primary:active { transform:scale(0.98); }
+  .btn-primary:disabled { opacity:.6; cursor:not-allowed; }
   
   .btn-secondary { width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:12px;
     font-family:var(--font-body); font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
   .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+  
+  .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+  .stat-mini { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:16px; text-align:center; }
+  .stat-mini .value { font-family:var(--font-mono); font-size:24px; font-weight:700; color:var(--text); }
+  .stat-mini .label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-top:4px; }
   
   .info { font-size:12px; color:var(--muted); line-height:1.7; margin-top:16px; }
   .info strong { color:var(--text); }
@@ -56,6 +69,27 @@
     opacity:0; transform:translateY(10px); transition:all .3s; z-index:200; }
   .toast.show { opacity:1; transform:translateY(0); }
   .toast.success { border-color:var(--green); }
+  .toast.error { border-color:var(--error); }
+  .toast.warn { border-color:var(--warn); }
+  
+  .divider { height:1px; background:var(--border); margin:20px 0; }
+  
+  .feature-list { display:grid; gap:10px; margin-top:16px; }
+  .feature-item { display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; }
+  .feature-item .icon { width:36px; height:36px; border-radius:10px; background:var(--accent-dim); color:var(--accent); display:grid; place-items:center; font-size:16px; flex-shrink:0; }
+  .feature-item .text { flex:1; }
+  .feature-item .text strong { display:block; font-size:13px; color:var(--text); margin-bottom:2px; }
+  .feature-item .text span { font-size:11px; color:var(--muted); }
+  
+  .test-result { margin-top:12px; padding:12px; border-radius:8px; font-size:12px; display:none; }
+  .test-result.success { background:rgba(72,187,120,0.12); border:1px solid var(--green); color:var(--green); display:block; }
+  .test-result.error { background:rgba(239,68,68,0.12); border:1px solid var(--error); color:var(--error); display:block; }
+  .test-result.loading { background:rgba(96,165,250,0.12); border:1px solid var(--info); color:var(--info); display:block; }
+  
+  @media (max-width:480px) {
+    .stats-row { grid-template-columns:1fr; }
+    .header h1 { font-size:28px; }
+  }
 </style>
 </head>
 <body>
@@ -64,7 +98,7 @@
   <header class="header">
     <div class="logo-icon">▶</div>
     <h1>W Addon TV</h1>
-    <div class="sub">Configuration</div>
+    <div class="sub">Configuration publique</div>
   </header>
 
   <div class="card">
@@ -74,23 +108,97 @@
   </div>
 
   <div class="card">
+    <div class="card-title">👤 Identifiant utilisateur</div>
+    <div class="card-desc">Ce pseudo sera visible dans les logs du serveur pour identifier vos sessions. Il est stocké localement dans votre navigateur.</div>
+    <div class="field">
+      <label for="user-pseudo">Votre pseudo</label>
+      <input type="text" id="user-pseudo" placeholder="ex: Jean_Dupont" maxlength="32" autocomplete="off">
+      <small>32 caractères max. Lettres, chiffres, tirets, underscores uniquement.</small>
+    </div>
+    <div class="field">
+      <label for="user-device">Nom de l'appareil (optionnel)</label>
+      <input type="text" id="user-device" placeholder="ex: Salon TV, Chambre, Mobile" maxlength="32" autocomplete="off">
+      <small>Utile si vous utilisez l'addon sur plusieurs appareils.</small>
+    </div>
+    <button class="btn-primary" id="save-identity-btn">💾 Enregistrer mon identité</button>
+    <div id="identity-status" class="test-result"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 Statistiques en direct</div>
+    <div class="stats-row" id="stats-row">
+      <div class="stat-mini"><div class="value" id="stat-channels">—</div><div class="label">Chaînes dispo</div></div>
+      <div class="stat-mini"><div class="value" id="stat-uptime">—</div><div class="label">Uptime</div></div>
+      <div class="stat-mini"><div class="value" id="stat-version">—</div><div class="label">Version</div></div>
+    </div>
+    <button class="btn-secondary" id="refresh-stats-btn">↻ Actualiser les stats</button>
+  </div>
+
+  <div class="card">
     <div class="card-title">📥 Installer dans Stremio</div>
     <div class="card-desc">Copiez l'URL du manifest ci-dessous et collez-la dans Stremio.</div>
     <div class="manifest-box" id="manifest-url">—</div>
     <button class="btn-primary" id="copy-btn">📋 Copier l'URL du manifest</button>
-    <a class="btn-secondary" href="/dashboard" style="margin-top:10px">← Ouvrir le Dashboard</a>
+    <div id="copy-status" class="test-result"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="card">
+    <div class="card-title">🧪 Tester un flux</div>
+    <div class="card-desc">Vérifiez qu'une chaîne fonctionne avant de l'ajouter à Stremio. Entrez un ID de chaîne (ex: 121 pour Canal+).</div>
+    <div class="field">
+      <label for="test-channel-id">ID de la chaîne</label>
+      <input type="text" id="test-channel-id" placeholder="121" autocomplete="off">
+      <small>IDs populaires : 121=Canal+, 201=beIN Sports 1, 401=TF1, 402=France 2, 406=M6, 420=L'Équipe</small>
+    </div>
+    <button class="btn-primary" id="test-stream-btn">▶ Tester le flux</button>
+    <div id="test-result" class="test-result"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✨ Fonctionnalités</div>
+    <div class="feature-list">
+      <div class="feature-item">
+        <div class="icon">📺</div>
+        <div class="text"><strong>Catalogue complet</strong><span>100+ chaînes françaises (TNT, Sport, Cinéma, Info, Jeunesse)</span></div>
+      </div>
+      <div class="feature-item">
+        <div class="icon">🔀</div>
+        <div class="text"><strong>Multi-sources</strong><span>dlstreams + Vavoo + flux personnalisés avec fallback automatique</span></div>
+      </div>
+      <div class="feature-item">
+        <div class="icon">📡</div>
+        <div class="text"><strong>Proxy HLS intégré</strong><span>Réécriture playlists + injection headers — fonctionne dans VLC/mpv/Stremio sans MediaFlow</span></div>
+      </div>
+      <div class="feature-item">
+        <div class="icon">📅</div>
+        <div class="text"><strong>EPG temps réel</strong><span>Guide des programmes (xmltvfr) avec "En ce moment" et "À suivre"</span></div>
+      </div>
+      <div class="feature-item">
+        <div class="icon">🎨</div>
+        <div class="text"><strong>Logos & Posters</strong><span>Logos officiels + posters générés automatiquement si logo manquant</span></div>
+      </div>
+      <div class="feature-item">
+        <div class="icon">🔧</div>
+        <div class="text"><strong>Personnalisable</strong><span>Chaînes custom, flux perso, mapping EPG, genres, noms/logos alternatifs</span></div>
+      </div>
+    </div>
   </div>
 
   <div class="info">
-    <strong>Comment faire :</strong><br>
+    <strong>Comment installer dans Stremio :</strong><br>
     1. Cliquez sur "Copier l'URL du manifest"<br>
     2. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>
     3. Collez l'URL et validez<br><br>
+    <strong>Lecture directe (VLC, mpv, ffmpeg) :</strong><br>
+    <code style="font-family:var(--font-mono);background:var(--input-bg);padding:2px 6px;border-radius:4px;">http://<IP>:8781/hls/121/index.m3u8</code> (auto-failover)<br>
+    <code style="font-family:var(--font-mono);background:var(--input-bg);padding:2px 6px;border-radius:4px;">http://<IP>:8781/hls/121/p0/index.m3u8</code> (player précis)<br><br>
     <em>L'addon n'affichera QUE des chaînes françaises.</em>
   </div>
 
   <div class="footer">
-    W Addon TV · <a href="/dashboard" style="color:var(--accent)">Dashboard</a> · <a href="/manifest.json?lang=fr" style="color:var(--accent)">Manifest FR</a>
+    W Addon TV · <a href="/manifest.json?lang=fr" style="color:var(--accent)">Manifest FR</a> · <a href="https://github.com" target="_blank" style="color:var(--accent)">GitHub</a>
   </div>
 </div>
 
@@ -99,25 +207,149 @@
 <script>
 const BASE = location.origin;
 const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
 
-function showToast(msg) {
+// --- Toast ---
+function showToast(msg, type = 'success') {
   const t = $("#toast");
   t.textContent = msg;
-  t.classList.add("show", "success");
-  setTimeout(() => t.classList.remove("show", "success"), 2000);
+  t.className = "toast show " + type;
+  setTimeout(() => t.classList.remove("show", "success", "error", "warn"), 2500);
 }
 
+// --- Identity (localStorage) ---
+const IDENTITY_KEY = 'waddontv_identity';
+function loadIdentity() {
+  try {
+    const data = JSON.parse(localStorage.getItem(IDENTITY_KEY) || '{}');
+    $("#user-pseudo").value = data.pseudo || '';
+    $("#user-device").value = data.device || '';
+    updateIdentityBadge(data);
+  } catch (e) {}
+}
+function saveIdentity() {
+  const pseudo = $("#user-pseudo").value.trim();
+  const device = $("#user-device").value.trim();
+  if (!pseudo) { showToast("Entrez un pseudo", "error"); return; }
+  if (!/^[a-zA-Z0-9_-]{1,32}$/.test(pseudo)) { showToast("Pseudo invalide (lettres, chiffres, _, - seulement)", "error"); return; }
+  const data = { pseudo, device, savedAt: Date.now() };
+  localStorage.setItem(IDENTITY_KEY, JSON.stringify(data));
+  updateIdentityBadge(data);
+  showToast("Identité enregistrée ✓");
+  // Send to server for logging correlation
+  fetch('/api/identity', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).catch(() => {});
+}
+function updateIdentityBadge(data) {
+  const el = $("#identity-status");
+  if (data.pseudo) {
+    el.textContent = `Connecté en tant que ${data.pseudo}${data.device ? ` (${data.device})` : ''}`;
+    el.className = "test-result success";
+  } else {
+    el.className = "test-result";
+    el.textContent = "";
+  }
+}
+
+// --- Manifest URL ---
 function updateManifest() {
   const url = `${BASE}/manifest.json?lang=fr`;
   $("#manifest-url").textContent = url;
 }
-
-$("#copy-btn").addEventListener("click", () => {
+$("#copy-btn").addEventListener("click", async () => {
   const url = $("#manifest-url").textContent;
-  navigator.clipboard.writeText(url).then(() => showToast("✓ URL copiée !"));
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast("✓ URL copiée dans le presse-papiers !");
+  } catch (e) {
+    showToast("Échec de la copie", "error");
+  }
 });
 
+// --- Stats ---
+async function loadStats() {
+  $("#refresh-stats-btn").disabled = true;
+  $("#refresh-stats-btn").textContent = "⏳ Chargement...";
+  try {
+    const res = await fetch('/api/public-stats');
+    if (!res.ok) throw new Error("Erreur serveur");
+    const data = await res.json();
+    $("#stat-channels").textContent = data.channels_total || "—";
+    $("#stat-uptime").textContent = formatUptime(data.uptime);
+    $("#stat-version").textContent = data.version || "—";
+  } catch (e) {
+    $("#stat-channels").textContent = "—";
+    $("#stat-uptime").textContent = "—";
+    $("#stat-version").textContent = "—";
+    showToast("Impossible de charger les stats", "warn");
+  } finally {
+    $("#refresh-stats-btn").disabled = false;
+    $("#refresh-stats-btn").textContent = "↻ Actualiser les stats";
+  }
+}
+function formatUptime(sec) {
+  if (!sec) return "—";
+  const d = Math.floor(sec/86400), h = Math.floor(sec%86400/3600), m = Math.floor(sec%3600/60);
+  return (d?d+"j ":"")+(h?h+"h ":"")+m+"m";
+}
+
+// --- Test Stream ---
+async function testStream() {
+  const cid = $("#test-channel-id").value.trim();
+  if (!cid) { showToast("Entrez un ID de chaîne", "error"); return; }
+  const resEl = $("#test-result");
+  resEl.className = "test-result loading";
+  resEl.textContent = "Test en cours...";
+  $("#test-stream-btn").disabled = true;
+  $("#test-stream-btn").textContent = "⏳ Test...";
+  try {
+    const res = await fetch(`/api/public-check?src=dlstreams&id=${encodeURIComponent(cid)}`);
+    const data = await res.json();
+    if (data.ok) {
+      resEl.className = "test-result success";
+      resEl.innerHTML = `✅ Flux OK (${data.ms}ms)<br><small>URL: <a href="${data.url}" target="_blank" style="color:var(--green);word-break:break-all;">${data.url}</a></small>`;
+      showToast(`Chaîne ${cid} fonctionnelle`);
+    } else {
+      resEl.className = "test-result error";
+      resEl.textContent = `❌ Échec: ${data.error || "inconnu"}`;
+      showToast(`Chaîne ${cid} indisponible`, "error");
+    }
+  } catch (e) {
+    resEl.className = "test-result error";
+    resEl.textContent = `❌ Erreur: ${e.message}`;
+    showToast("Erreur de test", "error");
+  } finally {
+    $("#test-stream-btn").disabled = false;
+    $("#test-stream-btn").textContent = "▶ Tester le flux";
+  }
+}
+
+// --- Init ---
+loadIdentity();
 updateManifest();
+loadStats();
+
+$("#save-identity-btn").addEventListener("click", saveIdentity);
+$("#refresh-stats-btn").addEventListener("click", loadStats);
+$("#test-stream-btn").addEventListener("click", testStream);
+
+// Enter key handlers
+$("#user-pseudo").addEventListener("keydown", e => { if(e.key==="Enter") saveIdentity(); });
+$("#user-device").addEventListener("keydown", e => { if(e.key==="Enter") saveIdentity(); });
+$("#test-channel-id").addEventListener("keydown", e => { if(e.key==="Enter") testStream(); });
+
+// Auto-send identity on page load if exists
+setTimeout(() => {
+  try {
+    const data = JSON.parse(localStorage.getItem(IDENTITY_KEY) || '{}');
+    if (data.pseudo) {
+      fetch('/api/identity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).catch(() => {});
+    }
+  } catch (e) {}
+}, 1000);
 </script>
 </body>
 </html>

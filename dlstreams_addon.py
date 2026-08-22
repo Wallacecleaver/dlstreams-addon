@@ -950,6 +950,17 @@ def _stats() -> dict:
         "recent_plays": _recent_plays_list(),
     }
 
+def _public_stats() -> dict:
+    all_ch = channels()
+    return {
+        "version": _VERSION,
+        "uptime": int(time.time() - _START_TIME),
+        "channels_total": len(all_ch),
+        "dlstreams_count": len(_ch_cache.get("list") or []),
+        "vavoo_count": len(_vavoo_cache.get("list") or []),
+        "manual_count": len(_manual_channels),
+    }
+
 def _daily_totals() -> list[dict]:
     days: dict[str, int] = {}
     now = time.time()
@@ -1398,6 +1409,19 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(resp)
             return
+        if path == "/api/identity":
+            try:
+                data = json.loads(body) if body else {}
+            except Exception as e:
+                data = {}
+            pseudo = str(data.get("pseudo", "")).strip()[:32]
+            device = str(data.get("device", "")).strip()[:32]
+            ip = self._client_ip()
+            if pseudo:
+                _log_activity("Identité déclarée", f"{pseudo} ({device or 'appareil inconnu'}) — IP: {ip}")
+            resp = json.dumps({"success": True}).encode()
+            self._send(200, resp, "application/json")
+            return
         if path == "/api/remove-channel":
             if not self._require_auth():
                 return
@@ -1580,6 +1604,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(resp)
                 return
+            if path == "/api/public-stats":
+                return self._send(200, json.dumps(_public_stats()).encode(), "application/json", True)
             if path == "/api/stats":
                 if not self._require_auth():
                     return
@@ -1663,6 +1689,30 @@ class Handler(BaseHTTPRequestHandler):
                 _log_activity("Cache rafraîchi", f"{n_dl} dlstreams / {n_vv} vavoo en {dur_ms}ms")
                 return self._send(200, json.dumps({"success": True, "dlstreams": n_dl, "vavoo": n_vv,
                     "ms": dur_ms}).encode(), "application/json")
+            if path == "/api/public-check":
+                src = qs.get("src", ["dlstreams"])[0]
+                cid = qs.get("id", [None])[0]
+                if not cid:
+                    return self._send(400, json.dumps({"ok": False, "error": "id manquant"}).encode(), "application/json")
+                t0 = time.time()
+                try:
+                    if src == "vavoo":
+                        real = vavoo_resolve(_unb64u(cid))
+                        if not real:
+                            raise ValueError("flux introuvable")
+                        _proxy_get(real, {"User-Agent": _VAVOO_UA}, timeout=10)
+                        url = f"{self._self_base()}/vhls?v={_b64u(cid)}"
+                    else:
+                        m3u8, host = resolve(cid)
+                        _proxy_get(m3u8, {"Referer": host + "/", "Origin": host}, timeout=10)
+                        url = f"{self._self_base()}/hls/{cid}/index.m3u8"
+                    ms = int((time.time() - t0) * 1000)
+                    _log_activity("Test flux public", f"#{cid} OK en {ms}ms")
+                    return self._send(200, json.dumps({"ok": True, "ms": ms, "url": url}).encode(), "application/json")
+                except Exception as e:
+                    ms = int((time.time() - t0) * 1000)
+                    _log_activity("Test flux public", f"#{cid} échec ({type(e).__name__})")
+                    return self._send(200, json.dumps({"ok": False, "ms": ms, "error": str(e)}).encode(), "application/json")
             if path == "/api/check":
                 if not self._require_auth():
                     return
