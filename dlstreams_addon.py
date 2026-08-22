@@ -890,6 +890,13 @@ def _unb64u(s: str) -> str:
     padding = 4 - (len(s) % 4) if len(s) % 4 else 0
     return base64.urlsafe_b64decode(s + "=" * padding).decode()
 
+def _decode_config(config_b64: str) -> dict:
+    try:
+        json_str = _unb64u(config_b64)
+        return json.loads(json_str)
+    except Exception:
+        return {}
+
 _PROXY_SECRET = secrets.token_bytes(32)
 
 def _proxy_sign(u_b64: str, h_b64: str) -> str:
@@ -1333,6 +1340,14 @@ class Handler(BaseHTTPRequestHandler):
             if k == name:
                 return v
         return ""
+    def _user_config(self) -> dict:
+        cfg_b64 = self._cookie("waddontv_cfg")
+        if not cfg_b64:
+            return {}
+        try:
+            return json.loads(_unb64u(cfg_b64))
+        except Exception:
+            return {}
     def _authed(self) -> bool:
         tok = self._cookie("dl_session")
         if not tok:
@@ -1713,6 +1728,13 @@ class Handler(BaseHTTPRequestHandler):
                     ms = int((time.time() - t0) * 1000)
                     _log_activity("Test flux public", f"#{cid} échec ({type(e).__name__})")
                     return self._send(200, json.dumps({"ok": False, "ms": ms, "error": str(e)}).encode(), "application/json")
+            if path == "/api/health":
+                _health_refresh(force=True)
+                return self._send(200, json.dumps({
+                    "dlstreams": {"ok": _health_snapshot.get("dlstreams", {}).get("ok", False)},
+                    "vavoo": {"ok": _health_snapshot.get("vavoo", {}).get("ok", False)},
+                    "epg": {"ok": _health_snapshot.get("epg", {}).get("ok", False)},
+                }).encode(), "application/json")
             if path == "/api/check":
                 if not self._require_auth():
                     return
@@ -1743,9 +1765,26 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(_system_info()).encode(), "application/json")
+            if path.startswith("/") and path.endswith("/manifest.json"):
+                config_b64 = path[1:-len("/manifest.json")]
+                user_config = _decode_config(config_b64) if config_b64 else {}
+                lang_filter = user_config.get("lang", "fr")
+                body = json.dumps(self._manifest(lang_filter=lang_filter, user_config=user_config)).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "public, max-age=60")
+                if user_config:
+                    cookie_val = _b64u(json.dumps(user_config))
+                    self.send_header("Set-Cookie", f"waddontv_cfg={cookie_val}; HttpOnly; Path=/; Max-Age=31536000; SameSite=Lax")
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if path in ("/", "/manifest.json"):
                 return self._send(200, json.dumps(self._manifest(lang_filter="fr")).encode(), "application/json", True)
             if path.startswith("/catalog/tv/"):
+                user_config = self._user_config()
                 extra = path[len("/catalog/tv/"):].removesuffix(".json")
                 catid = extra.split("/", 1)[0]
                 params = {}
@@ -1758,23 +1797,27 @@ class Handler(BaseHTTPRequestHandler):
                             if "=" in kv:
                                 k, v = kv.split("=", 1)
                                 params[k] = urllib.parse.unquote_plus(v)
-                lang_filter = "fr"
+                lang_filter = user_config.get("lang", "fr")
                 if catid == "custom":
                     st = _settings.get("stremio", {})
                     custom_channels = st.get("custom_channels", {})
                     metas = []
                     for cid, cc in custom_channels.items():
-                        c = {"id": cid, "name": cc.get("name", "Custom"), "logo": cc.get("logo", ""), "lang": "fr"}
-                        metas.append(self._meta(c, "custom"))
+                        c = {"id": cid, "name": cc.get("name", "Custom"), "logo": cc.get("logo", ""), "lang": lang_filter}
+                        metas.append(self._meta(c, "custom", user_config))
                     skip = int(params.get("skip") or 0)
                     metas = metas[skip:skip + 100]
                     return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
                 if catid == "dlstreams":
-                    chans = channels(lang_filter="fr")
+                    if not user_config.get("dlstreams", True):
+                        return self._send(200, json.dumps({"metas": []}).encode(), "application/json", True)
+                    chans = channels(lang_filter=lang_filter)
                 elif catid == "vavoo":
-                    chans = [c for c in vavoo_channels() if c.get("lang") == "fr"]
+                    if not user_config.get("vavoo", True):
+                        return self._send(200, json.dumps({"metas": []}).encode(), "application/json", True)
+                    chans = [c for c in vavoo_channels() if c.get("lang") == lang_filter]
                 else:
-                    chans = channels(lang_filter="fr")
+                    chans = channels(lang_filter=lang_filter)
                 q = params.get("search", "").lower().strip()
                 if q:
                     words = q.replace("+", " ").split()
@@ -1783,7 +1826,7 @@ class Handler(BaseHTTPRequestHandler):
                 if g:
                     chans = [c for c in chans if g in _genres_for(c["name"])]
                 skip = int(params.get("skip") or 0)
-                metas = [self._meta(c, catid) for c in chans[skip:skip + 100]]
+                metas = [self._meta(c, catid, user_config) for c in chans[skip:skip + 100]]
                 return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
             if path.startswith("/meta/tv/"):
                 seg = urllib.parse.unquote(path.rsplit("/", 1)[1].removesuffix(".json"))
@@ -1796,10 +1839,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps({"meta": self._meta(c, source)}).encode(),
                     "application/json", True)
             if path.startswith("/stream/tv/"):
+                user_config = self._user_config()
                 seg = urllib.parse.unquote(path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
                 if source == "vavoo":
+                    if not user_config.get("vavoo", True):
+                        return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
                     streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 st = _settings.get("stremio", {})
@@ -1819,13 +1865,18 @@ class Handler(BaseHTTPRequestHandler):
                     label = (sitem.get("label") if isinstance(sitem, dict) else "") or f"Flux perso {idx+1}"
                     streams.append({"name": "Personnalisé", "title": f"⚙️ {label}",
                         "url": f"{b}/hls/{cid}/custom_{idx}/index.m3u8"})
-                ok = working_players(cid)
-                if ok:
-                    streams.append({"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
-                        "url": f"{b}/hls/{cid}/index.m3u8"})
-                    for idx, (i, label) in enumerate(ok):
-                        streams.append({"name": "dlstreams", "title": f"1080p  Source {idx+1}",
-                            "url": f"{b}/hls/{cid}/p{i}/index.m3u8"})
+                if user_config.get("dlstreams", True):
+                    ok = working_players(cid)
+                    if ok:
+                        quality_pref = user_config.get("quality", "auto")
+                        streams.append({"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
+                            "url": f"{b}/hls/{cid}/index.m3u8"})
+                        for idx, (i, label) in enumerate(ok):
+                            title = f"Source {idx+1}"
+                            if quality_pref != "auto":
+                                title = f"{quality_pref} {title}"
+                            streams.append({"name": "dlstreams", "title": title,
+                                "url": f"{b}/hls/{cid}/p{i}/index.m3u8"})
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
@@ -1918,8 +1969,9 @@ class Handler(BaseHTTPRequestHandler):
                 _request_log.clear()
             _log_activity("Logs effacés")
             return self._send(200, json.dumps({"success": True}).encode(), "application/json")
-    def _manifest(self, lang_filter: str | None = None) -> dict:
-        lang_filter = "fr"
+    def _manifest(self, lang_filter: str | None = None, user_config: dict | None = None) -> dict:
+        uc = user_config or {}
+        lang_filter = uc.get("lang", lang_filter or "fr")
         _extra = [{"name": "search", "isRequired": False},
             {"name": "skip", "isRequired": False},
             {"name": "genre", "isRequired": False,
@@ -1935,16 +1987,22 @@ class Handler(BaseHTTPRequestHandler):
         if not st.get("manifest_desc"):
             desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
         catalogs = []
-        if st.get("include_dlstreams", True):
+        if uc.get("dlstreams", True) and st.get("include_dlstreams", True):
             catalogs.append({"type": "tv", "id": "dlstreams", "name": "W Addon TV",
                 "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
-        if st.get("include_vavoo", True):
+        if uc.get("vavoo", True) and st.get("include_vavoo", True):
             catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
                 "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
         custom_channels = st.get("custom_channels", {})
         if custom_channels:
             catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
                 "extra": _extra, "extraSupported": ["search", "skip"]})
+        behavior = {
+            "configurable": True,
+            "configurationRequired": False,
+            "adultContent": uc.get("adult", False),
+            "p2p": False
+        }
         return {
             "id": "st.waddontv.proxy.fr",
             "version": _VERSION,
@@ -1954,14 +2012,10 @@ class Handler(BaseHTTPRequestHandler):
             "types": ["tv"],
             "idPrefixes": ["dlstreams:", "vavoo:", "custom:"],
             "catalogs": catalogs,
-            "behaviorHints": {
-                "configurable": True,
-                "configurationRequired": False,
-                "adultContent": False,
-                "p2p": False
-            }
+            "behaviorHints": behavior
         }
-    def _meta(self, c: dict, source: str) -> dict:
+    def _meta(self, c: dict, source: str, user_config: dict | None = None) -> dict:
+        uc = user_config or {}
         raw_id = c["id"]
         if source == "vavoo":
             cid = _b64u(raw_id)
@@ -1971,15 +2025,16 @@ class Handler(BaseHTTPRequestHandler):
             cid = raw_id
         base = self._self_base()
         st = _settings.get("stremio", {})
+        show_logos = uc.get("logos", _settings.get("logos", True))
         if source == "custom":
             cc = st.get("custom_channels", {}).get(cid, {})
             display_name = cc.get("name", c["name"])
             custom_logo = cc.get("logo", "")
-            if _settings.get("logos", True) and custom_logo:
+            if show_logos and custom_logo:
                 poster = custom_logo
             else:
                 poster = f"{base}/poster/{urllib.parse.quote(c['name'], safe='')}.png"
-            lang = c.get("lang", "fr")
+            lang = c.get("lang", uc.get("lang", "fr"))
             genres = _genres_for(c["name"])
             desc = f"Chaîne personnalisée {display_name} via proxy intégré."
             release = "En direct"
@@ -1992,13 +2047,13 @@ class Handler(BaseHTTPRequestHandler):
         custom_name = st.get("channel_names", {}).get(str(raw_id))
         display_name = custom_name if custom_name else c["name"]
         custom_logo = st.get("channel_logos", {}).get(str(raw_id))
-        if _settings.get("logos", True) and custom_logo:
+        if show_logos and custom_logo:
             poster = custom_logo
-        elif _settings.get("logos", True):
+        elif show_logos:
             poster = f"{base}/logo/{source}/{urllib.parse.quote(cid, safe='')}.png"
         else:
             poster = f"{base}/poster/{urllib.parse.quote(c['name'], safe='')}.png"
-        lang = c.get("lang", "fr")
+        lang = c.get("lang", uc.get("lang", "fr"))
         lang_label = {"fr": "française", "en": "anglaise", "es": "espagnole",
             "de": "allemande", "it": "italienne", "ar": "arabe",
             "pt": "portugaise"}.get(lang, lang)
@@ -2010,18 +2065,19 @@ class Handler(BaseHTTPRequestHandler):
             st = _settings.get("stremio", {})
             custom_epg_id = st.get("channel_epg", {}).get(str(raw_id))
             epg_lookup_id = custom_epg_id if custom_epg_id else raw_id
-            cur, nxt = _epg_slot(epg_lookup_id)
-            if cur:
-                t0 = time.strftime("%H:%M", time.localtime(cur["start"]))
-                t1 = time.strftime("%H:%M", time.localtime(cur["stop"]))
-                release = f"En direct · {t0}-{t1}"
-                desc = cur["title"] or "Programme en cours"
-                if cur.get("desc"):
-                    desc += f"\n{cur['desc']}"
-                if nxt:
-                    tn = time.strftime("%H:%M", time.localtime(nxt["start"]))
-                    desc += f"\nÀ suivre à {tn} : {nxt['title']}"
-                desc += f"\nChaîne {display_name} diffusée en direct via {source}."
+            if uc.get("epg", _settings.get("epg", True)):
+                cur, nxt = _epg_slot(epg_lookup_id)
+                if cur:
+                    t0 = time.strftime("%H:%M", time.localtime(cur["start"]))
+                    t1 = time.strftime("%H:%M", time.localtime(cur["stop"]))
+                    release = f"En direct · {t0}-{t1}"
+                    desc = cur["title"] or "Programme en cours"
+                    if cur.get("desc"):
+                        desc += f"\n{cur['desc']}"
+                    if nxt:
+                        tn = time.strftime("%H:%M", time.localtime(nxt["start"]))
+                        desc += f"\nÀ suivre à {tn} : {nxt['title']}"
+                    desc += f"\nChaîne {display_name} diffusée en direct via {source}."
         return {"id": f"{source}:{cid}", "type": "tv", "name": display_name,
             "poster": poster, "logo": poster, "posterShape": "landscape",
             "background": poster,

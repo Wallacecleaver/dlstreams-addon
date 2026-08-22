@@ -1,355 +1,368 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>W Addon TV — Configuration</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg:#0a0a0b; --surface:#111113; --surface2:#18181b; --border:rgba(255,255,255,0.06);
-    --accent:#e53e3e; --accent-dim:rgba(229,62,62,0.08); --green:#48bb78;
-    --text:#f0f0f0; --text2:#888; --muted:#666; --input-bg:#0a0a0b; --card-hover:rgba(255,255,255,0.02);
-    --warn:#f59e0b; --error:#ef4444; --info:#60a5fa;
-    --font-display:'Bebas Neue',sans-serif; --font-mono:'Rajdhani',monospace; --font-body:'DM Sans',sans-serif;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; }
-  
-  .container { max-width:560px; margin:0 auto; padding:40px 20px; }
-  
-  .header { text-align:center; margin-bottom:32px; }
-  .header .logo-icon { width:72px; height:72px; margin:0 auto 16px; border-radius:18px;
-    background:linear-gradient(135deg,var(--accent),#ff7a59); display:grid; place-items:center;
-    font-size:32px; font-weight:800; color:#fff; box-shadow:0 12px 40px rgba(229,62,62,.4); }
-  .header h1 { font-family:var(--font-display); font-size:36px; font-weight:400; letter-spacing:1px; color:var(--text); margin-bottom:4px; }
-  .header .sub { font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
-  
-  .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; margin-bottom:20px; }
-  .card-title { font-size:16px; font-weight:700; color:var(--text); margin-bottom:8px; }
-  .card-desc { font-size:13px; color:var(--text2); margin-bottom:20px; line-height:1.5; }
-  
-  .badge-fr { display:inline-flex; align-items:center; gap:8px; padding:10px 16px;
-    background:rgba(16,185,129,.1); border:1px solid #10b981; border-radius:8px;
-    color:#10b981; font-size:13px; font-weight:600; }
-  .badge-fr .flag { font-size:20px; }
-  
-  .manifest-box { background:var(--input-bg); border:1px solid var(--border); border-radius:10px; padding:14px 16px;
-    font-family:var(--font-mono); font-size:12px; color:var(--text); word-break:break-all; margin-bottom:16px; }
-  
-  .field { margin-bottom:16px; }
-  .field label { display:block; font-size:12px; color:var(--text2); margin-bottom:6px; font-weight:600; }
-  .field input, .field select { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:11px 14px;
-    color:var(--text); font-family:var(--font-mono); font-size:14px; transition:border-color .2s; }
-  .field input:focus, .field select:focus { outline:none; border-color:var(--accent); }
-  .field small { display:block; margin-top:6px; font-size:11px; color:var(--muted); }
-  
-  .btn-primary { width:100%; background:var(--accent); color:#fff; border:none; border-radius:10px; padding:14px;
-    font-family:var(--font-body); font-size:14px; font-weight:700; cursor:pointer; transition:background .2s; }
-  .btn-primary:hover { background:#c53030; }
-  .btn-primary:active { transform:scale(0.98); }
-  .btn-primary:disabled { opacity:.6; cursor:not-allowed; }
-  
-  .btn-secondary { width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:12px;
-    font-family:var(--font-body); font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
-  .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
-  
-  .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
-  .stat-mini { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:16px; text-align:center; }
-  .stat-mini .value { font-family:var(--font-mono); font-size:24px; font-weight:700; color:var(--text); }
-  .stat-mini .label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-top:4px; }
-  
-  .info { font-size:12px; color:var(--muted); line-height:1.7; margin-top:16px; }
-  .info strong { color:var(--text); }
-  
-  .footer { text-align:center; margin-top:32px; color:var(--muted); font-size:12px; }
-  
-  .toast { position:fixed; bottom:24px; right:24px; background:var(--surface); border:1px solid var(--border); border-radius:10px;
-    padding:12px 18px; font-size:13px; font-weight:600; color:var(--text); box-shadow:0 8px 32px rgba(0,0,0,0.3);
-    opacity:0; transform:translateY(10px); transition:all .3s; z-index:200; }
-  .toast.show { opacity:1; transform:translateY(0); }
-  .toast.success { border-color:var(--green); }
-  .toast.error { border-color:var(--error); }
-  .toast.warn { border-color:var(--warn); }
-  
-  .divider { height:1px; background:var(--border); margin:20px 0; }
-  
-  .feature-list { display:grid; gap:10px; margin-top:16px; }
-  .feature-item { display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; }
-  .feature-item .icon { width:36px; height:36px; border-radius:10px; background:var(--accent-dim); color:var(--accent); display:grid; place-items:center; font-size:16px; flex-shrink:0; }
-  .feature-item .text { flex:1; }
-  .feature-item .text strong { display:block; font-size:13px; color:var(--text); margin-bottom:2px; }
-  .feature-item .text span { font-size:11px; color:var(--muted); }
-  
-  .test-result { margin-top:12px; padding:12px; border-radius:8px; font-size:12px; display:none; }
-  .test-result.success { background:rgba(72,187,120,0.12); border:1px solid var(--green); color:var(--green); display:block; }
-  .test-result.error { background:rgba(239,68,68,0.12); border:1px solid var(--error); color:var(--error); display:block; }
-  .test-result.loading { background:rgba(96,165,250,0.12); border:1px solid var(--info); color:var(--info); display:block; }
-  
-  @media (max-width:480px) {
-    .stats-row { grid-template-columns:1fr; }
-    .header h1 { font-size:28px; }
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>W Addon TV — Installation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --red: #e53e3e; --red-dark: #c53030; --bg: #0a0a0b; --bg2: #111113; --bg3: #18181b;
+      --border: rgba(255,255,255,0.06); --text: #f0f0f0; --muted: #666; --muted2: #444;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; overflow-x: hidden; }
+    body::before {
+      content: ''; position: fixed; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 600px; background: radial-gradient(ellipse, rgba(229,62,62,0.07) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    nav {
+      position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; height: 60px; background: rgba(10,10,11,0.85); backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-name { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 600; letter-spacing: 2px; color: #fff; text-transform: uppercase; }
+    .nav-link {
+      display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 8px;
+      border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px;
+      font-family: 'DM Sans', sans-serif; text-decoration: none; cursor: pointer; transition: all 0.2s;
+    }
+    .nav-link:hover { color: var(--text); border-color: var(--muted2); background: var(--bg3); }
+    .hero { position: relative; z-index: 1; text-align: center; padding: 80px 40px 50px; }
+    .status-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 28px; }
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 100px; font-size: 12px; font-weight: 500; color: var(--muted);
+      letter-spacing: 0.5px; cursor: default;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #666; flex-shrink: 0; animation: pulse 2s infinite; }
+    .status-dot.up { background: #48bb78; animation: none; }
+    .status-dot.down { background: var(--red); animation: none; }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
+    .hero-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(52px, 8vw, 96px); line-height: 0.9; letter-spacing: 4px; color: #fff; margin-bottom: 8px; }
+    .hero-title span { color: var(--red); display: block; }
+    .hero-sub { font-size: 15px; color: var(--muted); max-width: 480px; margin: 20px auto 0; line-height: 1.6; font-weight: 300; }
+    main { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; padding: 0 24px 140px; }
+    .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; margin-top: 40px; }
+    .section-line { flex: 1; height: 1px; background: var(--border); }
+    .section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; white-space: nowrap; }
+    .config-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-top: 12px; }
+    .config-field { margin-bottom: 16px; }
+    .config-field:last-child { margin-bottom: 0; }
+    .config-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .config-field .hint { font-size: 11px; color: var(--muted); font-weight: 300; margin-top: 5px; line-height: 1.5; }
+    .config-field .hint a { color: var(--red); text-decoration: none; }
+    .config-field .hint a:hover { text-decoration: underline; }
+    .config-field input, .config-field select {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px;
+      color: var(--text); font-family: 'Rajdhani', monospace; font-size: 14px; transition: border-color .2s;
+    }
+    .config-field input:focus, .config-field select:focus { outline: none; border-color: var(--red); }
+    .checkbox-row { display: flex !important; align-items: center; gap: 10px; cursor: pointer; margin-bottom: 0 !important; }
+    .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--red); cursor: pointer; }
+    .toggle-card {
+      display: flex !important; align-items: center; gap: 16px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+      margin-bottom: 0 !important; cursor: pointer; transition: border-color .2s, background .2s;
+    }
+    .toggle-card:hover { border-color: var(--muted2); }
+    .toggle-card:has(input:checked) { border-color: rgba(229,62,62,0.5); background: rgba(229,62,62,0.06); }
+    .toggle-card input[type="checkbox"] {
+      width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--red); cursor: pointer;
+    }
+    .toggle-card .toggle-text { display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+    .toggle-card .toggle-text .toggle-title { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; }
+    .toggle-card .toggle-text .toggle-desc { font-size: 11px; color: var(--muted); font-weight: 300; line-height: 1.5; }
+    .config-status { font-size: 12px; padding: 8px 12px; border-radius: 8px; margin-top: 14px; display: none; }
+    .config-status.ok { display: block; background: rgba(72,187,120,0.08); border: 1px solid rgba(72,187,120,0.25); color: #68d391; }
+    .tmdb-key-row { display: flex; gap: 8px; }
+    .tmdb-key-row input { flex: 1; min-width: 0; }
+    .btn-test {
+      flex-shrink: 0; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg3); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px;
+      font-weight: 500; cursor: pointer; transition: all .2s; white-space: nowrap;
+    }
+    .btn-test:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
+    .btn-test:disabled { opacity: .5; cursor: wait; }
+    .test-result { display: none; align-items: center; gap: 6px; font-size: 12px; margin-top: 8px; }
+    .test-result.show { display: flex; }
+    .test-result.ok { color: #68d391; }
+    .test-result.error { color: #fc8181; }
+
+    .install-bar {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 200; padding: 18px 32px;
+      background: rgba(10,10,11,0.97); backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(229,62,62,0.25); box-shadow: 0 -4px 30px rgba(229,62,62,0.06);
+      display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+    }
+    .btn { display: flex; align-items: center; gap: 7px; padding: 11px 22px; border-radius: 9px; font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-red { background: var(--red); color: #fff; animation: btnPulse 2.5s ease-in-out infinite; }
+    .btn-red:hover { background: var(--red-dark); transform: translateY(-1px); box-shadow: 0 4px 15px rgba(229,62,62,0.4); }
+    @keyframes btnPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(229,62,62,0.35); } 50% { box-shadow: 0 0 0 8px rgba(229,62,62,0); } }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { background: var(--bg3); transform: translateY(-1px); }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .btn-ghost:hover { color: var(--text); background: var(--bg3); }
+    .toast {
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(10px);
+      background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 10px 20px;
+      border-radius: 10px; font-size: 13px; opacity: 0; transition: all 0.25s; pointer-events: none; z-index: 999; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    @media (max-width: 640px) {
+      .hero { padding: 60px 20px 30px; }
+      .hero-title { font-size: clamp(48px, 14vw, 80px); }
+      main { padding: 0 12px 160px; }
+      .install-bar { padding: 14px 16px; }
+      .btn { flex: 1; justify-content: center; }
+      nav { padding: 0 16px; }
+    }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--muted2); border-radius: 4px; }
+  </style>
 </head>
 <body>
+  <nav>
+    <div class="nav-brand"><span class="nav-name">W Addon TV</span></div>
+    <a href="/dashboard" class="nav-link" target="_blank">Dashboard</a>
+  </nav>
 
-<div class="container">
-  <header class="header">
-    <div class="logo-icon">▶</div>
-    <h1>W Addon TV</h1>
-    <div class="sub">Configuration publique</div>
-  </header>
-
-  <div class="card">
-    <div class="card-title">🇫🇷 Addon 100% Français</div>
-    <div class="card-desc">Cet addon ne diffuse que des chaînes françaises (TF1, France 2, Canal+, beIN Sports, RMC Sport, L'Équipe, etc.). Toutes les autres langues sont désactivées.</div>
-    <div class="badge-fr"><span class="flag">🇫🇷</span>Français uniquement</div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">👤 Identifiant utilisateur</div>
-    <div class="card-desc">Ce pseudo sera visible dans les logs du serveur pour identifier vos sessions. Il est stocké localement dans votre navigateur.</div>
-    <div class="field">
-      <label for="user-pseudo">Votre pseudo</label>
-      <input type="text" id="user-pseudo" placeholder="ex: Jean_Dupont" maxlength="32" autocomplete="off">
-      <small>32 caractères max. Lettres, chiffres, tirets, underscores uniquement.</small>
+  <div class="hero">
+    <div class="status-row" id="status-row">
+      <div class="status-badge" data-service="dlstreams"><span class="status-dot"></span>dlstreams</div>
+      <div class="status-badge" data-service="vavoo"><span class="status-dot"></span>Vavoo</div>
+      <div class="status-badge" data-service="epg"><span class="status-dot"></span>EPG</div>
     </div>
-    <div class="field">
-      <label for="user-device">Nom de l'appareil (optionnel)</label>
-      <input type="text" id="user-device" placeholder="ex: Salon TV, Chambre, Mobile" maxlength="32" autocomplete="off">
-      <small>Utile si vous utilisez l'addon sur plusieurs appareils.</small>
+    <h1 class="hero-title">W Addon TV<span>Français</span></h1>
+    <p class="hero-sub">Chaînes TV en direct (TNT, Sport, Cinéma, Info) via dlstreams + Vavoo. Proxy HLS intégré, zero dépendance, prêt pour Stremio.</p>
+  </div>
+
+  <main>
+    <div class="section-header"><div class="section-line"></div><div class="section-label">Ta configuration</div><div class="section-line"></div></div>
+    <div class="config-card">
+      <div class="config-field">
+        <label>Ton pseudo</label>
+        <input type="text" id="cfg-pseudo" maxlength="32" placeholder="ex: Jean_Dupont">
+        <div class="hint">Ce pseudo sera visible dans les logs du serveur pour identifier tes sessions. Stocké localement dans ton navigateur.</div>
+      </div>
+      <div class="config-field">
+        <label>Appareil (optionnel)</label>
+        <input type="text" id="cfg-device" maxlength="32" placeholder="ex: Salon TV, Chambre, Mobile">
+        <div class="hint">Utile si tu utilises l'addon sur plusieurs appareils.</div>
+      </div>
+      <div class="config-status" id="cfg-status">✅ Configuration prête, génère ton lien ci-dessous</div>
     </div>
-    <button class="btn-primary" id="save-identity-btn">💾 Enregistrer mon identité</button>
-    <div id="identity-status" class="test-result"></div>
-  </div>
 
-  <div class="card">
-    <div class="card-title">📊 Statistiques en direct</div>
-    <div class="stats-row" id="stats-row">
-      <div class="stat-mini"><div class="value" id="stat-channels">—</div><div class="label">Chaînes dispo</div></div>
-      <div class="stat-mini"><div class="value" id="stat-uptime">—</div><div class="label">Uptime</div></div>
-      <div class="stat-mini"><div class="value" id="stat-version">—</div><div class="label">Version</div></div>
-    </div>
-    <button class="btn-secondary" id="refresh-stats-btn">↻ Actualiser les stats</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title">📥 Installer dans Stremio</div>
-    <div class="card-desc">Copiez l'URL du manifest ci-dessous et collez-la dans Stremio.</div>
-    <div class="manifest-box" id="manifest-url">—</div>
-    <button class="btn-primary" id="copy-btn">📋 Copier l'URL du manifest</button>
-    <div id="copy-status" class="test-result"></div>
-  </div>
-
-  <div class="divider"></div>
-
-  <div class="card">
-    <div class="card-title">🧪 Tester un flux</div>
-    <div class="card-desc">Vérifiez qu'une chaîne fonctionne avant de l'ajouter à Stremio. Entrez un ID de chaîne (ex: 121 pour Canal+).</div>
-    <div class="field">
-      <label for="test-channel-id">ID de la chaîne</label>
-      <input type="text" id="test-channel-id" placeholder="121" autocomplete="off">
-      <small>IDs populaires : 121=Canal+, 201=beIN Sports 1, 401=TF1, 402=France 2, 406=M6, 420=L'Équipe</small>
-    </div>
-    <button class="btn-primary" id="test-stream-btn">▶ Tester le flux</button>
-    <div id="test-result" class="test-result"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">✨ Fonctionnalités</div>
-    <div class="feature-list">
-      <div class="feature-item">
-        <div class="icon">📺</div>
-        <div class="text"><strong>Catalogue complet</strong><span>100+ chaînes françaises (TNT, Sport, Cinéma, Info, Jeunesse)</span></div>
+    <div class="section-header"><div class="section-line"></div><div class="section-label">Affichage & Lecture</div><div class="section-line"></div></div>
+    <div class="config-card">
+      <div class="config-field">
+        <label class="toggle-card" for="cfg-logos">
+          <input type="checkbox" id="cfg-logos" checked>
+          <span class="toggle-text">
+            <span class="toggle-title">Afficher les logos des chaînes</span>
+            <span class="toggle-desc">Récupère les logos officiels (epg.best) pour chaque chaîne.</span>
+          </span>
+        </label>
       </div>
-      <div class="feature-item">
-        <div class="icon">🔀</div>
-        <div class="text"><strong>Multi-sources</strong><span>dlstreams + Vavoo + flux personnalisés avec fallback automatique</span></div>
+      <div class="config-field">
+        <label class="toggle-card" for="cfg-epg">
+          <input type="checkbox" id="cfg-epg" checked>
+          <span class="toggle-text">
+            <span class="toggle-title">Activer l'EPG (guide des programmes)</span>
+            <span class="toggle-desc">Affiche « En ce moment » et « À suivre » via xmltvfr.fr.</span>
+          </span>
+        </label>
       </div>
-      <div class="feature-item">
-        <div class="icon">📡</div>
-        <div class="text"><strong>Proxy HLS intégré</strong><span>Réécriture playlists + injection headers — fonctionne dans VLC/mpv/Stremio sans MediaFlow</span></div>
+      <div class="config-field">
+        <label for="cfg-lang">Langue par défaut</label>
+        <select id="cfg-lang">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="de">Deutsch</option>
+          <option value="it">Italiano</option>
+        </select>
+        <div class="hint">Langue utilisée pour le catalogue et les métadonnées.</div>
       </div>
-      <div class="feature-item">
-        <div class="icon">📅</div>
-        <div class="text"><strong>EPG temps réel</strong><span>Guide des programmes (xmltvfr) avec "En ce moment" et "À suivre"</span></div>
-      </div>
-      <div class="feature-item">
-        <div class="icon">🎨</div>
-        <div class="text"><strong>Logos & Posters</strong><span>Logos officiels + posters générés automatiquement si logo manquant</span></div>
-      </div>
-      <div class="feature-item">
-        <div class="icon">🔧</div>
-        <div class="text"><strong>Personnalisable</strong><span>Chaînes custom, flux perso, mapping EPG, genres, noms/logos alternatifs</span></div>
+      <div class="config-field">
+        <label for="cfg-quality">Qualité préférée</label>
+        <select id="cfg-quality">
+          <option value="auto">Auto (meilleur dispo)</option>
+          <option value="1080p">1080p max</option>
+          <option value="720p">720p max</option>
+          <option value="480p">480p max</option>
+        </select>
+        <div class="hint">Sélectionne le player par défaut. « Auto » prend le premier qui fonctionne.</div>
       </div>
     </div>
+
+    <div class="section-header"><div class="section-line"></div><div class="section-label">Avancé</div><div class="section-line"></div></div>
+    <div class="config-card">
+      <div class="config-field">
+        <label class="toggle-card" for="cfg-vavoo">
+          <input type="checkbox" id="cfg-vavoo" checked>
+          <span class="toggle-text">
+            <span class="toggle-title">Inclure le catalogue Vavoo</span>
+            <span class="toggle-desc">Ajoute les chaînes Vavoo en plus de dlstreams (plus de choix, mais moins stables).</span>
+          </span>
+        </label>
+      </div>
+      <div class="config-field">
+        <label class="toggle-card" for="cfg-adult">
+          <input type="checkbox" id="cfg-adult">
+          <span class="toggle-text">
+            <span class="toggle-title">Inclure les chaînes adultes</span>
+            <span class="toggle-desc">Affiche les chaînes 18+ si disponibles sur les sources.</span>
+          </span>
+        </label>
+      </div>
+    </div>
+  </main>
+
+  <div class="install-bar">
+    <button class="btn btn-red" onclick="install('app')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Installer dans Stremio
+    </button>
+    <button class="btn btn-outline" onclick="install('web')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      Web
+    </button>
+    <button class="btn btn-ghost" onclick="copyLink()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+      Copier le lien
+    </button>
   </div>
 
-  <div class="info">
-    <strong>Comment installer dans Stremio :</strong><br>
-    1. Cliquez sur "Copier l'URL du manifest"<br>
-    2. Dans Stremio : Addons → Icône puzzle → "Install via URL"<br>
-    3. Collez l'URL et validez<br><br>
-    <strong>Lecture directe (VLC, mpv, ffmpeg) :</strong><br>
-    <code style="font-family:var(--font-mono);background:var(--input-bg);padding:2px 6px;border-radius:4px;">http://<IP>:8781/hls/121/index.m3u8</code> (auto-failover)<br>
-    <code style="font-family:var(--font-mono);background:var(--input-bg);padding:2px 6px;border-radius:4px;">http://<IP>:8781/hls/121/p0/index.m3u8</code> (player précis)<br><br>
-    <em>L'addon n'affichera QUE des chaînes françaises.</em>
-  </div>
+  <div class="toast" id="toast"></div>
 
-  <div class="footer">
-    W Addon TV · <a href="/manifest.json?lang=fr" style="color:var(--accent)">Manifest FR</a> · <a href="https://github.com" target="_blank" style="color:var(--accent)">GitHub</a>
-  </div>
-</div>
-
-<div class="toast" id="toast">Copié !</div>
-
-<script>
-const BASE = location.origin;
-const $ = s => document.querySelector(s);
-const $$ = s => document.querySelectorAll(s);
-
-// --- Toast ---
-function showToast(msg, type = 'success') {
-  const t = $("#toast");
-  t.textContent = msg;
-  t.className = "toast show " + type;
-  setTimeout(() => t.classList.remove("show", "success", "error", "warn"), 2500);
-}
-
-// --- Identity (localStorage) ---
-const IDENTITY_KEY = 'waddontv_identity';
-function loadIdentity() {
-  try {
-    const data = JSON.parse(localStorage.getItem(IDENTITY_KEY) || '{}');
-    $("#user-pseudo").value = data.pseudo || '';
-    $("#user-device").value = data.device || '';
-    updateIdentityBadge(data);
-  } catch (e) {}
-}
-function saveIdentity() {
-  const pseudo = $("#user-pseudo").value.trim();
-  const device = $("#user-device").value.trim();
-  if (!pseudo) { showToast("Entrez un pseudo", "error"); return; }
-  if (!/^[a-zA-Z0-9_-]{1,32}$/.test(pseudo)) { showToast("Pseudo invalide (lettres, chiffres, _, - seulement)", "error"); return; }
-  const data = { pseudo, device, savedAt: Date.now() };
-  localStorage.setItem(IDENTITY_KEY, JSON.stringify(data));
-  updateIdentityBadge(data);
-  showToast("Identité enregistrée ✓");
-  // Send to server for logging correlation
-  fetch('/api/identity', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).catch(() => {});
-}
-function updateIdentityBadge(data) {
-  const el = $("#identity-status");
-  if (data.pseudo) {
-    el.textContent = `Connecté en tant que ${data.pseudo}${data.device ? ` (${data.device})` : ''}`;
-    el.className = "test-result success";
-  } else {
-    el.className = "test-result";
-    el.textContent = "";
-  }
-}
-
-// --- Manifest URL ---
-function updateManifest() {
-  const url = `${BASE}/manifest.json?lang=fr`;
-  $("#manifest-url").textContent = url;
-}
-$("#copy-btn").addEventListener("click", async () => {
-  const url = $("#manifest-url").textContent;
-  try {
-    await navigator.clipboard.writeText(url);
-    showToast("✓ URL copiée dans le presse-papiers !");
-  } catch (e) {
-    showToast("Échec de la copie", "error");
-  }
-});
-
-// --- Stats ---
-async function loadStats() {
-  $("#refresh-stats-btn").disabled = true;
-  $("#refresh-stats-btn").textContent = "⏳ Chargement...";
-  try {
-    const res = await fetch('/api/public-stats');
-    if (!res.ok) throw new Error("Erreur serveur");
-    const data = await res.json();
-    $("#stat-channels").textContent = data.channels_total || "—";
-    $("#stat-uptime").textContent = formatUptime(data.uptime);
-    $("#stat-version").textContent = data.version || "—";
-  } catch (e) {
-    $("#stat-channels").textContent = "—";
-    $("#stat-uptime").textContent = "—";
-    $("#stat-version").textContent = "—";
-    showToast("Impossible de charger les stats", "warn");
-  } finally {
-    $("#refresh-stats-btn").disabled = false;
-    $("#refresh-stats-btn").textContent = "↻ Actualiser les stats";
-  }
-}
-function formatUptime(sec) {
-  if (!sec) return "—";
-  const d = Math.floor(sec/86400), h = Math.floor(sec%86400/3600), m = Math.floor(sec%3600/60);
-  return (d?d+"j ":"")+(h?h+"h ":"")+m+"m";
-}
-
-// --- Test Stream ---
-async function testStream() {
-  const cid = $("#test-channel-id").value.trim();
-  if (!cid) { showToast("Entrez un ID de chaîne", "error"); return; }
-  const resEl = $("#test-result");
-  resEl.className = "test-result loading";
-  resEl.textContent = "Test en cours...";
-  $("#test-stream-btn").disabled = true;
-  $("#test-stream-btn").textContent = "⏳ Test...";
-  try {
-    const res = await fetch(`/api/public-check?src=dlstreams&id=${encodeURIComponent(cid)}`);
-    const data = await res.json();
-    if (data.ok) {
-      resEl.className = "test-result success";
-      resEl.innerHTML = `✅ Flux OK (${data.ms}ms)<br><small>URL: <a href="${data.url}" target="_blank" style="color:var(--green);word-break:break-all;">${data.url}</a></small>`;
-      showToast(`Chaîne ${cid} fonctionnelle`);
-    } else {
-      resEl.className = "test-result error";
-      resEl.textContent = `❌ Échec: ${data.error || "inconnu"}`;
-      showToast(`Chaîne ${cid} indisponible`, "error");
+  <script>
+    function b64urlEncode(str) {
+      return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
-  } catch (e) {
-    resEl.className = "test-result error";
-    resEl.textContent = `❌ Erreur: ${e.message}`;
-    showToast("Erreur de test", "error");
-  } finally {
-    $("#test-stream-btn").disabled = false;
-    $("#test-stream-btn").textContent = "▶ Tester le flux";
-  }
-}
 
-// --- Init ---
-loadIdentity();
-updateManifest();
-loadStats();
-
-$("#save-identity-btn").addEventListener("click", saveIdentity);
-$("#refresh-stats-btn").addEventListener("click", loadStats);
-$("#test-stream-btn").addEventListener("click", testStream);
-
-// Enter key handlers
-$("#user-pseudo").addEventListener("keydown", e => { if(e.key==="Enter") saveIdentity(); });
-$("#user-device").addEventListener("keydown", e => { if(e.key==="Enter") saveIdentity(); });
-$("#test-channel-id").addEventListener("keydown", e => { if(e.key==="Enter") testStream(); });
-
-// Auto-send identity on page load if exists
-setTimeout(() => {
-  try {
-    const data = JSON.parse(localStorage.getItem(IDENTITY_KEY) || '{}');
-    if (data.pseudo) {
-      fetch('/api/identity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).catch(() => {});
+    function buildConfig() {
+      const pseudo = document.getElementById('cfg-pseudo').value.trim();
+      const device = document.getElementById('cfg-device').value.trim();
+      const logos = document.getElementById('cfg-logos').checked;
+      const epg = document.getElementById('cfg-epg').checked;
+      const lang = document.getElementById('cfg-lang').value;
+      const quality = document.getElementById('cfg-quality').value;
+      const vavoo = document.getElementById('cfg-vavoo').checked;
+      const adult = document.getElementById('cfg-adult').checked;
+      const cfg = {};
+      if (pseudo) cfg.pseudo = pseudo.slice(0, 32);
+      if (device) cfg.device = device.slice(0, 32);
+      if (!logos) cfg.logos = false;
+      if (!epg) cfg.epg = false;
+      if (lang !== 'fr') cfg.lang = lang;
+      if (quality !== 'auto') cfg.quality = quality;
+      if (!vavoo) cfg.vavoo = false;
+      if (adult) cfg.adult = true;
+      return Object.keys(cfg).length ? b64urlEncode(JSON.stringify(cfg)) : '';
     }
-  } catch (e) {}
-}, 1000);
-</script>
+
+    function getManifestUrl() {
+      const config = buildConfig();
+      const base = window.location.origin;
+      return config ? `${base}/${config}/manifest.json` : `${base}/manifest.json`;
+    }
+
+    // ---- Mémorisation locale ----
+    const STORAGE_KEYS = {
+      pseudo: 'waddontv_pseudo', device: 'waddontv_device',
+      logos: 'waddontv_logos', epg: 'waddontv_epg',
+      lang: 'waddontv_lang', quality: 'waddontv_quality',
+      vavoo: 'waddontv_vavoo', adult: 'waddontv_adult',
+    };
+
+    function loadSavedValues() {
+      try {
+        const pseudo = localStorage.getItem(STORAGE_KEYS.pseudo);
+        const device = localStorage.getItem(STORAGE_KEYS.device);
+        const logos = localStorage.getItem(STORAGE_KEYS.logos);
+        const epg = localStorage.getItem(STORAGE_KEYS.epg);
+        const lang = localStorage.getItem(STORAGE_KEYS.lang);
+        const quality = localStorage.getItem(STORAGE_KEYS.quality);
+        const vavoo = localStorage.getItem(STORAGE_KEYS.vavoo);
+        const adult = localStorage.getItem(STORAGE_KEYS.adult);
+        if (pseudo) document.getElementById('cfg-pseudo').value = pseudo;
+        if (device) document.getElementById('cfg-device').value = device;
+        if (logos !== null) document.getElementById('cfg-logos').checked = logos === '1';
+        if (epg !== null) document.getElementById('cfg-epg').checked = epg === '1';
+        if (lang) document.getElementById('cfg-lang').value = lang;
+        if (quality) document.getElementById('cfg-quality').value = quality;
+        if (vavoo !== null) document.getElementById('cfg-vavoo').checked = vavoo === '1';
+        if (adult !== null) document.getElementById('cfg-adult').checked = adult === '1';
+      } catch (e) { /* navigation privée -> silencieux */ }
+    }
+
+    function saveValuesLocally() {
+      try {
+        localStorage.setItem(STORAGE_KEYS.pseudo, document.getElementById('cfg-pseudo').value.trim());
+        localStorage.setItem(STORAGE_KEYS.device, document.getElementById('cfg-device').value.trim());
+        localStorage.setItem(STORAGE_KEYS.logos, document.getElementById('cfg-logos').checked ? '1' : '0');
+        localStorage.setItem(STORAGE_KEYS.epg, document.getElementById('cfg-epg').checked ? '1' : '0');
+        localStorage.setItem(STORAGE_KEYS.lang, document.getElementById('cfg-lang').value);
+        localStorage.setItem(STORAGE_KEYS.quality, document.getElementById('cfg-quality').value);
+        localStorage.setItem(STORAGE_KEYS.vavoo, document.getElementById('cfg-vavoo').checked ? '1' : '0');
+        localStorage.setItem(STORAGE_KEYS.adult, document.getElementById('cfg-adult').checked ? '1' : '0');
+      } catch (e) { /* silencieux */ }
+    }
+
+    ['cfg-pseudo', 'cfg-device', 'cfg-logos', 'cfg-epg', 'cfg-lang', 'cfg-quality', 'cfg-vavoo', 'cfg-adult'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', saveValuesLocally);
+    });
+
+    loadSavedValues();
+
+    function validateReady() {
+      const pseudoInput = document.getElementById('cfg-pseudo');
+      const pseudo = pseudoInput.value.trim();
+      pseudoInput.style.borderColor = '';
+      if (!pseudo) {
+        pseudoInput.style.borderColor = 'var(--red)';
+        toast('Entre ton pseudo avant d\'installer 👇');
+        return false;
+      }
+      return true;
+    }
+
+    function install(method) {
+      if (!validateReady()) return;
+      const url = getManifestUrl();
+      if (method === 'app') window.open(`stremio://${url.replace(/https?:\/\//, '')}`, '_blank');
+      else window.open(`https://web.stremio.com/#/addons?addon=${encodeURIComponent(url)}`, '_blank');
+    }
+    function copyLink() {
+      if (!validateReady()) return;
+      navigator.clipboard.writeText(getManifestUrl()).then(() => toast('✅ Lien copié !'));
+    }
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    async function checkServicesStatus() {
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        ['dlstreams', 'vavoo', 'epg'].forEach(svc => {
+          const badge = document.querySelector(`.status-badge[data-service="${svc}"]`);
+          if (!badge) return;
+          const dot = badge.querySelector('.status-dot');
+          const up = data[svc]?.ok === true;
+          dot.classList.add(up ? 'up' : 'down');
+          badge.title = up ? 'Opérationnel' : 'Indisponible actuellement';
+        });
+      } catch (e) { /* réseau down -> points restent en pulse neutre */ }
+    }
+    checkServicesStatus();
+  </script>
 </body>
 </html>
