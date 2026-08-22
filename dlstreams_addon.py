@@ -1931,9 +1931,7 @@ class Handler(BaseHTTPRequestHandler):
             _log_activity("Logs effacés")
             return self._send(200, json.dumps({"success": True}).encode(), "application/json")
 
-return self._send(404, b"not found", "text/plain")
-
-    def _manifest(self, lang_filter: str | None = None) -> dict:
+def _manifest(self, lang_filter: str | None = None) -> dict:
         _extra = [{"name": "search", "isRequired": False},
                   {"name": "skip", "isRequired": False},
                   {"name": "genre", "isRequired": False,
@@ -1977,7 +1975,7 @@ return self._send(404, b"not found", "text/plain")
             "behaviorHints": {
                 "configurable": True,
                 "configurationRequired": False,
-                "adultContent": False,
+"adultContent": False,
                 "p2p": False
             }
         }
