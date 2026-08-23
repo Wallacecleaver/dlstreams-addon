@@ -1479,7 +1479,7 @@ async function checkServices(){
     const btn = $("#svc-check-btn");
     if(btn){ btn.disabled = true; btn.textContent = "⏳ Vérification…"; }
     try{
-        await apiFetch('/api/health', {method: 'POST'});
+        await apiFetch('/api/health');
         await refreshStats();
         toast('🩺 Services vérifiés', 'success');
     }catch(e){

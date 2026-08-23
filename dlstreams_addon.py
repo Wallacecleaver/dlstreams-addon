@@ -1641,11 +1641,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"success": True,
                 "message": "rafraichissement EPG lance"}).encode(),
                 "application/json")
-        if path == "/api/health":
-            if not self._require_auth():
-                return
-            _health_refresh(force=True)
-            return self._send(200, json.dumps(_health_snapshot).encode(), "application/json")
         if path == "/api/playlists":
             if not self._require_auth():
                 return
