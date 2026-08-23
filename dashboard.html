@@ -1107,7 +1107,7 @@
 
 <script>
 // ---- Utils ----
-function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&","<":"<",">":">",'"':"', "'":"'"}[c])); }
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 const BASE = location.origin;
 const $ = s => document.querySelector(s);
