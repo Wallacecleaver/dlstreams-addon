@@ -62,89 +62,34 @@ _login_attempts: dict[str, list[float]] = {}
 _LOGIN_MAX_ATTEMPTS = 6
 _LOGIN_WINDOW = 300
 
+_PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_playlists.json")
+_playlists: list[dict] = []
+_login_attempts: dict[str, list[float]] = {}
+_LOGIN_MAX_ATTEMPTS = 6
+_LOGIN_WINDOW = 300
+
 _POPULAR_CHANNELS = [
     {"id": "121", "name": "Canal+ France", "lang": "fr"},
     {"id": "122", "name": "Canal+ Sport", "lang": "fr"},
-    {"id": "123", "name": "Canal+ Cinéma", "lang": "fr"},
-    {"id": "124", "name": "Canal+ Séries", "lang": "fr"},
-    {"id": "125", "name": "Canal+ Family", "lang": "fr"},
     {"id": "201", "name": "beIN Sports 1", "lang": "fr"},
     {"id": "202", "name": "beIN Sports 2", "lang": "fr"},
     {"id": "203", "name": "beIN Sports 3", "lang": "fr"},
-    {"id": "211", "name": "RMC Sport 1", "lang": "fr"},
-    {"id": "212", "name": "RMC Sport 2", "lang": "fr"},
-    {"id": "213", "name": "RMC Sport 3", "lang": "fr"},
-    {"id": "214", "name": "RMC Sport 4", "lang": "fr"},
-    {"id": "301", "name": "Eurosport 1", "lang": "fr"},
-    {"id": "302", "name": "Eurosport 2", "lang": "fr"},
-    {"id": "401", "name": "TF1", "lang": "fr"},
-    {"id": "402", "name": "France 2", "lang": "fr"},
-    {"id": "403", "name": "France 3", "lang": "fr"},
-    {"id": "404", "name": "France 4", "lang": "fr"},
-    {"id": "405", "name": "France 5", "lang": "fr"},
-    {"id": "406", "name": "M6", "lang": "fr"},
-    {"id": "407", "name": "Arte", "lang": "fr"},
-    {"id": "408", "name": "C8", "lang": "fr"},
-    {"id": "409", "name": "W9", "lang": "fr"},
-    {"id": "410", "name": "TMC", "lang": "fr"},
-    {"id": "411", "name": "TFX", "lang": "fr"},
-    {"id": "412", "name": "NRJ 12", "lang": "fr"},
-    {"id": "413", "name": "LCP", "lang": "fr"},
-    {"id": "414", "name": "France Info", "lang": "fr"},
-    {"id": "415", "name": "BFM TV", "lang": "fr"},
-    {"id": "416", "name": "CNews", "lang": "fr"},
-    {"id": "417", "name": "CStar", "lang": "fr"},
-    {"id": "418", "name": "Gulli", "lang": "fr"},
-    {"id": "419", "name": "TF1 Séries Films", "lang": "fr"},
-    {"id": "420", "name": "L'Équipe", "lang": "fr"},
-    {"id": "421", "name": "6ter", "lang": "fr"},
-    {"id": "422", "name": "RMC Story", "lang": "fr"},
-    {"id": "423", "name": "RMC Découverte", "lang": "fr"},
-    {"id": "424", "name": "Chérie 25", "lang": "fr"},
+    {"id": "960", "name": "Ligue 1 McDonald's", "lang": "fr"},
+    {"id": "68", "name": "Ligue 1 McDonald's 2", "lang": "fr"},
+    {"id": "76", "name": "Ligue 1 McDonald's 3", "lang": "fr"},
+    {"id": "970", "name": "DAZN 1", "lang": "fr"},
+    {"id": "971", "name": "DAZN 2", "lang": "fr"},
+    {"id": "972", "name": "DAZN 3", "lang": "fr"},
+    {"id": "973", "name": "DAZN 4", "lang": "fr"},
+    {"id": "974", "name": "DAZN 5", "lang": "fr"},
 ]
 
 _CH_LOGO = {
     "121": "https://static.epg.best/fr/CanalPlus.fr.png",
     "122": "https://static.epg.best/fr/CanalPlusSport.fr.png",
-    "123": "https://static.epg.best/fr/CanalPlusCinema.fr.png",
-    "124": "https://static.epg.best/fr/CanalPlusSeries.fr.png",
-    "125": "https://static.epg.best/fr/CanalPlusFamily.fr.png",
-    "211": "https://static.epg.best/fr/RMCSport1.fr.png",
-    "212": "https://static.epg.best/fr/RMCSport2.fr.png",
-    "213": "https://static.epg.best/fr/RMCSport3.fr.png",
-    "214": "https://static.epg.best/fr/RMCSport4.fr.png",
-    "301": "https://static.epg.best/fr/Eurosport1.fr.png",
-    "302": "https://static.epg.best/fr/Eurosport2.fr.png",
-    "401": "https://static.epg.best/fr/TF1.fr.png",
-    "402": "https://static.epg.best/fr/France2.fr.png",
-    "403": "https://static.epg.best/fr/France3.fr.png",
-    "404": "https://static.epg.best/fr/France4.fr.png",
-    "405": "https://static.epg.best/fr/France5.fr.png",
-    "406": "https://static.epg.best/fr/M6.fr.png",
-    "407": "https://static.epg.best/fr/Arte.fr.png",
-    "408": "https://static.epg.best/fr/C8.fr.png",
-    "409": "https://static.epg.best/fr/W9.fr.png",
-    "410": "https://static.epg.best/fr/TMC.fr.png",
-    "411": "https://static.epg.best/fr/TFX.fr.png",
-    "412": "https://static.epg.best/fr/NRJ12.fr.png",
-    "413": "https://static.epg.best/fr/LCP.fr.png",
-    "414": "https://static.epg.best/fr/FranceInfo.fr.png",
-    "415": "https://static.epg.best/fr/BFMTV.fr.png",
-    "416": "https://static.epg.best/fr/CNews.fr.png",
-    "417": "https://static.epg.best/fr/CStar.fr.png",
-    "418": "https://static.epg.best/fr/Gulli.fr.png",
-    "419": "https://static.epg.best/fr/TF1SeriesFilms.fr.png",
-    "420": "https://static.epg.best/fr/LEquipe.fr.png",
-    "421": "https://static.epg.best/fr/6ter.fr.png",
-    "422": "https://static.epg.best/fr/RMCStory.fr.png",
-    "423": "https://static.epg.best/fr/RMCDecouverte.fr.png",
-    "424": "https://static.epg.best/fr/Cherie25.fr.png",
     "201": "https://static.epg.best/fr/BeinSports1.fr.png",
     "202": "https://static.epg.best/fr/BeinSports2.fr.png",
     "203": "https://static.epg.best/fr/BeinSports3.fr.png",
-    "116": "https://static.epg.best/fr/BeinSports1.fr.png",
-    "772": "https://static.epg.best/fr/Eurosport1.fr.png",
-    "645": "https://static.epg.best/fr/LEquipe.fr.png",
     "960": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
     "68": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
     "76": "https://static.epg.best/fr/Ligue1McDonalds.fr.png",
@@ -227,16 +172,19 @@ def _settings_load():
         pass
 
 _CH_EPG = {
-    "121": "CanalPlus.fr", "122": "CanalPlusSport.fr", "123": "CanalPlusCinema.fr",
-    "124": "CanalPlusSeries.fr", "125": "CanalPlusFamilyCentre.af",
-    "201": "beINSPORTS1.fr", "202": "beINSPORTS2.fr", "203": "beINSPORTS3.fr",
-    "211": "RMCSport1.fr", "212": "RMCSport2.fr", "213": "RMCSport3.fr", "214": "RMCSport4.fr",
-    "301": "Eurosport1.fr", "302": "Eurosport2.fr",
-    "401": "TF1.fr", "402": "France2.fr", "403": "France3.fr", "404": "France4.fr",
-    "405": "France5.fr", "406": "M6.fr", "407": "Arte.fr", "409": "W9.fr", "410": "TMC.fr",
-    "413": "LCP100.fr", "414": "FranceInfo.fr", "415": "BFMTV.fr", "416": "CNews.fr",
-    "417": "CStar.fr", "418": "Gulli.fr", "419": "TF1SeriesFilms.fr", "420": "LEquipe21.fr",
-    "421": "6ter.fr", "423": "RMCDecouverte.fr", "424": "Cherie25.fr",
+    "121": "CanalPlus.fr",
+    "122": "CanalPlusSport.fr",
+    "201": "beINSPORTS1.fr",
+    "202": "beINSPORTS2.fr",
+    "203": "beINSPORTS3.fr",
+    "960": "Ligue1McDonalds.fr",
+    "68": "Ligue1McDonalds.fr",
+    "76": "Ligue1McDonalds.fr",
+    "970": "DAZN1.fr",
+    "971": "DAZN2.fr",
+    "972": "DAZN3.fr",
+    "973": "DAZN4.fr",
+    "974": "DAZN5.fr",
 }
 _EPG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_epg.json")
 _EPG_TTL = 6 * 3600
@@ -497,6 +445,24 @@ def _sessions_save():
     try:
         with open(_SESSION_FILE, "w", encoding="utf-8") as f:
             json.dump(_sessions, f)
+    except Exception as e:
+        pass
+
+def _playlists_load():
+    global _playlists
+    try:
+        if os.path.exists(_PLAYLISTS_FILE):
+            with open(_PLAYLISTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                _playlists = data
+    except Exception as e:
+        pass
+
+def _playlists_save():
+    try:
+        with open(_PLAYLISTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(_playlists, f, ensure_ascii=False, indent=1)
     except Exception as e:
         pass
 
@@ -1595,6 +1561,58 @@ class Handler(BaseHTTPRequestHandler):
                 return
             _health_refresh(force=True)
             return self._send(200, json.dumps(_health_snapshot).encode(), "application/json")
+        if path == "/api/playlists":
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception as e:
+                return self._send(400, json.dumps({"success": False, "error": "body invalide"}).encode(), "application/json")
+            action = data.get("action")
+            if action == "create":
+                name = data.get("name", "").strip()
+                if not name:
+                    return self._send(400, json.dumps({"success": False, "error": "nom requis"}).encode(), "application/json")
+                if any(p["name"] == name for p in _playlists):
+                    return self._send(400, json.dumps({"success": False, "error": "nom déjà utilisé"}).encode(), "application/json")
+                _playlists.append({"name": name, "channels": []})
+                _playlists_save()
+                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
+            if action == "add":
+                name = data.get("name", "").strip()
+                key = data.get("key", "").strip()
+                if not name or not key:
+                    return self._send(400, json.dumps({"success": False, "error": "nom et key requis"}).encode(), "application/json")
+                pl = next((p for p in _playlists if p["name"] == name), None)
+                if not pl:
+                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
+                if any(c["key"] == key for c in pl.get("channels", [])):
+                    return self._send(400, json.dumps({"success": False, "error": "chaîne déjà dans la playlist"}).encode(), "application/json")
+                pl.setdefault("channels", []).append({"key": key})
+                _playlists_save()
+                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
+            if action == "remove":
+                name = data.get("name", "").strip()
+                key = data.get("key", "").strip()
+                if not name or not key:
+                    return self._send(400, json.dumps({"success": False, "error": "nom et key requis"}).encode(), "application/json")
+                pl = next((p for p in _playlists if p["name"] == name), None)
+                if not pl:
+                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
+                pl["channels"] = [c for c in pl.get("channels", []) if c["key"] != key]
+                _playlists_save()
+                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
+            if action == "delete":
+                name = data.get("name", "").strip()
+                if not name:
+                    return self._send(400, json.dumps({"success": False, "error": "nom requis"}).encode(), "application/json")
+                idx = next((i for i, p in enumerate(_playlists) if p["name"] == name), None)
+                if idx is None:
+                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
+                _playlists.pop(idx)
+                _playlists_save()
+                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
+            return self._send(400, json.dumps({"success": False, "error": "action inconnue"}).encode(), "application/json")
         return self._send(404, b"not found", "text/plain")
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
@@ -1683,6 +1701,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(list(_manual_channels.values())).encode(), "application/json")
+            if path == "/api/playlists":
+                if not self._require_auth():
+                    return
+                return self._send(200, json.dumps(_playlists).encode(), "application/json")
             if path == "/api/activity":
                 if not self._require_auth():
                     return
@@ -2108,6 +2130,7 @@ def main():
     _sessions_load()
     _settings_load()
     _epg_load()
+    _playlists_load()
     log.info(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     log.info(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     log.info(f"  Configure: http://127.0.0.1:{PORT}/configure")
