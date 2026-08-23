@@ -875,7 +875,28 @@ def _extract_config_from_path(path: str) -> tuple[dict, str]:
             return config, "/" + rest
     return {}, path
 
-_PROXY_SECRET = secrets.token_bytes(32)
+_PROXY_SECRET_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_proxy_secret.key")
+
+def _load_proxy_secret():
+    try:
+        if os.path.exists(_PROXY_SECRET_FILE):
+            with open(_PROXY_SECRET_FILE, "rb") as f:
+                secret = f.read()
+            if len(secret) == 32:
+                return secret
+    except Exception:
+        pass
+    return secrets.token_bytes(32)
+
+def _save_proxy_secret(secret: bytes):
+    try:
+        with open(_PROXY_SECRET_FILE, "wb") as f:
+            f.write(secret)
+    except Exception:
+        pass
+
+_PROXY_SECRET = _load_proxy_secret()
+_save_proxy_secret(_PROXY_SECRET)
 
 def _proxy_sign(u_b64: str, h_b64: str) -> str:
     return hmac.new(_PROXY_SECRET, (u_b64 + "|" + h_b64).encode(), hashlib.sha256).hexdigest()[:24]
