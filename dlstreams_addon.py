@@ -979,18 +979,37 @@ def _public_stats() -> dict:
 
 def _build_m3u(qs: dict) -> str:
     base = qs.get("base", [""])[0] or ""
-    include_vavoo = qs.get("vavoo", ["true"])[0] == "true"
+    code = qs.get("code", [""])[0]
+    wp = _settings.get("wiseplay", {})
+    stored_code = wp.get("access_code", "")
+    wiseplay_mode = bool(code) and bool(stored_code) and code == stored_code
+
+    if wiseplay_mode:
+        ch_toggles = wp.get("channels", {})
+        src = wp.get("sources", {"dlstreams": True, "vavoo": True})
+        include_dlstreams = src.get("dlstreams", True)
+        include_vavoo = src.get("vavoo", True)
+    else:
+        ch_toggles = {}
+        include_dlstreams = True
+        include_vavoo = qs.get("vavoo", ["true"])[0] == "true"
+
     lines = ["#EXTM3U"]
-    all_ch = channels()
-    for ch in all_ch:
-        href = f"{base}/hls/{ch['id']}/index.m3u8"
-        grp = (ch.get("lang") or "other").upper()
-        logo = _CH_LOGO.get(str(ch.get("id")), "")
-        lines.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{logo}" group-title="{grp}",{ch["name"]}')
-        lines.append(href)
+    if include_dlstreams:
+        all_ch = channels()
+        for ch in all_ch:
+            if ch_toggles.get(str(ch["id"])) is False:
+                continue
+            href = f"{base}/hls/{ch['id']}/index.m3u8"
+            grp = (ch.get("lang") or "other").upper()
+            logo = _CH_LOGO.get(str(ch.get("id")), "")
+            lines.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{logo}" group-title="{grp}",{ch["name"]}')
+            lines.append(href)
     if include_vavoo:
         vavoo_ch = vavoo_channels()
         for ch in vavoo_ch:
+            if ch_toggles.get(str(ch["id"])) is False:
+                continue
             enc = _b64u(ch["id"])
             href = f"{base}/vhls?v={enc}"
             grp = (ch.get("lang") or "other").upper()
@@ -1817,7 +1836,7 @@ class Handler(BaseHTTPRequestHandler):
                     for k in ("dlstreams", "vavoo"):
                         if k in data["sources"] and isinstance(data["sources"][k], bool):
                             wp.setdefault("sources", {})[k] = data["sources"][k]
-                        changed = True
+                            changed = True
                 if changed:
                     _settings_save()
                 return self._send(200, json.dumps(wp).encode(), "application/json")
