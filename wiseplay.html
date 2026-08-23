@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Wiseplay Config — W Addon TV</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0b;--surface:#111113;--surface2:#18181b;--border:rgba(255,255,255,.06);--accent:#e53e3e;--accent-dim:rgba(229,62,62,.08);--green:#48bb78;--text:#f0f0f0;--text2:#888;--muted:#666;--input-bg:#0a0a0b;--font-display:'Bebas Neue',sans-serif;--font-mono:'Rajdhani',monospace;--font-body:'DM Sans',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);min-height:100vh}
+.app{display:flex;flex-direction:column;min-height:100vh}
+header{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(10,10,11,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.brand{font-family:var(--font-display);font-size:22px;letter-spacing:1px;color:#fff}
+.btn{display:flex;align-items:center;gap:6px;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;font-family:var(--font-body);cursor:pointer;border:none;transition:.2s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#c53030}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+main{flex:1;padding:16px;max-width:720px;margin:0 auto;width:100%}
+.section{margin-bottom:24px}
+.section-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;font-weight:700}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.ch-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);transition:background .15s}
+.ch-row:last-child{border-bottom:none}
+.ch-row:hover{background:var(--surface2)}
+.ch-logo{width:40px;height:22px;border-radius:4px;object-fit:cover;background:#000;flex-shrink:0}
+.ch-info{flex:1;min-width:0}
+.ch-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px}
+.toggle{width:44px;height:26px;appearance:none;-webkit-appearance:none;background:var(--surface2);border:1px solid var(--border);border-radius:20px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:all .2s}
+.toggle:checked{background:var(--accent-dim);border-color:rgba(229,62,62,.4)}
+.toggle:checked::after{left:22px;background:var(--accent)}
+.logo-input{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font-mono);font-size:12px}
+.logo-input:focus{outline:none;border-color:var(--accent)}
+.empty{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+.m3u-box{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:16px}
+.footer{padding:24px 16px;text-align:center;color:var(--muted);font-size:12px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface);border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;opacity:0;transition:all .25s;z-index:999}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.success{border-color:var(--green)}
+@media (max-width:480px){
+  header{padding:12px}
+  main{padding:12px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<div class="brand">Wiseplay Config</div>
+<button class="btn btn-primary" onclick="copyM3U()">📋 Copier lien M3U</button>
+</header>
+<main>
+<section class="section">
+<div class="section-title">Chaînes actives</div>
+<div class="card" id="channels-list">
+<div class="empty">Chargement…</div>
+</div>
+</section>
+<section class="section">
+<div class="section-title">Lien M3U pour Wiseplay</div>
+<div class="m3u-box" id="m3u-url">—</div>
+<button class="btn btn-primary" style="width:100%" onclick="copyM3U()">📋 Copier le lien M3U</button>
+</section>
+</main>
+<div class="footer">W Addon TV · <a href="/playlist.m3u" style="color:var(--accent)">Playlist M3U directe</a></div>
+<div class="toast" id="toast">Copié !</div>
+<script>
+const BASE = location.origin;
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&","<":"<",">":">",'"':""","'":"'"}[c]));}
+function b64u(s){return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_");}
+
+function showToast(msg, type){
+const t = $("#toast");
+t.textContent = msg;
+t.className = "toast show" + (type?" "+type:"");
+setTimeout(()=>t.classList.remove("show","success","error"),2500);
+}
+
+function buildM3UUrl(){
+return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
+}
+
+function updateM3UDisplay(){
+$("#m3u-url").textContent = buildM3UUrl();
+}
+
+async function loadChannels(){
+try{
+const r = await fetch(`${BASE}/api/channels`);
+if(!r.ok) throw new Error("Auth requise");
+const data = await r.json();
+renderChannels(data);
+}catch(e){
+if(e.message !== "Auth requise") showToast("Erreur: "+e.message,"error");
+document.getElementById("channels-list").innerHTML = '<div class="empty">Connecte-toi via /dashboard d\'abord</div>';
+}
+}
+
+function renderChannels(channels){
+const list = document.getElementById("channels-list");
+const activeKey = localStorage.getItem("waddontv_active_channels") || "";
+const active = new Set(activeKey.split(",").filter(Boolean));
+if(!channels.length){
+list.innerHTML = '<div class="empty">Aucune chaîne</div>';
+return;
+}
+list.innerHTML = channels.map(c=>{
+const id = c.id;
+const isActive = active.has(id);
+const logo = c.logo || "";
+return `<div class="ch-row" data-id="${escapeHtml(id)}">
+<img class="ch-logo" src="${escapeHtml(logo)}" alt="" onerror="this.style.display='none'">
+<div class="ch-info">
+<div class="ch-name">${escapeHtml(c.name)}</div>
+<div class="ch-meta">ID: ${escapeHtml(id)} · ${c.lang?.toUpperCase()||"FR"}</div>
+</div>
+<input type="checkbox" class="toggle" ${isActive?"checked":""} onchange="toggleChannel('${escapeHtml(id)}',this.checked)">
+</div>`;
+}).join("");
+list.querySelectorAll(".toggle").forEach(t=>{
+t.addEventListener("change",e=>toggleChannel(e.target.closest(".ch-row").dataset.id,e.target.checked));
+});
+}
+
+function toggleChannel(id, checked){
+let active = new Set((localStorage.getItem("waddontv_active_channels")||"").split(",").filter(Boolean));
+if(checked) active.add(id); else active.delete(id);
+localStorage.setItem("waddontv_active_channels", Array.from(active).join(","));
+showToast(checked?"✅ Activée":"⏸️ Désactivée", checked?"success":"");
+}
+
+async function copyM3U(){
+navigator.clipboard.writeText(buildM3UUrl()).then(()=>showToast("✅ Lien M3U copié !","success")).catch(()=>showToast("Erreur","error"));
+}
+
+function saveLogo(id){
+const url = document.getElementById(`logo-${id}`).value.trim();
+// TODO: call API to save logo override
+showToast("Logo sauvegardé (à implémenter)","success");
+}
+
+updateM3UDisplay();
+loadChannels();
+</script>
+</body>
+</html>

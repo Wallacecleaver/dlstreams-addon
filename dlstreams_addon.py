@@ -1289,9 +1289,10 @@ def _warm_logos():
 _HTML_DIR = os.path.dirname(os.path.abspath(__file__))
 DASHBOARD_HTML = ""
 CONFIGURE_HTML = ""
+WISEPLAY_HTML = ""
 
 def _load_html_files():
-    global DASHBOARD_HTML, CONFIGURE_HTML
+    global DASHBOARD_HTML, CONFIGURE_HTML, WISEPLAY_HTML
     try:
         with open(os.path.join(_HTML_DIR, "dashboard.html"), "r", encoding="utf-8") as f:
             DASHBOARD_HTML = f.read()
@@ -1307,6 +1308,14 @@ def _load_html_files():
     except Exception as e:
         log.error(f"Impossible de lire configure.html: {e}")
         CONFIGURE_HTML = "<html><body><h1>configure.html introuvable</h1></body></html>"
+    
+    try:
+        with open(os.path.join(_HTML_DIR, "wiseplay.html"), "r", encoding="utf-8") as f:
+            WISEPLAY_HTML = f.read()
+        log.info(f"wiseplay.html chargé ({len(WISEPLAY_HTML)} octets)")
+    except Exception as e:
+        log.error(f"Impossible de lire wiseplay.html: {e}")
+        WISEPLAY_HTML = "<html><body><h1>wiseplay.html introuvable</h1></body></html>"
 
 _load_html_files()
 # ============================================================
@@ -1691,6 +1700,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, _poster_get(pname), "image/png", True)
             if path == "/dashboard" or path == "/dashboard.html" or path.startswith("/dashboard/"):
                 return self._send(200, DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
+            if path == "/wiseplay" or path == "/wiseplay.html":
+                return self._send(200, WISEPLAY_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
             if path == "/configure" or path == "/configure.html":
                 return self._send(200, CONFIGURE_HTML.encode("utf-8"), "text/html; charset=utf-8", True)
             if path == "/api/logout":
