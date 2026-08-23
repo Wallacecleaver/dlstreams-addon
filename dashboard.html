@@ -980,6 +980,18 @@
           </div>
 
           <div class="card">
+            <div class="card-head"><div class="card-title">📱 Wiseplay</div></div>
+            <div class="card-body">
+              <div class="field">
+                <label for="wp-access-code">Code d'accès Wiseplay</label>
+                <input type="text" id="wp-access-code" class="add-source-input" placeholder="Code pour /wiseplay (vide = désactivé)">
+                <small>Ce code protège l'accès à <a href="/wiseplay" style="color:var(--accent)" target="_blank">/wiseplay</a>. Laisser vide pour désactiver.</small>
+              </div>
+              <button class="add-source-btn" onclick="saveSettings()">💾 Enregistrer</button>
+            </div>
+          </div>
+
+          <div class="card">
             <div class="card-head"><div class="card-title">🗂️ Catégories</div></div>
             <div class="card-body">
               <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Attribuez une catégorie aux chaînes populaires. Elles alimentent le filtre « genre » de Stremio.</p>
@@ -1094,6 +1106,9 @@
   <div class="toast" id="toast"></div>
 
 <script>
+// ---- Utils ----
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&","<":"<",">":">",'"':""","'":"'"}[c])); }
+function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 const BASE = location.origin;
 const $ = s => document.querySelector(s);
 const fmtDur = s => {
@@ -1844,6 +1859,7 @@ async function loadSettings(){
         $('#set-logos').checked = !!_settings.logos;
         $('#set-epg').checked = !!_settings.epg;
         $('#set-epg-url').value = _settings.epg_url || '';
+        $('#wp-access-code').value = _settings.wiseplay?.access_code || '';
         const e = d.epg || {};
         $('#epg-status').textContent = e.at
             ? `Dernière MAJ ${new Date(e.at*1000).toLocaleTimeString('fr-FR')} · ${e.covered}/${e.channels} chaînes`
@@ -1884,7 +1900,7 @@ async function setGenre(key, value){
 }
 
 async function saveSettings(){
-    const body = {logos: $('#set-logos').checked, epg: $('#set-epg').checked, epg_url: $('#set-epg-url').value.trim()};
+    const body = {logos: $('#set-logos').checked, epg: $('#set-epg').checked, epg_url: $('#set-epg-url').value.trim(), wiseplay: {access_code: $('#wp-access-code').value.trim()}};
     const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     if(r.ok){ toast('Réglages enregistrés','success'); } else toast('Erreur d\'enregistrement','error');
 }
@@ -2243,9 +2259,6 @@ async function refreshEpg(){
         else toast('Erreur','error');
     }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur','error'); }
 }
-
-function b64u(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
-function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 let _hls = null;
 function closePlayer(){
