@@ -145,7 +145,7 @@ const BASE = location.origin;
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
-function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&","<":"<",">":">",'"':""","'":"'"}[c]));}
+function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
 function showToast(msg, type){
 const t = $("#toast");
@@ -179,21 +179,6 @@ if(!r.ok) throw new Error("Erreur serveur: "+r.status);
 return r.json();
 }
 
-function showToast(msg, type){
-const t = $("#toast");
-t.textContent = msg;
-t.className = "toast show" + (type?" "+type:"");
-setTimeout(()=>t.classList.remove("show","success","error"),2500);
-}
-
-function buildM3UUrl(){
-return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
-}
-
-function updateM3UDisplay(){
-$("#m3u-url").textContent = buildM3UUrl();
-}
-
 // Auth
 $("#connect-btn").addEventListener("click", async ()=>{
 const code = $("#access-code").value.trim();
@@ -225,21 +210,6 @@ updateM3UDisplay();
 }catch(e){
 showToast("Erreur chargement: "+e.message,"error");
 }
-}
-
-function updateM3UDisplay(){
-$("#m3u-url").textContent = buildM3UUrl();
-}
-
-function buildM3UUrl(){
-return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
-}
-
-function copyM3U(){
-navigator.clipboard.writeText(buildM3UUrl()).then(
-()=>showToast("✅ Lien M3U copié !","success"),
-()=>showToast("Erreur copie","error")
-);
 }
 
 // Sources
@@ -277,9 +247,6 @@ return `<div class="ch-row" data-id="${escapeHtml(id)}">
 <input type="checkbox" class="toggle" ${active?"checked":""} onchange="toggleChannel('${escapeHtml(id)}',this.checked)">
 </div>`;
 }).join("");
-container.querySelectorAll(".toggle").forEach(t=>{
-t.addEventListener("change",e=>toggleChannel(e.target.closest(".ch-row").dataset.id,e.target.checked));
-});
 }catch(e){console.error(e);}
 }
 function toggleChannel(id, checked){
@@ -297,22 +264,19 @@ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(
 showToast("Chaînes enregistrées","success");
 }).catch(e=>showToast("Erreur: "+e.message,"error"));
 }
-let saveTimer;
-function debounceSave(){
-clearTimeout(saveTimer);
-saveTimer = setTimeout(saveChannels, 800);
-}
 
 // Playlists
+let currentPlaylists = {};
 function renderPlaylists(plMap){
+currentPlaylists = plMap || {};
 const container = $("#playlists-container");
-const names = Object.keys(plMap||{});
+const names = Object.keys(currentPlaylists);
 if(!names.length){
 container.innerHTML = '<div class="empty">Aucune playlist — créez-en une</div>';
 return;
 }
 container.innerHTML = names.map(name=>{
-const channels = plMap[name]||[];
+const channels = currentPlaylists[name]||[];
 return `<div class="card" style="margin-top:12px">
 <div class="card-header">
 <div class="card-title">${escapeHtml(name)}</div>
@@ -338,6 +302,15 @@ loadConfig();
 showToast("Playlist créée","success");
 }catch(e){showToast(e.message,"error");}
 }
+function editPlaylist(name){
+const current = (currentPlaylists[name]||[]).join(", ");
+const input = prompt(`IDs des chaînes pour "${name}" (séparés par des virgules) :`, current);
+if(input === null) return;
+const list = input.split(",").map(s=>s.trim()).filter(Boolean);
+api("/api/wiseplay/config", {method:"POST", body:{playlists: {[name]: list}}}).then(
+()=>{loadConfig(); showToast("Playlist mise à jour","success");}
+).catch(e=>showToast(e.message,"error"));
+}
 function deletePlaylist(name){
 if(!confirm(`Supprimer "${name}" ?`)) return;
 api("/api/wiseplay/config", {method:"POST", body:{playlists: {"_delete": name}}}).then(
@@ -345,58 +318,10 @@ api("/api/wiseplay/config", {method:"POST", body:{playlists: {"_delete": name}}}
 ).catch(e=>showToast(e.message,"error"));
 }
 $("#create-playlist-btn").addEventListener("click", addPlaylist);
+$("#add-playlist-btn").addEventListener("click", ()=> $("#new-playlist-name").focus());
 
 // M3U copy
 $("#copy-m3u-btn").addEventListener("click", copyM3U);
-function copyM3U(){
-navigator.clipboard.writeText(buildM3UUrl()).then(
-()=>showToast("✅ Lien M3U copié !","success"),
-()=>showToast("Erreur copie","error")
-);
-}
-function buildM3UUrl(){
-return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
-}
-function updateM3UDisplay(){
-$("#m3u-url").textContent = buildM3UUrl();
-}
-
-// Auth
-$("#connect-btn").addEventListener("click", async ()=>{
-const code = $("#access-code").value.trim();
-if(!code){ showToast("Entrez un code","error"); return; }
-try{
-await api("/api/wiseplay/config");
-$("#auth-section").style.display = "none";
-$("#config-section").style.display = "block";
-$("#access-code").disabled = true;
-$("#connect-btn").textContent = "✅ Connecté";
-$("#connect-btn").disabled = true;
-loadConfig();
-showToast("✅ Connecté","success");
-}catch(e){
-$("#auth-error").textContent = e.message;
-$("#auth-error").style.display = "block";
-showToast(e.message,"error");
-}
-});
-
-function showToast(msg, type){
-const t = $("#toast");
-t.textContent = msg;
-t.className = "toast show" + (type?" "+type:"");
-setTimeout(()=>t.classList.remove("show","success","error"),2500);
-}
-
-function buildM3UUrl(){
-return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
-}
-
-function updateM3UDisplay(){
-$("#m3u-url").textContent = buildM3UUrl();
-}
-
-function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&","<":"<",">":">",'"':""","'":"'"}[c]));}
 
 // Init
 updateM3UDisplay();
