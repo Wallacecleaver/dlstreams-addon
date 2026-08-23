@@ -5,6 +5,7 @@ WORKDIR /app
 COPY dlstreams_addon.py .
 COPY dashboard.html .
 COPY configure.html .
+COPY wiseplay.html .
 EXPOSE 8781
 # Port configurable : -e PORT=8781
 CMD ["python", "dlstreams_addon.py"]
