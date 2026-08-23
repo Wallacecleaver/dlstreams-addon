@@ -1796,8 +1796,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps(_playlists).encode(), "application/json")
             if path == "/api/wiseplay/config":
                 code = qs.get("code", [""])[0]
-                if code != _settings.get("wiseplay", {}).get("access_code", ""):
-                    return self._send(401, json.dumps({"success": False, "error": "Code invalide"}).encode(), "application/json")
+                stored_code = _settings.get("wiseplay", {}).get("access_code", "")
+                if not stored_code or code != stored_code:
+                    return self._send(401, json.dumps({"success": False, "error": "Code invalide ou non configuré"}).encode(), "application/json")
                 if self.command == "GET":
                     all_ch = channels() + vavoo_channels()
                     wp = _settings.get("wiseplay", {})
