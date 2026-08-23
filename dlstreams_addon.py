@@ -142,6 +142,15 @@ _SETTINGS_DEFAULT = {
         "channel_epg": {},
         "custom_channels": {},
     },
+    "wiseplay": {
+        "access_code": "",
+        "channels": {},
+        "playlists": {},
+        "sources": {
+            "dlstreams": True,
+            "vavoo": True
+        }
+    }
 }
 _settings: dict = dict(_SETTINGS_DEFAULT)
 
@@ -1605,6 +1614,22 @@ class Handler(BaseHTTPRequestHandler):
                                 "epg": str(vv.get("epg", "")),
                             }
                     changed = True
+            if isinstance(data.get("wiseplay"), dict):
+                wp = data["wiseplay"]
+                if isinstance(wp.get("access_code"), str):
+                    _settings["wiseplay"]["access_code"] = wp["access_code"]
+                    changed = True
+                if isinstance(wp.get("channels"), dict):
+                    _settings["wiseplay"]["channels"] = {str(k): bool(v) for k, v in wp["channels"].items()}
+                    changed = True
+                if isinstance(wp.get("playlists"), dict):
+                    _settings["wiseplay"]["playlists"] = {str(k): list(v) for k, v in wp["playlists"].items()}
+                    changed = True
+                if isinstance(wp.get("sources"), dict):
+                    for k in ("dlstreams", "vavoo"):
+                        if isinstance(wp["sources"].get(k), bool):
+                            _settings["wiseplay"]["sources"][k] = wp["sources"][k]
+                    changed = True
             if changed:
                 _settings_save()
             return self._send(200, json.dumps({"success": True, "settings": _settings}).encode(),
@@ -1769,6 +1794,37 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(_playlists).encode(), "application/json")
+            if path == "/api/wiseplay/config":
+                code = qs.get("code", [""])[0]
+                if code != _settings.get("wiseplay", {}).get("access_code", ""):
+                    return self._send(401, json.dumps({"success": False, "error": "Code invalide"}).encode(), "application/json")
+                if self.command == "GET":
+                    all_ch = channels() + vavoo_channels()
+                    wp = _settings.get("wiseplay", {})
+                    return self._send(200, json.dumps({
+                        **wp,
+                        "all_channels": all_ch
+                    }).encode(), "application/json")
+                try:
+                    data = json.loads(body) if body else {}
+                except Exception:
+                    data = {}
+                changed = False
+                wp = _settings.setdefault("wiseplay", {})
+                if "channels" in data and isinstance(data["channels"], dict):
+                    wp["channels"] = {str(k): bool(v) for k, v in data["channels"].items()}
+                    changed = True
+                if "playlists" in data and isinstance(data["playlists"], dict):
+                    wp["playlists"] = {str(k): [str(x) for x in v] for k, v in data["playlists"].items()}
+                    changed = True
+                if "sources" in data and isinstance(data["sources"], dict):
+                    for k in ("dlstreams", "vavoo"):
+                        if k in data["sources"] and isinstance(data["sources"][k], bool):
+                            wp.setdefault("sources", {})[k] = data["sources"][k]
+                        changed = True
+                if changed:
+                    _settings_save()
+                return self._send(200, json.dumps(wp).encode(), "application/json")
             if path == "/api/activity":
                 if not self._require_auth():
                     return

@@ -12,14 +12,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);min-hei
 .app{display:flex;flex-direction:column;min-height:100vh}
 header{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(10,10,11,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
 .brand{font-family:var(--font-display);font-size:22px;letter-spacing:1px;color:#fff}
+main{flex:1;padding:16px;max-width:720px;margin:0 auto;width:100%}
+.section{margin-bottom:24px}
+.section-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;font-weight:700}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600}
+.field input,.field select{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:var(--font-mono);font-size:14px;transition:border-color .2s}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.field small{display:block;margin-top:6px;font-size:11px;color:var(--muted)}
+.field .hint{font-size:11px;color:var(--muted);margin-top:4px}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 8px;border-bottom:1px solid var(--border)}
+.card-title{font-size:15px;font-weight:800;color:var(--text);letter-spacing:.01em}
 .btn{display:flex;align-items:center;gap:6px;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;font-family:var(--font-body);cursor:pointer;border:none;transition:.2s}
 .btn-primary{background:var(--accent);color:#fff}
 .btn-primary:hover{background:#c53030}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-main{flex:1;padding:16px;max-width:720px;margin:0 auto;width:100%}
-.section{margin-bottom:24px}
-.section-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;font-weight:700}
+.btn-danger{background:rgba(239,68,68,.12);border:1px solid var(--error);color:var(--error)}
+.btn-danger:hover{background:var(--error);color:#fff}
+.m3u-box{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:16px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
 .ch-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);transition:background .15s}
 .ch-row:last-child{border-bottom:none}
@@ -32,14 +44,26 @@ main{flex:1;padding:16px;max-width:720px;margin:0 auto;width:100%}
 .toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:all .2s}
 .toggle:checked{background:var(--accent-dim);border-color:rgba(229,62,62,.4)}
 .toggle:checked::after{left:22px;background:var(--accent)}
-.logo-input{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--font-mono);font-size:12px}
-.logo-input:focus{outline:none;border-color:var(--accent)}
-.empty{text-align:center;padding:32px;color:var(--muted);font-size:13px}
 .m3u-box{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.ch-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);transition:background .15s}
+.ch-row:last-child{border-bottom:none}
+.ch-row:hover{background:var(--surface2)}
+.ch-logo{width:40px;height:22px;border-radius:4px;object-fit:cover;background:#000;flex-shrink:0}
+.ch-info{flex:1;min-width:0}
+.ch-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px}
+.toggle{width:44px;height:26px;appearance:none;-webkit-appearance:none;background:var(--surface2);border:1px solid var(--border);border-radius:20px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:all .2s}
+.toggle:checked{background:var(--accent-dim);border-color:rgba(229,62,62,.4)}
+.toggle:checked::after{left:22px;background:var(--accent)}
+.m3u-box{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:16px}
+.empty{text-align:center;padding:32px;color:var(--muted);font-size:13px}
 .footer{padding:24px 16px;text-align:center;color:var(--muted);font-size:12px}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface);border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;opacity:0;transition:all .25s;z-index:999}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.success{border-color:var(--green)}
+.toast.error{border-color:var(--error)}
 @media (max-width:480px){
   header{padding:12px}
   main{padding:12px}
@@ -50,19 +74,68 @@ main{flex:1;padding:16px;max-width:720px;margin:0 auto;width:100%}
 <div class="app">
 <header>
 <div class="brand">Wiseplay Config</div>
-<button class="btn btn-primary" onclick="copyM3U()">📋 Copier lien M3U</button>
 </header>
 <main>
-<section class="section">
-<div class="section-title">Chaînes actives</div>
-<div class="card" id="channels-list">
-<div class="empty">Chargement…</div>
+<!-- Auth Section -->
+<section class="section" id="auth-section">
+<div class="section-title">Connexion</div>
+<div class="card">
+<div class="field">
+<label for="access-code">Code d'accès</label>
+<input type="text" id="access-code" placeholder="Entrez votre code" autocomplete="off">
+<small>Défini dans le dashboard principal → Réglages → Wiseplay</small>
+</div>
+<button class="btn btn-primary" style="width:100%;margin-top:8px" id="connect-btn">🔐 Se connecter</button>
+<div class="empty" id="auth-error" style="display:none;color:var(--error);margin-top:8px"></div>
 </div>
 </section>
-<section class="section">
+
+<!-- Config Section (hidden until auth) -->
+<section class="section" id="config-section" style="display:none">
 <div class="section-title">Lien M3U pour Wiseplay</div>
-<div class="m3u-box" id="m3u-url">—</div>
-<button class="btn btn-primary" style="width:100%" onclick="copyM3U()">📋 Copier le lien M3U</button>
+<div class="card">
+<div class="m3u-box" id="m3u-url">Génération…</div>
+<button class="btn btn-primary" style="width:100%" id="copy-m3u-btn">📋 Copier le lien M3U</button>
+</div>
+
+<div class="section-title" style="margin-top:24px">Sources</div>
+<div class="card">
+<label class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+<div>
+<div style="font-weight:600">dlstreams</div>
+<div class="hint">Chaînes Canal+, beIN, Ligue 1, DAZN</div>
+</div>
+<input type="checkbox" id="src-dlstreams" class="toggle" onchange="saveSources()">
+</label>
+<label class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+<div>
+<div style="font-weight:600">Vavoo</div>
+<div class="hint">Catalogue Vavoo (plus de chaînes, moins stable)</div>
+</div>
+<input type="checkbox" id="src-vavoo" class="toggle" onchange="saveSources()">
+</label>
+</div>
+
+<div class="section-title" style="margin-top:24px">Chaînes</div>
+<div class="card">
+<div class="card-header">
+<div class="card-title">Activer / Désactiver</div>
+</div>
+<div id="channels-container"></div>
+</div>
+
+<div class="section-title" style="margin-top:24px">Playlists</div>
+<div class="card">
+<div class="card-header">
+<div class="card-title">Gérer les playlists</div>
+<button class="btn btn-ghost" id="add-playlist-btn">➕ Créer</button>
+</div>
+<div id="playlists-container"></div>
+<div class="field" style="margin-top:12px">
+<input type="text" id="new-playlist-name" placeholder="Nom de la playlist">
+<button class="btn btn-primary" style="margin-top:8px;width:100%" id="create-playlist-btn">➕ Créer la playlist</button>
+</div>
+</div>
 </section>
 </main>
 <div class="footer">W Addon TV · <a href="/playlist.m3u" style="color:var(--accent)">Playlist M3U directe</a></div>
@@ -73,7 +146,6 @@ const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
 function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&","<":"<",">":">",'"':""","'":"'"}[c]));}
-function b64u(s){return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_");}
 
 function showToast(msg, type){
 const t = $("#toast");
@@ -90,29 +162,111 @@ function updateM3UDisplay(){
 $("#m3u-url").textContent = buildM3UUrl();
 }
 
-async function loadChannels(){
+function copyM3U(){
+navigator.clipboard.writeText(buildM3UUrl()).then(
+()=>showToast("✅ Lien M3U copié !","success"),
+()=>showToast("Erreur copie","error")
+);
+}
+
+async function api(path, opts={}){
+const code = $("#access-code").value.trim();
+if(!code) throw new Error("Code requis");
+const url = `${BASE}${path}?code=${encodeURIComponent(code)}`;
+const r = await fetch(url, {method: opts.method||"GET", headers: {"Content-Type":"application/json"}, body: opts.body?JSON.stringify(opts.body):undefined});
+if(r.status===401) throw new Error("Code invalide ou expiré");
+if(!r.ok) throw new Error("Erreur serveur: "+r.status);
+return r.json();
+}
+
+function showToast(msg, type){
+const t = $("#toast");
+t.textContent = msg;
+t.className = "toast show" + (type?" "+type:"");
+setTimeout(()=>t.classList.remove("show","success","error"),2500);
+}
+
+function buildM3UUrl(){
+return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
+}
+
+function updateM3UDisplay(){
+$("#m3u-url").textContent = buildM3UUrl();
+}
+
+// Auth
+$("#connect-btn").addEventListener("click", async ()=>{
+const code = $("#access-code").value.trim();
+if(!code){ showToast("Entrez un code","error"); return; }
 try{
-const r = await fetch(`${BASE}/api/channels`);
-if(!r.ok) throw new Error("Auth requise");
-const data = await r.json();
-renderChannels(data);
+await api("/api/wiseplay/config"); // test code
+$("#auth-section").style.display = "none";
+$("#config-section").style.display = "block";
+$("#access-code").disabled = true;
+$("#connect-btn").textContent = "✅ Connecté";
+$("#connect-btn").disabled = true;
+loadConfig();
+showToast("✅ Connecté","success");
 }catch(e){
-if(e.message !== "Auth requise") showToast("Erreur: "+e.message,"error");
-document.getElementById("channels-list").innerHTML = '<div class="empty">Connecte-toi via /dashboard d\'abord</div>';
+$("#auth-error").textContent = e.message;
+$("#auth-error").style.display = "block";
+showToast(e.message,"error");
+}
+});
+
+// Load config
+async function loadConfig(){
+try{
+const wp = await api("/api/wiseplay/config");
+renderSources(wp.sources||{});
+renderChannels(wp.channels||{});
+renderPlaylists(wp.playlists||{});
+updateM3UDisplay();
+}catch(e){
+showToast("Erreur chargement: "+e.message,"error");
 }
 }
 
-function renderChannels(channels){
-const list = document.getElementById("channels-list");
-const activeKey = localStorage.getItem("waddontv_active_channels") || "";
-const active = new Set(activeKey.split(",").filter(Boolean));
-if(!channels.length){
-list.innerHTML = '<div class="empty">Aucune chaîne</div>';
-return;
+function updateM3UDisplay(){
+$("#m3u-url").textContent = buildM3UUrl();
 }
-list.innerHTML = channels.map(c=>{
+
+function buildM3UUrl(){
+return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
+}
+
+function copyM3U(){
+navigator.clipboard.writeText(buildM3UUrl()).then(
+()=>showToast("✅ Lien M3U copié !","success"),
+()=>showToast("Erreur copie","error")
+);
+}
+
+// Sources
+function renderSources(src){
+$("#src-dlstreams").checked = src.dlstreams !== false;
+$("#src-vavoo").checked = src.vavoo === true;
+}
+async function saveSources(){
+const body = {sources: {dlstreams: $("#src-dlstreams").checked, vavoo: $("#src-vavoo").checked}};
+try{
+await api("/api/wiseplay/config", {method:"POST", body});
+showToast("Sources enregistrées","success");
+}catch(e){showToast(e.message,"error");}
+}
+$("#src-dlstreams").addEventListener("change", saveSources);
+$("#src-vavoo").addEventListener("change", saveSources);
+
+// Channels
+async function renderChannels(chMap){
+try{
+const r = await fetch(`${BASE}/api/channels`);
+if(!r.ok) throw new Error("Erreur chargement chaînes");
+const all = await r.json();
+const container = $("#channels-container");
+container.innerHTML = all.map(c=>{
 const id = c.id;
-const isActive = active.has(id);
+const active = (chMap||{})[id] !== false;
 const logo = c.logo || "";
 return `<div class="ch-row" data-id="${escapeHtml(id)}">
 <img class="ch-logo" src="${escapeHtml(logo)}" alt="" onerror="this.style.display='none'">
@@ -120,33 +274,132 @@ return `<div class="ch-row" data-id="${escapeHtml(id)}">
 <div class="ch-name">${escapeHtml(c.name)}</div>
 <div class="ch-meta">ID: ${escapeHtml(id)} · ${c.lang?.toUpperCase()||"FR"}</div>
 </div>
-<input type="checkbox" class="toggle" ${isActive?"checked":""} onchange="toggleChannel('${escapeHtml(id)}',this.checked)">
+<input type="checkbox" class="toggle" ${active?"checked":""} onchange="toggleChannel('${escapeHtml(id)}',this.checked)">
 </div>`;
 }).join("");
-list.querySelectorAll(".toggle").forEach(t=>{
+container.querySelectorAll(".toggle").forEach(t=>{
 t.addEventListener("change",e=>toggleChannel(e.target.closest(".ch-row").dataset.id,e.target.checked));
 });
+}catch(e){console.error(e);}
 }
-
 function toggleChannel(id, checked){
-let active = new Set((localStorage.getItem("waddontv_active_channels")||"").split(",").filter(Boolean));
-if(checked) active.add(id); else active.delete(id);
-localStorage.setItem("waddontv_active_channels", Array.from(active).join(","));
-showToast(checked?"✅ Activée":"⏸️ Désactivée", checked?"success":"");
+const chMap = JSON.parse(localStorage.getItem("waddontv_channels_pending")||"{}");
+chMap[id] = checked;
+localStorage.setItem("waddontv_channels_pending", JSON.stringify(chMap));
+saveChannels();
+}
+function saveChannels(){
+const chMap = JSON.parse(localStorage.getItem("waddontv_channels_pending")||"{}");
+const body = {channels: chMap};
+fetch(`${BASE}/api/wiseplay/config?code=${encodeURIComponent($("#access-code").value.trim())}`, {
+method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)
+}).then(r=>r.json()).then(d=>{
+showToast("Chaînes enregistrées","success");
+}).catch(e=>showToast("Erreur: "+e.message,"error"));
+}
+let saveTimer;
+function debounceSave(){
+clearTimeout(saveTimer);
+saveTimer = setTimeout(saveChannels, 800);
 }
 
-async function copyM3U(){
-navigator.clipboard.writeText(buildM3UUrl()).then(()=>showToast("✅ Lien M3U copié !","success")).catch(()=>showToast("Erreur","error"));
+// Playlists
+function renderPlaylists(plMap){
+const container = $("#playlists-container");
+const names = Object.keys(plMap||{});
+if(!names.length){
+container.innerHTML = '<div class="empty">Aucune playlist — créez-en une</div>';
+return;
+}
+container.innerHTML = names.map(name=>{
+const channels = plMap[name]||[];
+return `<div class="card" style="margin-top:12px">
+<div class="card-header">
+<div class="card-title">${escapeHtml(name)}</div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-ghost" onclick="editPlaylist('${escapeHtml(name)}')" style="font-size:11px;padding:6px 10px">✏️</button>
+<button class="btn btn-danger" onclick="deletePlaylist('${escapeHtml(name)}')" style="font-size:11px;padding:6px 10px">🗑️</button>
+</div>
+</div>
+<div style="padding:8px 16px 16px">
+<div class="ch-name" style="margin-bottom:8px">${channels.length} chaîne${channels.length>1?'s':''}</div>
+<div style="font-size:12px;color:var(--muted)">${channels.slice(0,5).join(", ")}${channels.length>5?"…":""}</div>
+</div>
+</div>`;
+}).join("");
+}
+async function addPlaylist(){
+const name = $("#new-playlist-name").value.trim();
+if(!name){ showToast("Nom requis","error"); return; }
+try{
+await api("/api/wiseplay/config", {method:"POST", body:{playlists: {[name]: []}}});
+$("#new-playlist-name").value = "";
+loadConfig();
+showToast("Playlist créée","success");
+}catch(e){showToast(e.message,"error");}
+}
+function deletePlaylist(name){
+if(!confirm(`Supprimer "${name}" ?`)) return;
+api("/api/wiseplay/config", {method:"POST", body:{playlists: {"_delete": name}}}).then(
+()=>{loadConfig(); showToast("Playlist supprimée","success");}
+).catch(e=>showToast(e.message,"error"));
+}
+$("#create-playlist-btn").addEventListener("click", addPlaylist);
+
+// M3U copy
+$("#copy-m3u-btn").addEventListener("click", copyM3U);
+function copyM3U(){
+navigator.clipboard.writeText(buildM3UUrl()).then(
+()=>showToast("✅ Lien M3U copié !","success"),
+()=>showToast("Erreur copie","error")
+);
+}
+function buildM3UUrl(){
+return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
+}
+function updateM3UDisplay(){
+$("#m3u-url").textContent = buildM3UUrl();
 }
 
-function saveLogo(id){
-const url = document.getElementById(`logo-${id}`).value.trim();
-// TODO: call API to save logo override
-showToast("Logo sauvegardé (à implémenter)","success");
+// Auth
+$("#connect-btn").addEventListener("click", async ()=>{
+const code = $("#access-code").value.trim();
+if(!code){ showToast("Entrez un code","error"); return; }
+try{
+await api("/api/wiseplay/config");
+$("#auth-section").style.display = "none";
+$("#config-section").style.display = "block";
+$("#access-code").disabled = true;
+$("#connect-btn").textContent = "✅ Connecté";
+$("#connect-btn").disabled = true;
+loadConfig();
+showToast("✅ Connecté","success");
+}catch(e){
+$("#auth-error").textContent = e.message;
+$("#auth-error").style.display = "block";
+showToast(e.message,"error");
+}
+});
+
+function showToast(msg, type){
+const t = $("#toast");
+t.textContent = msg;
+t.className = "toast show" + (type?" "+type:"");
+setTimeout(()=>t.classList.remove("show","success","error"),2500);
 }
 
+function buildM3UUrl(){
+return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
+}
+
+function updateM3UDisplay(){
+$("#m3u-url").textContent = buildM3UUrl();
+}
+
+function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&","<":"<",">":">",'"':""","'":"'"}[c]));}
+
+// Init
 updateM3UDisplay();
-loadChannels();
 </script>
 </body>
 </html>
