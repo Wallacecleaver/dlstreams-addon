@@ -155,7 +155,8 @@ setTimeout(()=>t.classList.remove("show","success","error"),2500);
 }
 
 function buildM3UUrl(){
-return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&vavoo=true`;
+const code = $("#access-code").value.trim();
+return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&code=${encodeURIComponent(code)}`;
 }
 
 function updateM3UDisplay(){
@@ -204,7 +205,7 @@ async function loadConfig(){
 try{
 const wp = await api("/api/wiseplay/config");
 renderSources(wp.sources||{});
-renderChannels(wp.channels||{});
+renderChannels(wp.channels||{}, wp.all_channels||[]);
 renderPlaylists(wp.playlists||{});
 updateM3UDisplay();
 }catch(e){
@@ -228,13 +229,13 @@ $("#src-dlstreams").addEventListener("change", saveSources);
 $("#src-vavoo").addEventListener("change", saveSources);
 
 // Channels
-async function renderChannels(chMap){
-try{
-const r = await fetch(`${BASE}/api/channels`);
-if(!r.ok) throw new Error("Erreur chargement chaînes");
-const all = await r.json();
+function renderChannels(chMap, allChannels){
 const container = $("#channels-container");
-container.innerHTML = all.map(c=>{
+if(!allChannels || !allChannels.length){
+container.innerHTML = '<div class="empty">Aucune chaîne disponible</div>';
+return;
+}
+container.innerHTML = allChannels.map(c=>{
 const id = c.id;
 const active = (chMap||{})[id] !== false;
 const logo = c.logo || "";
@@ -247,7 +248,6 @@ return `<div class="ch-row" data-id="${escapeHtml(id)}">
 <input type="checkbox" class="toggle" ${active?"checked":""} onchange="toggleChannel('${escapeHtml(id)}',this.checked)">
 </div>`;
 }).join("");
-}catch(e){console.error(e);}
 }
 function toggleChannel(id, checked){
 const chMap = JSON.parse(localStorage.getItem("waddontv_channels_pending")||"{}");
