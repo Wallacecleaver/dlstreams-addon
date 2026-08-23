@@ -1146,7 +1146,7 @@ async function apiFetch(url, opts) {
     if (r.status === 401) {
         $('#dashboard').classList.remove('active');
         $('#login-screen').style.display = 'flex';
-        toast('Session expirée, reconnecte-toi', 'error');
+        toast("Session expir\u00e9e, reconnecte-toi", "error");
         throw new Error('unauthenticated');
     }
     return r;
