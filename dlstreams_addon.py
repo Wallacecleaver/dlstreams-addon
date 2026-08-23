@@ -968,6 +968,36 @@ def _public_stats() -> dict:
         "manual_count": len(_manual_channels),
     }
 
+def _build_m3u(qs: dict) -> str:
+    base = qs.get("base", [""])[0] or ""
+    include_vavoo = qs.get("vavoo", ["true"])[0] == "true"
+    lines = ["#EXTM3U"]
+    all_ch = channels()
+    for ch in all_ch:
+        href = f"{base}/hls/{ch['id']}/index.m3u8"
+        grp = (ch.get("lang") or "other").upper()
+        logo = _CH_LOGO.get(str(ch.get("id")), "")
+        lines.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{logo}" group-title="{grp}",{ch["name"]}')
+        lines.append(href)
+    if include_vavoo:
+        vavoo_ch = vavoo_channels()
+        for ch in vavoo_ch:
+            enc = _b64u(ch["id"])
+            href = f"{base}/vhls?v={enc}"
+            grp = (ch.get("lang") or "other").upper()
+            logo = ch.get("logo", "")
+            lines.append(f'#EXTINF:-1 tvg-id="vavoo:{ch["id"]}" tvg-logo="{logo}" group-title="{grp}",{ch["name"]}')
+            lines.append(href)
+    st = _settings.get("stremio", {})
+    for cid, cc in st.get("custom_channels", {}).items():
+        for idx, stream_url in enumerate(cc.get("streams", [])):
+            href = f"{base}/hls/custom/{cid}/s{idx}/index.m3u8"
+            grp = "CUSTOM"
+            logo = cc.get("logo", "")
+            lines.append(f'#EXTINF:-1 tvg-id="custom:{cid}" tvg-logo="{logo}" group-title="{grp}",{cc.get("name", cid)}')
+            lines.append(href)
+    return "\n".join(lines)
+
 def _daily_totals() -> list[dict]:
     days: dict[str, int] = {}
     now = time.time()
@@ -1678,6 +1708,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/public-stats":
                 return self._send(200, json.dumps(_public_stats()).encode(), "application/json", True)
+            if path == "/playlist.m3u":
+                return self._send(200, _build_m3u(qs).encode("utf-8"), "application/vnd.apple.mpegurl", True)
             if path == "/api/stats":
                 if not self._require_auth():
                     return
