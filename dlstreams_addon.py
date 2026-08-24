@@ -1447,6 +1447,7 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(content_length) if content_length > 0 else b''
         u = urllib.parse.urlsplit(self.path)
         path = u.path
+        qs = urllib.parse.parse_qs(u.query)
         if path == "/api/auth":
             ip = self._client_ip()
             now = time.time()
@@ -1712,6 +1713,31 @@ class Handler(BaseHTTPRequestHandler):
                 _playlists_save()
                 return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
             return self._send(400, json.dumps({"success": False, "error": "action inconnue"}).encode(), "application/json")
+        if path == "/api/wiseplay/config":
+            code = qs.get("code", [""])[0]
+            stored_code = _settings.get("wiseplay", {}).get("access_code", "")
+            if not stored_code or code != stored_code:
+                return self._send(401, json.dumps({"success": False, "error": "Code invalide ou non configuré"}).encode(), "application/json")
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            changed = False
+            wp = _settings.setdefault("wiseplay", {})
+            if "channels" in data and isinstance(data["channels"], dict):
+                wp["channels"] = {str(k): bool(v) for k, v in data["channels"].items()}
+                changed = True
+            if "playlists" in data and isinstance(data["playlists"], dict):
+                wp["playlists"] = {str(k): [str(x) for x in v] for k, v in data["playlists"].items()}
+                changed = True
+            if "sources" in data and isinstance(data["sources"], dict):
+                for k in ("dlstreams", "vavoo"):
+                    if k in data["sources"] and isinstance(data["sources"][k], bool):
+                        wp.setdefault("sources", {})[k] = data["sources"][k]
+                        changed = True
+            if changed:
+                _settings_save()
+            return self._send(200, json.dumps(wp).encode(), "application/json")
         return self._send(404, b"not found", "text/plain")
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
@@ -1813,33 +1839,12 @@ class Handler(BaseHTTPRequestHandler):
                 stored_code = _settings.get("wiseplay", {}).get("access_code", "")
                 if not stored_code or code != stored_code:
                     return self._send(401, json.dumps({"success": False, "error": "Code invalide ou non configuré"}).encode(), "application/json")
-                if self.command == "GET":
-                    all_ch = channels() + vavoo_channels()
-                    wp = _settings.get("wiseplay", {})
-                    return self._send(200, json.dumps({
-                        **wp,
-                        "all_channels": all_ch
-                    }).encode(), "application/json")
-                try:
-                    data = json.loads(body) if body else {}
-                except Exception:
-                    data = {}
-                changed = False
-                wp = _settings.setdefault("wiseplay", {})
-                if "channels" in data and isinstance(data["channels"], dict):
-                    wp["channels"] = {str(k): bool(v) for k, v in data["channels"].items()}
-                    changed = True
-                if "playlists" in data and isinstance(data["playlists"], dict):
-                    wp["playlists"] = {str(k): [str(x) for x in v] for k, v in data["playlists"].items()}
-                    changed = True
-                if "sources" in data and isinstance(data["sources"], dict):
-                    for k in ("dlstreams", "vavoo"):
-                        if k in data["sources"] and isinstance(data["sources"][k], bool):
-                            wp.setdefault("sources", {})[k] = data["sources"][k]
-                            changed = True
-                if changed:
-                    _settings_save()
-                return self._send(200, json.dumps(wp).encode(), "application/json")
+                all_ch = channels() + vavoo_channels()
+                wp = _settings.get("wiseplay", {})
+                return self._send(200, json.dumps({
+                    **wp,
+                    "all_channels": all_ch
+                }).encode(), "application/json")
             if path == "/api/activity":
                 if not self._require_auth():
                     return
