@@ -3,142 +3,237 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Wiseplay Config — W Addon TV</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Wiseplay — W Addon TV</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0a0a0b;--surface:#111113;--surface2:#18181b;--border:rgba(255,255,255,.06);--accent:#e53e3e;--accent-dim:rgba(229,62,62,.08);--green:#48bb78;--text:#f0f0f0;--text2:#888;--muted:#666;--input-bg:#0a0a0b;--font-display:'Bebas Neue',sans-serif;--font-mono:'Rajdhani',monospace;--font-body:'DM Sans',sans-serif}
+:root{
+  --bg:#0a0a0b;--surface:#111113;--surface2:#18181b;--surface3:#1f1f23;--border:rgba(255,255,255,.06);
+  --accent:#e53e3e;--accent-dim:rgba(229,62,62,.08);--green:#48bb78;--error:#ef4444;
+  --text:#f0f0f0;--text2:#888;--muted:#666;--input-bg:#0a0a0b;--card-hover:rgba(255,255,255,.02);
+  --font-display:'Bebas Neue',sans-serif;--font-mono:'Rajdhani',monospace;--font-body:'DM Sans',sans-serif;
+}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:var(--font-body);min-height:100vh}
-.app{display:flex;flex-direction:column;min-height:100vh}
-header{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(10,10,11,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
-.brand{font-family:var(--font-display);font-size:22px;letter-spacing:1px;color:#fff}
-main{flex:1;padding:16px;max-width:720px;margin:0 auto;width:100%}
-.section{margin-bottom:24px}
-.section-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;font-weight:700}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+
+/* ---- Ecran de connexion (plein ecran, comme le dashboard) ---- */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;padding:20px}
+#login-screen::before{content:'';position:fixed;top:-200px;left:50%;transform:translateX(-50%);
+  width:600px;height:500px;background:radial-gradient(ellipse,rgba(229,62,62,.10) 0%,transparent 70%);pointer-events:none}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px 32px;width:100%;max-width:340px;
+  box-shadow:0 24px 80px rgba(0,0,0,.35);position:relative;z-index:1}
+.login-logo{width:60px;height:60px;margin:0 auto 14px;border-radius:16px;
+  background:linear-gradient(135deg,var(--accent),#ff7a59);display:grid;place-items:center;
+  font-size:26px;font-weight:800;color:#fff;box-shadow:0 8px 28px rgba(229,62,62,.4)}
+.login-title{font-family:var(--font-display);font-size:28px;font-weight:400;letter-spacing:1px;text-align:center;color:var(--text)}
+.login-sub{font-size:12px;color:var(--muted);text-align:center;margin:6px 0 24px;line-height:1.5}
 .field{margin-bottom:16px}
 .field label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600}
-.field input,.field select{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:var(--font-mono);font-size:14px;transition:border-color .2s}
-.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
-.field small{display:block;margin-top:6px;font-size:11px;color:var(--muted)}
-.field .hint{font-size:11px;color:var(--muted);margin-top:4px}
-.card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 8px;border-bottom:1px solid var(--border)}
-.card-title{font-size:15px;font-weight:800;color:var(--text);letter-spacing:.01em}
-.btn{display:flex;align-items:center;gap:6px;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;font-family:var(--font-body);cursor:pointer;border:none;transition:.2s}
-.btn-primary{background:var(--accent);color:#fff}
+.field input{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;
+  color:var(--text);font-family:var(--font-mono);font-size:15px;letter-spacing:1px;text-align:center;text-transform:uppercase;transition:border-color .2s}
+.field input:focus{outline:none;border-color:var(--accent)}
+.field input::placeholder{text-transform:none;letter-spacing:0;font-size:13px;color:var(--muted)}
+.field small{display:block;margin-top:8px;font-size:11px;color:var(--muted);text-align:center;line-height:1.5}
+.login-error{font-size:12px;color:var(--accent);text-align:center;margin-top:10px;padding:8px 12px;
+  background:rgba(229,62,62,.08);border:1px solid rgba(229,62,62,.2);border-radius:8px;display:none}
+.btn-primary{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:13px;
+  font-family:var(--font-body);font-size:14px;font-weight:700;cursor:pointer;transition:background .2s}
 .btn-primary:hover{background:#c53030}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+.shake{animation:shake .4s}
+
+/* ---- App (apres connexion) ---- */
+#app{display:none;flex-direction:column;min-height:100vh}
+#app.active{display:flex}
+header{position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:10px;padding:13px 16px;
+  background:rgba(10,10,11,.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.header-icon{width:32px;height:32px;border-radius:9px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),#ff7a59);display:grid;place-items:center;font-size:15px;font-weight:800;color:#fff}
+.header-text .brand{font-family:var(--font-display);font-size:19px;letter-spacing:.5px;color:#fff;line-height:1}
+.header-text .sub{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.header-reset{margin-left:auto;background:none;border:1px solid var(--border);color:var(--muted);
+  border-radius:7px;padding:6px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all .2s}
+.header-reset:hover{color:var(--accent);border-color:var(--accent)}
+
+main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
+.section{margin-bottom:22px}
+.section-title{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);text-transform:uppercase;
+  letter-spacing:1.2px;margin-bottom:10px;font-weight:700}
+
+/* ---- Hero M3U ---- */
+.hero{position:relative;overflow:hidden;border-radius:16px;padding:22px;
+  background:linear-gradient(150deg,rgba(229,62,62,.10),var(--surface) 55%);
+  border:1px solid rgba(229,62,62,.18)}
+.hero::after{content:'';position:absolute;top:-30%;right:-15%;width:220px;height:220px;border-radius:50%;
+  background:radial-gradient(circle,rgba(229,62,62,.16),transparent 70%);pointer-events:none}
+.hero-top{display:flex;align-items:center;gap:10px;position:relative;z-index:1;margin-bottom:14px}
+.hero-icon{font-size:20px}
+.hero-title{font-family:var(--font-display);font-size:20px;letter-spacing:.3px;color:var(--text)}
+.hero-desc{font-size:12px;color:var(--text2);margin:-8px 0 14px;position:relative;z-index:1;line-height:1.5}
+.m3u-box{position:relative;z-index:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:13px 15px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:12px}
+.hero .btn-primary{position:relative;z-index:1}
+
+/* ---- Cartes generiques ---- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;
+  border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(229,62,62,.04),rgba(229,62,62,0))}
+.card-title{font-size:14px;font-weight:800;color:var(--text)}
+.card-count{font-size:11px;color:var(--muted);font-weight:600}
+
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 15px;border-radius:9px;font-size:12px;font-weight:700;
+  font-family:var(--font-body);cursor:pointer;border:none;transition:.2s;white-space:nowrap}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 .btn-danger{background:rgba(239,68,68,.12);border:1px solid var(--error);color:var(--error)}
 .btn-danger:hover{background:var(--error);color:#fff}
-.m3u-box{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:16px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-.ch-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);transition:background .15s}
-.ch-row:last-child{border-bottom:none}
-.ch-row:hover{background:var(--surface2)}
-.ch-logo{width:40px;height:22px;border-radius:4px;object-fit:cover;background:#000;flex-shrink:0}
-.ch-info{flex:1;min-width:0}
-.ch-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ch-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px}
-.toggle{width:44px;height:26px;appearance:none;-webkit-appearance:none;background:var(--surface2);border:1px solid var(--border);border-radius:20px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+
+/* ---- Sources ---- */
+.src-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.src-row:last-child{border-bottom:none}
+.src-icon{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:16px;flex-shrink:0;background:var(--surface2)}
+.src-name{font-size:14px;font-weight:700;color:var(--text)}
+.src-hint{font-size:11px;color:var(--muted);margin-top:2px}
+
+.toggle{width:44px;height:26px;appearance:none;-webkit-appearance:none;background:var(--surface2);border:1px solid var(--border);
+  border-radius:20px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
 .toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:all .2s}
 .toggle:checked{background:var(--accent-dim);border-color:rgba(229,62,62,.4)}
 .toggle:checked::after{left:22px;background:var(--accent)}
-.m3u-box{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:16px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-.ch-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);transition:background .15s}
+
+/* ---- Chaines ---- */
+.ch-search{position:relative;padding:12px 16px;border-bottom:1px solid var(--border)}
+.ch-search .ico{position:absolute;left:28px;top:50%;transform:translateY(-50%);font-size:12px;opacity:.5;pointer-events:none}
+.ch-search input{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:9px;
+  padding:9px 12px 9px 30px;color:var(--text);font-size:13px;font-family:var(--font-body)}
+.ch-search input:focus{outline:none;border-color:var(--accent)}
+.ch-list{max-height:420px;overflow-y:auto}
+.ch-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);transition:background .15s}
 .ch-row:last-child{border-bottom:none}
-.ch-row:hover{background:var(--surface2)}
-.ch-logo{width:40px;height:22px;border-radius:4px;object-fit:cover;background:#000;flex-shrink:0}
+.ch-row:hover{background:var(--card-hover)}
+.ch-logo{width:42px;height:24px;border-radius:5px;object-fit:cover;background:var(--surface2);flex-shrink:0}
 .ch-info{flex:1;min-width:0}
-.ch-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ch-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:2px}
-.toggle{width:44px;height:26px;appearance:none;-webkit-appearance:none;background:var(--surface2);border:1px solid var(--border);border-radius:20px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
-.toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:all .2s}
-.toggle:checked{background:var(--accent-dim);border-color:rgba(229,62,62,.4)}
-.toggle:checked::after{left:22px;background:var(--accent)}
-.m3u-box{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:16px}
-.empty{text-align:center;padding:32px;color:var(--muted);font-size:13px}
-.footer{padding:24px 16px;text-align:center;color:var(--muted);font-size:12px}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface);border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;opacity:0;transition:all .25s;z-index:999}
+.ch-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-meta{font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;letter-spacing:.3px}
+
+/* ---- Playlists ---- */
+.pl-create{display:flex;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.pl-create input{flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;
+  color:var(--text);font-size:13px;font-family:var(--font-body)}
+.pl-create input:focus{outline:none;border-color:var(--accent)}
+.pl-item{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border)}
+.pl-item:last-child{border-bottom:none}
+.pl-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#ff7a59);
+  display:grid;place-items:center;font-size:14px;flex-shrink:0}
+.pl-info{flex:1;min-width:0}
+.pl-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-meta{font-size:11px;color:var(--muted);margin-top:1px}
+.pl-actions{display:flex;gap:6px;flex-shrink:0}
+.pl-actions .btn{padding:7px 10px;font-size:11px}
+
+.empty{text-align:center;padding:34px 20px;color:var(--muted);font-size:13px}
+.empty .ico{font-size:26px;opacity:.4;margin-bottom:8px}
+
+.footer{padding:22px 16px 30px;text-align:center;color:var(--muted);font-size:11px}
+.footer a{color:var(--accent);text-decoration:none}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface);
+  border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;
+  opacity:0;transition:all .25s;z-index:999;box-shadow:0 8px 32px rgba(0,0,0,.3)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.success{border-color:var(--green)}
 .toast.error{border-color:var(--error)}
+
 @media (max-width:480px){
-  header{padding:12px}
-  main{padding:12px}
+  main{padding:14px 12px 32px}
+  .login-card{padding:30px 24px}
 }
 </style>
 </head>
 <body>
-<div class="app">
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">▶</div>
+    <div class="login-title">Wiseplay</div>
+    <div class="login-sub">Choisis tes chaînes et récupère<br>ton lien M3U personnel</div>
+    <div class="field">
+      <label for="access-code">Code d'accès</label>
+      <input type="text" id="access-code" placeholder="Entre ton code" autocomplete="off" onkeydown="if(event.key==='Enter')$('#connect-btn').click()">
+      <small>Le code t'a été envoyé par la personne qui gère l'addon</small>
+    </div>
+    <button class="btn-primary" id="connect-btn">🔐 Se connecter</button>
+    <div class="login-error" id="auth-error"></div>
+  </div>
+</div>
+
+<div id="app">
 <header>
-<div class="brand">Wiseplay Config</div>
+  <div class="header-icon">▶</div>
+  <div class="header-text">
+    <div class="brand">Wiseplay</div>
+    <div class="sub">W Addon TV</div>
+  </div>
+  <button class="header-reset" id="reset-btn">↪ Changer de code</button>
 </header>
 <main>
-<!-- Auth Section -->
-<section class="section" id="auth-section">
-<div class="section-title">Connexion</div>
-<div class="card">
-<div class="field">
-<label for="access-code">Code d'accès</label>
-<input type="text" id="access-code" placeholder="Entrez votre code" autocomplete="off">
-<small>Défini dans le dashboard principal → Réglages → Wiseplay</small>
-</div>
-<button class="btn btn-primary" style="width:100%;margin-top:8px" id="connect-btn">🔐 Se connecter</button>
-<div class="empty" id="auth-error" style="display:none;color:var(--error);margin-top:8px"></div>
-</div>
-</section>
 
-<!-- Config Section (hidden until auth) -->
-<section class="section" id="config-section" style="display:none">
-<div class="section-title">Lien M3U pour Wiseplay</div>
-<div class="card">
-<div class="m3u-box" id="m3u-url">Génération…</div>
-<button class="btn btn-primary" style="width:100%" id="copy-m3u-btn">📋 Copier le lien M3U</button>
-</div>
+  <div class="section">
+    <div class="hero">
+      <div class="hero-top"><span class="hero-icon">🔗</span><span class="hero-title">Ton lien M3U</span></div>
+      <div class="hero-desc">Colle ce lien dans ton application de lecture (VLC, Wiseplay, IPTV Smarters…). Il reflète toujours les chaînes que tu as activées ci-dessous.</div>
+      <div class="m3u-box" id="m3u-url">Génération…</div>
+      <button class="btn-primary" id="copy-m3u-btn">📋 Copier le lien M3U</button>
+    </div>
+  </div>
 
-<div class="section-title" style="margin-top:24px">Sources</div>
-<div class="card">
-<label class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-<div>
-<div style="font-weight:600">dlstreams</div>
-<div class="hint">Chaînes Canal+, beIN, Ligue 1, DAZN</div>
-</div>
-<input type="checkbox" id="src-dlstreams" class="toggle" onchange="saveSources()">
-</label>
-<label class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-<div>
-<div style="font-weight:600">Vavoo</div>
-<div class="hint">Catalogue Vavoo (plus de chaînes, moins stable)</div>
-</div>
-<input type="checkbox" id="src-vavoo" class="toggle" onchange="saveSources()">
-</label>
-</div>
+  <div class="section">
+    <div class="section-title">📡 Sources</div>
+    <div class="card">
+      <div class="src-row">
+        <div class="src-icon">📺</div>
+        <div style="flex:1">
+          <div class="src-name">W Addon TV</div>
+          <div class="src-hint">Canal+, beIN Sports, Ligue 1, DAZN…</div>
+        </div>
+        <input type="checkbox" id="src-dlstreams" class="toggle" onchange="saveSources()">
+      </div>
+      <div class="src-row">
+        <div class="src-icon">🌍</div>
+        <div style="flex:1">
+          <div class="src-name">Vavoo</div>
+          <div class="src-hint">Catalogue élargi, moins stable</div>
+        </div>
+        <input type="checkbox" id="src-vavoo" class="toggle" onchange="saveSources()">
+      </div>
+    </div>
+  </div>
 
-<div class="section-title" style="margin-top:24px">Chaînes</div>
-<div class="card">
-<div class="card-header">
-<div class="card-title">Activer / Désactiver</div>
-</div>
-<div id="channels-container"></div>
-</div>
+  <div class="section">
+    <div class="section-title">📺 Chaînes</div>
+    <div class="card">
+      <div class="ch-search">
+        <span class="ico">🔍</span>
+        <input type="search" id="ch-filter" placeholder="Filtrer les chaînes…" oninput="renderChannels(_lastChMap,_lastAllChannels)">
+      </div>
+      <div class="ch-list" id="channels-container"><div class="empty">Chargement…</div></div>
+    </div>
+  </div>
 
-<div class="section-title" style="margin-top:24px">Playlists</div>
-<div class="card">
-<div class="card-header">
-<div class="card-title">Gérer les playlists</div>
-<button class="btn btn-ghost" id="add-playlist-btn">➕ Créer</button>
-</div>
-<div id="playlists-container"></div>
-<div class="field" style="margin-top:12px">
-<input type="text" id="new-playlist-name" placeholder="Nom de la playlist">
-<button class="btn btn-primary" style="margin-top:8px;width:100%" id="create-playlist-btn">➕ Créer la playlist</button>
-</div>
-</div>
-</section>
+  <div class="section">
+    <div class="section-title">🎵 Playlists</div>
+    <div class="card">
+      <div class="pl-create">
+        <input type="text" id="new-playlist-name" placeholder="Nom de la playlist…">
+        <button class="btn btn-ghost" id="create-playlist-btn">➕ Créer</button>
+      </div>
+      <div id="playlists-container"><div class="empty">Chargement…</div></div>
+    </div>
+  </div>
+
 </main>
-<div class="footer">W Addon TV · <a href="/playlist.m3u" style="color:var(--accent)">Playlist M3U directe</a></div>
+<div class="footer">W Addon TV · <a href="/playlist.m3u">Playlist M3U directe</a></div>
+</div>
+
 <div class="toast" id="toast">Copié !</div>
 <script>
 const BASE = location.origin;
@@ -181,24 +276,46 @@ return r.json();
 }
 
 // Auth
-$("#connect-btn").addEventListener("click", async ()=>{
+function doConnect(){
 const code = $("#access-code").value.trim();
-if(!code){ showToast("Entrez un code","error"); return; }
-try{
-await api("/api/wiseplay/config"); // test code
-$("#auth-section").style.display = "none";
-$("#config-section").style.display = "block";
-$("#access-code").disabled = true;
-$("#connect-btn").textContent = "✅ Connecté";
+const err = $("#auth-error");
+err.style.display = "none";
+if(!code){ showToast("Entre un code","error"); return; }
 $("#connect-btn").disabled = true;
+$("#connect-btn").textContent = "⏳ Connexion…";
+api("/api/wiseplay/config").then(()=>{
+localStorage.setItem("wiseplay_code", code);
+$("#login-screen").style.display = "none";
+$("#app").classList.add("active");
 loadConfig();
 showToast("✅ Connecté","success");
-}catch(e){
-$("#auth-error").textContent = e.message;
-$("#auth-error").style.display = "block";
-showToast(e.message,"error");
-}
+}).catch(e=>{
+err.textContent = e.message;
+err.style.display = "block";
+const card = document.querySelector(".login-card");
+card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake");
+}).finally(()=>{
+$("#connect-btn").disabled = false;
+$("#connect-btn").textContent = "🔐 Se connecter";
 });
+}
+$("#connect-btn").addEventListener("click", doConnect);
+$("#reset-btn").addEventListener("click", ()=>{
+localStorage.removeItem("wiseplay_code");
+$("#app").classList.remove("active");
+$("#login-screen").style.display = "flex";
+$("#access-code").value = "";
+$("#access-code").focus();
+});
+
+// Reconnexion auto si un code est déjà enregistré sur cet appareil
+(function(){
+const saved = localStorage.getItem("wiseplay_code");
+if(saved){
+$("#access-code").value = saved;
+doConnect();
+}
+})();
 
 // Load config
 async function loadConfig(){
@@ -225,17 +342,24 @@ await api("/api/wiseplay/config", {method:"POST", body});
 showToast("Sources enregistrées","success");
 }catch(e){showToast(e.message,"error");}
 }
-$("#src-dlstreams").addEventListener("change", saveSources);
-$("#src-vavoo").addEventListener("change", saveSources);
 
 // Channels
+let _lastChMap = {}, _lastAllChannels = [];
 function renderChannels(chMap, allChannels){
+_lastChMap = chMap || {};
+_lastAllChannels = allChannels || [];
 const container = $("#channels-container");
 if(!allChannels || !allChannels.length){
-container.innerHTML = '<div class="empty">Aucune chaîne disponible</div>';
+container.innerHTML = '<div class="empty"><div class="ico">📭</div>Aucune chaîne disponible</div>';
 return;
 }
-container.innerHTML = allChannels.map(c=>{
+const q = ($("#ch-filter").value || "").toLowerCase().trim();
+const list = q ? allChannels.filter(c => (c.name||"").toLowerCase().includes(q)) : allChannels;
+if(!list.length){
+container.innerHTML = '<div class="empty"><div class="ico">🔍</div>Aucun résultat</div>';
+return;
+}
+container.innerHTML = list.map(c=>{
 const id = c.id;
 const active = (chMap||{})[id] !== false;
 const logo = c.logo || "";
@@ -243,7 +367,7 @@ return `<div class="ch-row" data-id="${escapeHtml(id)}">
 <img class="ch-logo" src="${escapeHtml(logo)}" alt="" onerror="this.style.display='none'">
 <div class="ch-info">
 <div class="ch-name">${escapeHtml(c.name)}</div>
-<div class="ch-meta">ID: ${escapeHtml(id)} · ${c.lang?.toUpperCase()||"FR"}</div>
+<div class="ch-meta">${c.lang?.toUpperCase()||"FR"}</div>
 </div>
 <input type="checkbox" class="toggle" ${active?"checked":""} onchange="toggleChannel('${escapeHtml(id)}',this.checked)">
 </div>`;
@@ -272,22 +396,20 @@ currentPlaylists = plMap || {};
 const container = $("#playlists-container");
 const names = Object.keys(currentPlaylists);
 if(!names.length){
-container.innerHTML = '<div class="empty">Aucune playlist — créez-en une</div>';
+container.innerHTML = '<div class="empty"><div class="ico">🎵</div>Aucune playlist — crée-en une ci-dessous</div>';
 return;
 }
 container.innerHTML = names.map(name=>{
 const channels = currentPlaylists[name]||[];
-return `<div class="card" style="margin-top:12px">
-<div class="card-header">
-<div class="card-title">${escapeHtml(name)}</div>
-<div style="display:flex;gap:8px">
-<button class="btn btn-ghost" onclick="editPlaylist('${escapeHtml(name)}')" style="font-size:11px;padding:6px 10px">✏️</button>
-<button class="btn btn-danger" onclick="deletePlaylist('${escapeHtml(name)}')" style="font-size:11px;padding:6px 10px">🗑️</button>
+return `<div class="pl-item">
+<div class="pl-icon">🎵</div>
+<div class="pl-info">
+<div class="pl-name">${escapeHtml(name)}</div>
+<div class="pl-meta">${channels.length} chaîne${channels.length>1?'s':''}</div>
 </div>
-</div>
-<div style="padding:8px 16px 16px">
-<div class="ch-name" style="margin-bottom:8px">${channels.length} chaîne${channels.length>1?'s':''}</div>
-<div style="font-size:12px;color:var(--muted)">${channels.slice(0,5).join(", ")}${channels.length>5?"…":""}</div>
+<div class="pl-actions">
+<button class="btn btn-ghost" onclick="editPlaylist('${escapeHtml(name)}')">✏️</button>
+<button class="btn btn-danger" onclick="deletePlaylist('${escapeHtml(name)}')">🗑️</button>
 </div>
 </div>`;
 }).join("");
@@ -318,13 +440,10 @@ api("/api/wiseplay/config", {method:"POST", body:{playlists: {"_delete": name}}}
 ).catch(e=>showToast(e.message,"error"));
 }
 $("#create-playlist-btn").addEventListener("click", addPlaylist);
-$("#add-playlist-btn").addEventListener("click", ()=> $("#new-playlist-name").focus());
+$("#new-playlist-name").addEventListener("keydown", e=>{ if(e.key==="Enter") addPlaylist(); });
 
 // M3U copy
 $("#copy-m3u-btn").addEventListener("click", copyM3U);
-
-// Init
-updateM3UDisplay();
 </script>
 </body>
 </html>
