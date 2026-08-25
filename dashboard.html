@@ -8,14 +8,14 @@
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
 <style>
   :root {
-    --bg:#0a0a0b; --surface:#111113; --surface2:#18181b; --border:rgba(255,255,255,0.06);
+    --bg:#0a0a0b; --surface:#111113; --surface2:#18181b; --surface3:#1f1f23; --border:rgba(255,255,255,0.06);
     --accent:#e53e3e; --accent-dim:rgba(229,62,62,0.08); --green:#48bb78;
     --text:#f0f0f0; --text2:#888; --muted:#666; --input-bg:#0a0a0b; --card-hover:rgba(255,255,255,0.02);
     --warn:#f59e0b; --error:#ef4444; --info:#60a5fa;
     --font-display:'Bebas Neue',sans-serif; --font-mono:'Rajdhani',monospace; --font-body:'DM Sans',sans-serif;
   }
   body.light {
-    --bg:#f1f5f9; --surface:#ffffff; --surface2:#f8fafc; --border:rgba(0,0,0,0.08);
+    --bg:#f1f5f9; --surface:#ffffff; --surface2:#f8fafc; --surface3:#f1f5f9; --border:rgba(0,0,0,0.08);
     --accent:#dc2626; --accent-dim:rgba(220,38,38,0.08); --green:#38a169;
     --text:#0f172a; --text2:#475569; --muted:#94a3b8; --input-bg:#f8fafc; --card-hover:rgba(0,0,0,0.02);
     --info:#2563eb;
@@ -102,6 +102,7 @@
   .btn-add:hover { background:var(--accent); color:#fff; }
   .btn-outline-sm { background:none; border:1px solid var(--border); color:var(--text2); }
   .btn-outline-sm:hover { color:var(--text); border-color:var(--text2); }
+  .btn-outline-sm:disabled { opacity:.5; cursor:not-allowed; }
 
   .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
   .stat-card { position:relative; overflow:hidden; border-radius:16px; padding:18px 20px;
@@ -138,19 +139,6 @@
   .ov-chart { width:100%; height:auto; display:block; }
   .ov-chart-grid { stroke:var(--border); stroke-width:1; stroke-dasharray:3 5; }
   .ov-chart-xlabel { font-size:9px; fill:var(--muted); font-family:var(--font-body); }
-  .ov-split { display:flex; align-items:center; gap:24px; padding:8px 4px; }
-  .ov-donut { width:132px; height:132px; flex-shrink:0; }
-  .ov-donut-total { font-size:20px; font-weight:700; fill:var(--text); font-family:var(--font-mono); }
-  .ov-donut-sub { font-size:8px; fill:var(--muted); text-transform:uppercase; letter-spacing:1px; font-weight:700; font-family:var(--font-body); }
-  .ov-split-legend { display:flex; flex-direction:column; gap:10px; }
-  .ov-legend-item { display:flex; align-items:center; gap:9px; font-size:13px; color:var(--text2); font-weight:600; }
-  .ov-legend-item b { margin-left:auto; font-family:var(--font-mono); font-size:16px; color:var(--text); }
-  .ov-legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
-  .chart-bar-row { display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:12px; }
-  .chart-bar-row .chart-label { font-size:13px; color:var(--text2); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .chart-bar-row .chart-bar { height:18px; background:var(--surface2); border-radius:6px; overflow:hidden; }
-  .chart-bar-row .chart-fill { height:100%; border-radius:6px; width:0; background:var(--accent); opacity:.85; transition:width .8s cubic-bezier(.22,1,.36,1); }
-  .chart-bar-row .chart-count { font-size:12px; color:var(--text2); text-align:right; font-family:var(--font-mono); }
 
   .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-bottom:20px; }
   .card-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border);
@@ -166,14 +154,12 @@
   .search-bar select:disabled { opacity:.45; cursor:not-allowed; }
   .search-bar select { background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:9px 12px;
     color:var(--text); cursor:pointer; font-family:var(--font-body); font-size:13px; }
-  /* Sélecteur de source (segmented) */
-  .tabs { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:3px; }
+  .tabs { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:3px; flex-wrap:wrap; }
   .tab { border:none; background:transparent; color:var(--muted); font-size:12px; font-weight:800;
     padding:7px 16px; border-radius:8px; cursor:pointer; font-family:var(--font-body); transition:all .15s; letter-spacing:.2px; }
   .tab:hover { color:var(--text); }
   .tab.active { background:var(--accent); color:#fff; box-shadow:0 2px 10px rgba(229,62,62,.35); }
 
-  /* Barre de recherche catalogue */
   .catalog-search { position:relative; flex:1; min-width:220px; }
   .catalog-search .search-ico { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.55; pointer-events:none; }
   .catalog-search input[type="search"] { width:100%; background:var(--input-bg); border:1px solid var(--border);
@@ -189,7 +175,6 @@
   .channel-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; }
   .list-count { font-size:12px; color:var(--muted); font-weight:600; }
 
-  /* Cartes chaînes (vignette poster/logo + nom) */
   .chan-card { display:block; border-radius:14px; border:1px solid var(--border); background:var(--surface);
     overflow:hidden; text-decoration:none; color:var(--text); cursor:pointer;
     transition:transform .18s cubic-bezier(.22,1,.36,1), border-color .18s, box-shadow .18s; }
@@ -216,7 +201,6 @@
   .fav-empty { grid-column:1/-1; text-align:center; padding:26px; color:var(--muted); font-size:13px; }
   .fav-empty a { color:var(--accent); }
 
-/* Sources manuelles */
   .manual-channels-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin-top:16px; }
   .manual-channel-card { display:flex; flex-direction:column; background:var(--surface2); border:1px solid var(--border);
     border-radius:12px; overflow:hidden; text-decoration:none; color:var(--text); transition:all .18s; }
@@ -273,8 +257,11 @@
   .player-close:hover { background:var(--surface2); color:var(--text); }
   .player-body { padding:20px; }
   .player-frame { width:100%; aspect-ratio:16/9; background:#000; border-radius:8px; border:none; }
+  .player-status { font-size:12px; color:var(--text2); margin-top:10px; padding:8px 12px; background:var(--surface2); border-radius:8px; display:none; }
+  .player-status.show { display:block; }
+  .player-status.ok { color:var(--green); }
+  .player-status.ko { color:var(--error); }
 
-  /* LOGS — cartes propres */
   .logs-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding-bottom:8px; border-bottom:1px solid var(--border); }
   .logs-stats { display:flex; align-items:center; gap:12px; margin-right:auto; }
   .log-stat { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
@@ -321,32 +308,6 @@
   .logs-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; color:var(--muted); text-align:center; }
   .logs-empty .icon { font-size:36px; opacity:.4; margin-bottom:10px; }
 
-  /* Stremio table */
-  .stremio-table { display:flex; flex-direction:column; gap:6px; }
-  .stremio-row { display:grid; grid-template-columns: 80px 1fr 1fr auto; gap:10px; align-items:center;
-    padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; }
-  .stremio-row-head { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
-    background:var(--surface3); border:1px solid var(--border); }
-  .stremio-cell { display:flex; align-items:center; gap:8px; }
-  .stremio-cell input { flex:1; background:var(--input-bg); border:1px solid var(--border); border-radius:6px;
-    padding:8px 10px; color:var(--text); font-size:12px; font-family:var(--font-body); }
-  .stremio-cell input:focus { outline:none; border-color:var(--accent); }
-  .stremio-cell .stremio-del { padding:6px 10px; background:rgba(239,68,68,.1); color:var(--error); border:1px solid var(--error);
-    border-radius:6px; cursor:pointer; font-size:12px; transition:all .15s; }
-  .stremio-cell .stremio-del:hover { background:rgba(239,68,68,.2); }
-  .stremio-empty { text-align:center; color:var(--muted); padding:20px; font-size:13px; }
-
-  /* Stremio channel editor table */
-  .stremio-ch-table { display:flex; flex-direction:column; gap:4px; }
-  .stremio-ch-row { display:grid; grid-template-columns: 60px 1fr 100px 120px 160px 80px; gap:10px; align-items:center;
-    padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
-    transition:background .15s; }
-  .stremio-ch-row:hover { background:var(--card-hover); }
-  .stremio-ch-head { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
-    background:var(--surface3); border:1px solid var(--border); }
-  .stremio-ch-row img { border-radius:4px; }
-  .stremio-ch-row .btn-outline-sm { padding:4px 10px; font-size:11px; height:auto; }
-
   /* TV Channels table */
   .tv-ch-table { display:flex; flex-direction:column; gap:4px; }
   .tv-ch-row { display:grid; grid-template-columns: 50px 1fr 100px 90px 90px 80px; gap:10px; align-items:center;
@@ -363,8 +324,8 @@
   .tv-stream.missing { color:var(--muted); font-size:11px; }
   .tv-name.custom { color:var(--accent); font-weight:700; }
   .tv-name.auto { color:var(--text2); }
+  .tv-empty { text-align:center; color:var(--muted); padding:30px; font-size:13px; }
 
-  /* Generic modal */
   .modal { position:fixed; top:0; left:0; right:0; bottom:0;
     background:rgba(0,0,0,0.6); z-index:1000;
     display:none; align-items:center; justify-content:center; padding:20px; }
@@ -380,14 +341,13 @@
   .modal-close:hover { background:var(--surface2); color:var(--text); }
   .modal-body { padding:20px; max-height:70vh; overflow-y:auto; }
 
-  /* TV Modal */
   .tv-modal { max-width:560px; }
   .form-row { margin-bottom:14px; }
   .form-row label { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
-  .form-row input { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-size:13px; }
-  .form-row input:focus { outline:none; border-color:var(--accent); }
+  .form-row input, .form-row textarea, .form-row select { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-size:13px; font-family:var(--font-body); }
+  .form-row input:focus, .form-row textarea:focus, .form-row select:focus { outline:none; border-color:var(--accent); }
   .form-row input[readonly] { background:var(--surface2); color:var(--text2); }
-  .form-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; padding-top:16px; border-top:1px solid var(--border); }
+  .form-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; padding-top:16px; border-top:1px solid var(--border); flex-wrap:wrap; }
 
   .update-time { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; white-space:nowrap; font-weight:600; }
   .update-time .spinner { width:13px; height:13px; border:2px solid var(--border);
@@ -409,29 +369,12 @@
   .toast.error { border-color:var(--error); }
   .toast.warn { border-color:var(--warn); }
 
-  footer { margin-top:40px; color:var(--muted); font-size:12px; text-align:center; }
-
-  /* Raccourcis & Liens sidebar */
-  .nav-shortcut { display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:8px;
-    font-size:12px; font-weight:600; color:var(--text2); cursor:pointer; margin-bottom:2px;
-    border:none; background:none; width:100%; text-align:left; font-family:var(--font-body); transition:all .15s; }
-  a.nav-shortcut { text-decoration:none; }
-  .nav-shortcut:hover { background:var(--surface2); color:var(--text); }
-  .nav-shortcut.active { background:var(--surface2); color:var(--text); box-shadow: inset 2px 0 0 var(--accent); }
-  .nav-shortcut .sc-ico { width:20px; text-align:center; flex-shrink:0; font-size:13px; }
-  .nav-shortcut .sc-txt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .nav-shortcut .sc-count { font-size:10px; font-weight:800; color:var(--muted); background:var(--surface2);
-    border:1px solid var(--border); border-radius:20px; padding:1px 7px; font-family:var(--font-mono); flex-shrink:0; }
-  .nav-shortcut.active .sc-count { color:var(--accent); border-color:rgba(229,62,62,.35); background:rgba(229,62,62,.08); }
-
-  /* Sélecteur de plage du graphique trafic */
   .chart-range { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; }
   .range-btn { border:none; background:transparent; color:var(--muted); font-size:11px; font-weight:800;
     padding:5px 11px; border-radius:6px; cursor:pointer; font-family:var(--font-body); transition:all .15s; }
   .range-btn:hover { color:var(--text); }
   .range-btn.active { background:var(--accent); color:#fff; }
 
-  /* Top chaînes */
   .top-row { display:grid; grid-template-columns:30px minmax(0,1fr) 1.2fr 44px; align-items:center; gap:12px;
     padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
   .top-row:last-child { border-bottom:none; }
@@ -443,7 +386,6 @@
   .top-plays { font-size:12px; color:var(--text2); text-align:right; font-family:var(--font-mono); font-weight:700; }
   .top-time { font-size:12px; color:var(--text2); font-weight:600; }
 
-  /* État des services */
   .svc-row { display:flex; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid var(--border); }
   .svc-row:last-child { border-bottom:none; }
   .svc-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
@@ -452,13 +394,8 @@
   .svc-dot.ko { background:var(--error); box-shadow:0 0 8px rgba(239,68,68,.6); }
   .svc-name { font-size:13px; font-weight:600; color:var(--text); flex-shrink:0; }
   .svc-desc { font-size:12px; color:var(--muted); margin-left:auto; text-align:right; }
-  .svc-count { font-family:var(--font-mono); font-weight:800; }
-  .svc-count.ok { color:var(--green); }
-  .svc-count.part { color:var(--warn); }
-  .svc-count.ko { color:var(--error); }
   .svc-foot { border-top:1px solid var(--border); }
 
-  /* En ce moment (lectures live) */
   .live-item { display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid var(--border);
     text-decoration:none; color:var(--text); }
   .live-item:last-child { border-bottom:none; }
@@ -467,9 +404,7 @@
     animation:pulse 1.6s infinite; flex-shrink:0; }
   .live-name { flex:1; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .live-time { font-size:11px; color:var(--muted); font-family:var(--font-mono); flex-shrink:0; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
-  /* Programmes en cours (mini-EPG) */
   .now-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
   .now-card { display:flex; flex-direction:column; background:var(--surface2); border:1px solid var(--border);
     border-radius:12px; overflow:hidden; text-decoration:none; color:var(--text); transition:all .18s; }
@@ -492,7 +427,6 @@
   .now-next { font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .now-next b { color:var(--accent); font-weight:700; }
 
-  /* Page Système */
   .sys-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
   .sys-row { display:flex; justify-content:space-between; gap:12px; padding:10px 14px;
     background:var(--surface2); border:1px solid var(--border); border-radius:10px; }
@@ -503,6 +437,32 @@
     font-size:13px; font-weight:700; cursor:pointer; font-family:var(--font-body); transition:all .2s; }
   .btn-danger:hover { background:var(--error); color:#fff; }
   .btn-danger:disabled { opacity:.6; cursor:not-allowed; }
+
+  /* Wiseplay settings card (Réglages) */
+  .wp-code-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .wp-code-row input { flex:1; min-width:160px; }
+  .wp-status { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:5px 12px; border-radius:20px; }
+  .wp-status.on { color:var(--green); background:rgba(72,187,120,.1); border:1px solid rgba(72,187,120,.35); }
+  .wp-status.off { color:var(--muted); background:var(--surface2); border:1px solid var(--border); }
+  .wp-link-box { display:flex; align-items:center; gap:8px; background:var(--input-bg); border:1px solid var(--border);
+    border-radius:8px; padding:9px 12px; margin-top:10px; font-family:var(--font-mono); font-size:12px; color:var(--text2);
+    overflow-x:auto; white-space:nowrap; }
+
+  /* Sub-tabs used inside Stremio page */
+  .subnav { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+    padding:4px; margin-bottom:20px; flex-wrap:wrap; }
+  .subnav-item { border:none; background:transparent; color:var(--text2); font-size:12px; font-weight:700;
+    padding:9px 15px; border-radius:8px; cursor:pointer; font-family:var(--font-body); transition:all .15s; }
+  .subnav-item:hover { color:var(--text); }
+  .subnav-item.active { background:var(--accent); color:#fff; box-shadow:0 2px 10px rgba(229,62,62,.35); }
+  .subpage { display:none; }
+  .subpage.active { display:block; }
+
+  /* Batch test progress */
+  .batch-progress { display:none; align-items:center; gap:10px; font-size:12px; color:var(--text2); }
+  .batch-progress.show { display:flex; }
+  .batch-bar { width:120px; height:6px; background:var(--surface2); border-radius:6px; overflow:hidden; }
+  .batch-bar-fill { height:100%; background:var(--accent); width:0%; transition:width .2s; }
 
   .mobile-topbar { display:none; }
   .sidebar-backdrop { display:none; }
@@ -558,26 +518,23 @@
         <div class="sidebar-nav">
           <div class="nav-section-label">Menu</div>
           <button class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">📊 Vue d'ensemble</button>
+          <button class="nav-item" data-page="stremio" onclick="navigateTo('stremio')">🎬 Stremio</button>
           <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
-          <button class="nav-item" data-page="programs" onclick="navigateTo('programs')">📺 Programmes</button>
-          <button class="nav-item" data-page="sources" onclick="navigateTo('sources')">📡 Sources</button>
-          <button class="nav-item" data-page="channels" onclick="navigateTo('channels')">📺 Chaînes TV</button>
-          <button class="nav-item" data-page="playlists" onclick="navigateTo('playlists')">🎵 Playlists</button>
-          <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
-          <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages</button>
+          <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
         </div>
         <div class="sidebar-bottom">
-          <button class="btn-logout" onclick="logout()">Déconnexion</button>
+          <button class="btn-logout" onclick="logout()">↪ Déconnexion</button>
         </div>
       </div>
 
-      <div class="main">
-        <div class="mobile-topbar">
-          <button class="burger" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button>
-          <div class="mt-title">W Addon TV</div>
-        </div>
+      <div class="mobile-topbar">
+        <button class="burger" onclick="toggleSidebar()">☰</button>
+        <span class="mt-title">W Addon TV</span>
+      </div>
 
-        <!-- PAGE: OVERVIEW -->
+      <div class="main">
+
+        <!-- PAGE: VUE D'ENSEMBLE -->
         <div class="page active" id="page-dashboard">
           <div class="page-header">
             <div>
@@ -693,112 +650,198 @@
           </div>
         </div>
 
-        <!-- PAGE: PROGRAMMES -->
-        <div class="page" id="page-programs">
+        <!-- PAGE: STREMIO -->
+        <div class="page" id="page-stremio">
           <div class="page-header">
             <div>
-              <div class="page-title">Programmes</div>
-              <div class="page-sub">Ce qui passe en ce moment sur les chaînes populaires</div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-head" style="gap:12px">
-              <div class="catalog-search">
-                <span class="search-ico">🔍</span>
-                <input type="search" id="now-q" placeholder="Rechercher une chaîne ou un programme…" oninput="renderNow()">
-              </div>
-              <span class="card-desc" id="now-total" style="white-space:nowrap"></span>
-              <button class="btn-outline-sm" onclick="loadNow(true)" title="Rafraîchir les programmes">↻</button>
-            </div>
-            <div class="card-body" id="now-list" style="padding-top:8px">
-              <div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- PAGE: LOGS -->
-        <div class="page" id="page-logs">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Logs</div>
-              <div class="page-sub">Journal en direct des requêtes — 300 dernières entrées</div>
+              <div class="page-title">Stremio</div>
+              <div class="page-sub">Chaînes, logos, catégories, flux et playlists de l'addon</div>
             </div>
           </div>
 
-          <div class="card">
-            <div class="card-head logs-toolbar">
-              <div class="logs-stats" id="logs-stats">
-                <span class="log-stat" id="stat-total"><b>0</b> total</span>
-                <span class="log-stat ok" id="stat-2xx"><b>0</b> 2xx</span>
-                <span class="log-stat warn" id="stat-4xx"><b>0</b> 4xx</span>
-                <span class="log-stat err" id="stat-5xx"><b>0</b> 5xx</span>
-              </div>
-              <div class="logs-group logs-search">
-                <input type="search" id="logs-search" placeholder="Filtrer chemin, IP, méthode…" oninput="renderLogs()">
-                <span class="search-ico">🔍</span>
-              </div>
-              <div class="logs-group">
-                <label>Méthode</label>
-                <select class="logs-select" id="logs-method" onchange="renderLogs()">
-                  <option value="">Toutes</option>
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                  <option value="DELETE">DELETE</option>
-                </select>
-              </div>
-              <div class="logs-group">
-                <label>Auto-refresh</label>
-                <select class="logs-select" id="logs-interval" onchange="restartLogPolling()">
-                  <option value="2000">2s</option>
-                  <option value="5000" selected>5s</option>
-                  <option value="10000">10s</option>
-                  <option value="0">Off</option>
-                </select>
-              </div>
-              <button class="logs-pausebtn" id="logs-pausebtn" onclick="toggleLogPause()">⏸️ Pause</button>
-              <button class="btn-outline-sm" onclick="exportLogs()">⬇️ Exporter</button>
-              <button class="btn-outline-sm" onclick="clearLogs()">🗑️ Vider</button>
-              <div class="logs-status" style="margin-left:auto">
-                <div class="logs-dot" id="logs-dot"></div>
-                <span id="logs-statustext">Live</span>
-              </div>
-            </div>
-            <div class="card-body" style="padding:0">
-              <div class="logs-list" id="logs-list">
-                <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs…</p></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- PAGE: CHAÎNES TV -->
-        <div class="page" id="page-channels">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Chaînes TV</div>
-              <div class="page-sub">Gestion complète : nom, logo, flux, EPG</div>
-            </div>
+          <div class="subnav">
+            <button class="subnav-item active" data-sub="st-channels" onclick="switchStremioSub('st-channels')">📺 Chaînes</button>
+            <button class="subnav-item" data-sub="st-categories" onclick="switchStremioSub('st-categories')">🗂️ Catégories</button>
+            <button class="subnav-item" data-sub="st-playlists" onclick="switchStremioSub('st-playlists')">🎵 Playlists</button>
+            <button class="subnav-item" data-sub="st-programs" onclick="switchStremioSub('st-programs')">🕐 Programmes</button>
+            <button class="subnav-item" data-sub="st-add" onclick="switchStremioSub('st-add')">➕ Ajouter une chaîne</button>
+            <button class="subnav-item" data-sub="st-general" onclick="switchStremioSub('st-general')">🎨 Général</button>
           </div>
 
-          <div class="card">
-            <div class="card-head">
-              <div class="tabs" style="margin-bottom:8px">
-                <button class="tab active" data-tv-tab="all" onclick="switchTvTab('all')">📺 Toutes</button>
-                <button class="tab" data-tv-tab="custom" onclick="switchTvTab('custom')">⭐ Personnalisées</button>
-              </div>
-              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                <div class="catalog-search" style="min-width:280px;flex:1">
-                  <span class="search-ico">🔍</span>
-                  <input type="search" id="tv-ch-search" placeholder="Filtrer (nom, ID, source, EPG)…" oninput="renderTvChannels()">
+          <!-- SUB: Chaînes -->
+          <div class="subpage active" id="sub-st-channels">
+            <div class="card">
+              <div class="card-head">
+                <div class="tabs" style="margin-bottom:8px">
+                  <button class="tab active" data-tv-tab="all" onclick="switchTvTab('all')">📺 Toutes</button>
+                  <button class="tab" data-tv-tab="custom" onclick="switchTvTab('custom')">⭐ Personnalisées</button>
                 </div>
-                <span class="card-desc" id="tv-ch-count"></span>
-                <button class="btn-outline-sm" onclick="loadTvChannels()">↻ Rafraîchir</button>
-                <button class="add-source-btn" id="tv-add-custom-btn" style="display:none" onclick="openAddCustomChannel()">➕ Ajouter chaîne</button>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                  <div class="catalog-search" style="min-width:280px;flex:1">
+                    <span class="search-ico">🔍</span>
+                    <input type="search" id="tv-ch-search" placeholder="Filtrer (nom, ID, source, EPG)…" oninput="renderTvChannels()">
+                  </div>
+                  <span class="card-desc" id="tv-ch-count"></span>
+                  <button class="btn-outline-sm" onclick="loadTvChannels()">↻ Rafraîchir</button>
+                  <button class="add-source-btn" id="tv-add-custom-btn" style="display:none;width:auto" onclick="openAddCustomChannel()">➕ Ajouter chaîne</button>
+                </div>
+              </div>
+              <div class="card-body" style="padding-top:8px">
+                <div class="tv-ch-table" id="tv-ch-list">
+                  <div class="tv-empty">Chargement…</div>
+                </div>
               </div>
             </div>
-            <div class="card-body" style="padding-top:8px">
-              <div class="tv-ch-table" id="tv-ch-list">
-                <div class="tv-empty">Chargement…</div>
+          </div>
+
+          <!-- SUB: Catégories -->
+          <div class="subpage" id="sub-st-categories">
+            <div class="card">
+              <div class="card-head"><div class="card-title">🗂️ Catégories des chaînes populaires</div></div>
+              <div class="card-body">
+                <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Attribuez une catégorie aux chaînes populaires. Elles alimentent le filtre « genre » de Stremio.</p>
+                <div id="genre-edit" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">chargement…</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUB: Playlists -->
+          <div class="subpage" id="sub-st-playlists">
+            <div class="page-header" style="margin-bottom:16px">
+              <div class="page-sub">Regroupez vos chaînes favorites en collections exportables en M3U</div>
+              <div class="header-actions">
+                <input type="text" id="pl-new-name" placeholder="Nom de la playlist…" style="background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-size:13px">
+                <button class="btn-add" onclick="createPlaylist()">➕ Créer</button>
+              </div>
+            </div>
+            <div class="channel-list" id="playlists-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+              <div class="fav-empty">chargement…</div>
+            </div>
+          </div>
+
+          <!-- SUB: Programmes -->
+          <div class="subpage" id="sub-st-programs">
+            <div class="card">
+              <div class="card-head" style="gap:12px">
+                <div class="catalog-search">
+                  <span class="search-ico">🔍</span>
+                  <input type="search" id="now-q" placeholder="Rechercher une chaîne ou un programme…" oninput="renderNow()">
+                </div>
+                <span class="card-desc" id="now-total" style="white-space:nowrap"></span>
+                <button class="btn-outline-sm" onclick="loadNow(true)" title="Rafraîchir les programmes">↻</button>
+              </div>
+              <div class="card-body" id="now-list" style="padding-top:8px">
+                <div class="fav-empty">EPG pas encore chargé — va dans Stremio → Général pour le rafraîchir</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUB: Ajouter une chaîne -->
+          <div class="subpage" id="sub-st-add">
+            <div class="card">
+              <div class="card-head"><div class="card-title">📡 Ajouter une chaîne via le scraper W Addon TV</div></div>
+              <div class="card-body">
+                <div class="add-source-box">
+                  <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page W Addon TV (ex: https://dlstreams.st/watch.php?id=121)">
+                  <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
+                  <div class="add-source-result" id="add-source-result"></div>
+                  <div class="add-source-preview" id="add-source-preview" style="display:none"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title">📋 Chaînes ajoutées manuellement</div>
+                <span class="card-desc" id="manual-count" style="font-size:12px;color:var(--muted)"></span>
+              </div>
+              <div class="card-body">
+                <div class="manual-channels-list" id="manual-channels-list">
+                  <div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div class="card-title">🕒 Activité récente</div></div>
+              <div class="card-body">
+                <div id="activity-list-src" style="font-size:13px;color:var(--text2)">chargement…</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUB: Général -->
+          <div class="subpage" id="sub-st-general">
+            <div class="card">
+              <div class="card-head"><div class="card-title">📝 Manifest de l'addon</div></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label>Nom de l'addon</label>
+                  <input type="text" id="set-manifest-name" placeholder="W Addon TV">
+                </div>
+                <div class="form-row">
+                  <label>Description</label>
+                  <input type="text" id="set-manifest-desc" placeholder="Chaînes TV en direct via dlstreams + Vavoo…">
+                </div>
+                <div class="form-row">
+                  <label>Langue par défaut</label>
+                  <select id="set-default-lang">
+                    <option value="fr">🇫🇷 Français</option>
+                    <option value="en">🇬🇧 English</option>
+                    <option value="es">🇪🇸 Español</option>
+                    <option value="de">🇩🇪 Deutsch</option>
+                    <option value="it">🇮🇹 Italiano</option>
+                    <option value="ar">🇸🇦 Arabe</option>
+                    <option value="pt">🇵🇹 Português</option>
+                  </select>
+                </div>
+                <button class="add-source-btn" style="width:auto;padding:10px 20px" onclick="saveSettings()">💾 Enregistrer</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div class="card-title">🎨 Affichage & sources</div></div>
+              <div class="card-body">
+                <label class="toggle-row">
+                  <div>
+                    <div class="toggle-title">Logos réels des chaînes</div>
+                    <div class="toggle-sub">Vraies logos des chaînes populaires, sinon posters générés</div>
+                  </div>
+                  <input type="checkbox" id="set-logos" onchange="saveSettings()">
+                </label>
+                <label class="toggle-row">
+                  <div>
+                    <div class="toggle-title">EPG — programme en cours</div>
+                    <div class="toggle-sub">Affiche « Maintenant / À suivre » sur les chaînes couvertes</div>
+                  </div>
+                  <input type="checkbox" id="set-epg" onchange="saveSettings()">
+                </label>
+                <label class="toggle-row">
+                  <div>
+                    <div class="toggle-title">Inclure les chaînes W Addon TV</div>
+                    <div class="toggle-sub">Affiche les chaînes dlstreams dans le catalogue Stremio</div>
+                  </div>
+                  <input type="checkbox" id="set-include-dl" onchange="saveSettings()">
+                </label>
+                <label class="toggle-row">
+                  <div>
+                    <div class="toggle-title">Inclure les chaînes Vavoo</div>
+                    <div class="toggle-sub">Affiche les chaînes Vavoo dans le catalogue Stremio</div>
+                  </div>
+                  <input type="checkbox" id="set-include-vv" onchange="saveSettings()">
+                </label>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div class="card-title">📡 Source EPG (XMLTV)</div></div>
+              <div class="card-body">
+                <input class="add-source-input" id="set-epg-url" type="url" placeholder="URL du fichier XMLTV (.xml ou .xml.gz)">
+                <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
+                  <button class="add-source-btn" style="width:auto;padding:10px 20px" onclick="saveSettings()">💾 Enregistrer</button>
+                  <button class="btn-outline-sm" onclick="refreshEpg()">↻ Rafraîchir l'EPG</button>
+                  <span id="epg-status" style="color:var(--text2);font-size:13px">chargement…</span>
+                </div>
               </div>
             </div>
           </div>
@@ -813,7 +856,7 @@
               <div class="modal-body">
                 <input type="hidden" id="tv-modal-id">
                 <input type="hidden" id="tv-modal-src">
-                
+
                 <div class="form-row">
                   <label>ID (lecture seule)</label>
                   <input type="text" id="tv-modal-id-input" readonly style="background:var(--surface2);color:var(--text2)">
@@ -822,80 +865,43 @@
                   <label>Source</label>
                   <input type="text" id="tv-modal-src-input" readonly style="background:var(--surface2);color:var(--text2);text-transform:uppercase">
                 </div>
-                
+
                 <div class="form-row">
                   <label>Nom de la chaîne</label>
                   <input type="text" id="tv-modal-name" placeholder="Nom personnalisé (vide = auto)">
                   <span id="tv-modal-orig-name" style="font-size:11px;color:var(--muted)"></span>
                 </div>
-                
+
                 <div class="form-row">
                   <label>Logo (URL png/jpg)</label>
                   <input type="url" id="tv-modal-logo" placeholder="https://.../logo.png (vide = auto)">
                   <img id="tv-modal-logo-preview" src="" alt="" style="width:48px;height:27px;object-fit:cover;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
                   <span id="tv-modal-orig-logo" style="font-size:11px;color:var(--muted)"></span>
                 </div>
-                
+
                 <div class="form-row">
                   <label>Flux personnalisés (m3u8/mpd) — texte + lien, plusieurs possibles</label>
                   <div id="tv-modal-streams"></div>
                   <button type="button" class="btn-outline-sm" onclick="addTvStreamRow()" style="margin-top:6px">➕ Ajouter un flux</button>
                   <span id="tv-modal-orig-stream" style="font-size:11px;color:var(--muted);display:block;margin-top:5px"></span>
                 </div>
-                
+
                 <div class="form-row">
                   <label>EPG (ID xmltv)</label>
                   <input type="text" id="tv-modal-epg" placeholder="ID xmltv pour l'EPG (vide = auto)">
                   <span id="tv-modal-orig-epg" style="font-size:11px;color:var(--muted)"></span>
                 </div>
-                
+
                 <div class="form-actions">
                   <button class="btn-outline-sm" onclick="resetTvModal()">↺ Réinitialiser</button>
                   <button class="btn-outline-sm" onclick="deleteTvChannel()">🗑️ Supprimer override</button>
-                  <button class="add-source-btn" onclick="saveTvChannel()">💾 Enregistrer</button>
+                  <button class="add-source-btn" style="width:auto" onclick="saveTvChannel()">💾 Enregistrer</button>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- PAGE: PLAYLISTS -->
-        <div class="page" id="page-playlists">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Playlists</div>
-              <div class="page-sub">Regroupez vos chaînes favorites en collections</div>
-            </div>
-            <div class="header-actions">
-              <input type="text" id="pl-new-name" placeholder="Nom de la playlist…" style="background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-size:13px">
-              <button class="btn-add" onclick="createPlaylist()">➕ Créer</button>
-            </div>
-          </div>
-          <div class="channel-list" id="playlists-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
-            <div class="fav-empty">chargement…</div>
-          </div>
-        </div>
-
-        <div class="modal" id="pl-modal">
-          <div class="modal-content" style="max-width:640px">
-            <div class="modal-header">
-              <h3 id="pl-modal-title">Playlist</h3>
-              <button class="modal-close" onclick="closePlModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-              <div class="search-bar" style="margin-bottom:14px">
-                <input type="search" id="pl-add-search" placeholder="Rechercher une chaîne à ajouter…" oninput="renderPlAddResults()">
-              </div>
-              <div id="pl-add-results" style="max-height:160px;overflow-y:auto;margin-bottom:16px"></div>
-              <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-weight:700">Chaînes dans la playlist</div>
-              <div id="pl-channels-list"></div>
-              <div class="form-actions">
-                <button class="btn-outline-sm" onclick="exportPlaylistM3U()">⬇️ Export M3U</button>
-                <button class="btn-danger" onclick="deletePlaylist()">🗑️ Supprimer la playlist</button>
-              </div>
-            </div>
-          </div>
-
+          <!-- Modal chaîne personnalisée -->
           <div class="modal" id="tv-custom-modal">
             <div class="modal-content tv-modal">
               <div class="modal-header">
@@ -919,7 +925,7 @@
                 </div>
                 <div class="form-row">
                   <label>Flux (un par ligne, m3u8/mpd)</label>
-                  <textarea id="tv-custom-streams" rows="4" placeholder="https://.../flux1.m3u8" style="width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:var(--font-mono);resize:vertical"></textarea>
+                  <textarea id="tv-custom-streams" rows="4" placeholder="https://.../flux1.m3u8" style="resize:vertical;font-family:var(--font-mono)"></textarea>
                 </div>
                 <div class="form-row">
                   <label>EPG (ID xmltv, optionnel)</label>
@@ -928,115 +934,31 @@
                 <div class="form-actions">
                   <button class="btn-outline-sm" onclick="closeCustomChannelModal()">Annuler</button>
                   <button class="btn-danger" id="tv-custom-delete-btn" style="display:none" onclick="deleteCustomChannel()">🗑️ Supprimer</button>
-                  <button class="add-source-btn" onclick="saveCustomChannel()">💾 Enregistrer</button>
+                  <button class="add-source-btn" style="width:auto" onclick="saveCustomChannel()">💾 Enregistrer</button>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- PAGE: REGLAGES -->
-        <div class="page" id="page-settings">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Réglages</div>
-              <div class="page-sub">Logos, EPG et catégories personnalisables</div>
-            </div>
-            <div class="header-actions">
-              <button class="btn-outline-sm" onclick="loadSettings()">↻ Actualiser</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">🎨 Affichage</div></div>
-            <div class="card-body">
-              <label class="toggle-row">
-                <div>
-                  <div class="toggle-title">Logos réels des chaînes</div>
-                  <div class="toggle-sub">Vraies logos des chaînes populaires, sinon posters générés</div>
+          <!-- Modal playlist -->
+          <div class="modal" id="pl-modal">
+            <div class="modal-content" style="max-width:640px">
+              <div class="modal-header">
+                <h3 id="pl-modal-title">Playlist</h3>
+                <button class="modal-close" onclick="closePlModal()">&times;</button>
+              </div>
+              <div class="modal-body">
+                <div class="search-bar" style="margin-bottom:14px">
+                  <input type="search" id="pl-add-search" placeholder="Rechercher une chaîne à ajouter…" oninput="renderPlAddResults()">
                 </div>
-                <input type="checkbox" id="set-logos" onchange="saveSettings()">
-              </label>
-              <label class="toggle-row">
-                <div>
-                  <div class="toggle-title">EPG — programme en cours</div>
-                  <div class="toggle-sub">Affiche « Maintenant / À suivre » sur les chaînes couvertes</div>
+                <div id="pl-add-results" style="max-height:160px;overflow-y:auto;margin-bottom:16px"></div>
+                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-weight:700">Chaînes dans la playlist</div>
+                <div id="pl-channels-list"></div>
+                <div class="form-actions">
+                  <button class="btn-outline-sm" onclick="exportPlaylistM3U()">⬇️ Export M3U</button>
+                  <button class="btn-danger" onclick="deletePlaylist()">🗑️ Supprimer la playlist</button>
                 </div>
-                <input type="checkbox" id="set-epg" onchange="saveSettings()">
-              </label>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">📡 Source EPG (XMLTV)</div></div>
-            <div class="card-body">
-              <input class="add-source-input" id="set-epg-url" type="url" placeholder="URL du fichier XMLTV (.xml ou .xml.gz)">
-              <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
-                <button class="add-source-btn" onclick="saveSettings()">💾 Enregistrer</button>
-                <button class="btn-outline-sm" onclick="refreshEpg()">↻ Rafraîchir l'EPG</button>
-                <span id="epg-status" style="color:var(--text2);font-size:13px">chargement…</span>
               </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">📱 Wiseplay</div></div>
-            <div class="card-body">
-              <div class="field">
-                <label for="wp-access-code">Code d'accès Wiseplay</label>
-                <input type="text" id="wp-access-code" class="add-source-input" placeholder="Code pour /wiseplay (vide = désactivé)">
-                <small>Ce code protège l'accès à <a href="/wiseplay" style="color:var(--accent)" target="_blank">/wiseplay</a>. Laisser vide pour désactiver.</small>
-              </div>
-              <button class="add-source-btn" onclick="saveSettings()">💾 Enregistrer</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">🗂️ Catégories</div></div>
-            <div class="card-body">
-              <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Attribuez une catégorie aux chaînes populaires. Elles alimentent le filtre « genre » de Stremio.</p>
-              <div id="genre-edit" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">chargement…</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- PAGE: SOURCES -->
-        <div class="page" id="page-sources">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Sources</div>
-              <div class="page-sub">Ajoutez vos propres chaînes via le scraper W Addon TV</div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">📡 Ajouter une source</div></div>
-            <div class="card-body">
-              <div class="add-source-box">
-                <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page W Addon TV (ex: https://dlstreams.st/watch.php?id=121)">
-                <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
-                <div class="add-source-result" id="add-source-result"></div>
-                <div class="add-source-preview" id="add-source-preview" style="display:none"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div class="card-title">📋 Sources ajoutées manuellement</div>
-              <span class="card-desc" id="manual-count" style="font-size:12px;color:var(--muted)"></span>
-            </div>
-            <div class="card-body">
-              <div class="manual-channels-list" id="manual-channels-list">
-                <div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><div class="card-title">🕒 Activité récente</div></div>
-            <div class="card-body">
-              <div id="activity-list-src" style="font-size:13px;color:var(--text2)">chargement…</div>
             </div>
           </div>
         </div>
@@ -1046,7 +968,7 @@
           <div class="page-header">
             <div>
               <div class="page-title">Catalogue</div>
-              <div class="page-sub">Explorer toutes les chaînes disponibles</div>
+              <div class="page-sub">Explorer et tester toutes les chaînes disponibles</div>
             </div>
           </div>
 
@@ -1079,10 +1001,124 @@
               </select>
               <span class="list-count" id="catalog-count"></span>
               <span style="flex:1"></span>
+              <div class="batch-progress" id="batch-progress">
+                <span id="batch-progress-label">0/0</span>
+                <div class="batch-bar"><div class="batch-bar-fill" id="batch-bar-fill"></div></div>
+              </div>
+              <button class="btn-outline-sm" id="batch-test-btn" onclick="testAllVisible()">🧪 Tester tout</button>
               <button class="btn-outline-sm" onclick="exportCatalogM3U()">⬇️ M3U</button>
             </div>
             <div class="card-body">
               <div class="channel-list" id="list"><div class="fav-empty">chargement…</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: REGLAGES -->
+        <div class="page" id="page-settings">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Réglages</div>
+              <div class="page-sub">Wiseplay, système et journal des requêtes</div>
+            </div>
+          </div>
+
+          <div class="subnav">
+            <button class="subnav-item active" data-sub="rg-wiseplay" onclick="switchSettingsSub('rg-wiseplay')">📱 Wiseplay</button>
+            <button class="subnav-item" data-sub="rg-system" onclick="switchSettingsSub('rg-system')">🖥️ Système</button>
+            <button class="subnav-item" data-sub="rg-logs" onclick="switchSettingsSub('rg-logs')">📋 Logs<span class="nav-badge" id="logs-badge-sub" style="display:none">0</span></button>
+          </div>
+
+          <!-- SUB: Wiseplay -->
+          <div class="subpage active" id="sub-rg-wiseplay">
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title">📱 Accès Wiseplay</div>
+                <span class="wp-status off" id="wp-status-badge">● Désactivé</span>
+              </div>
+              <div class="card-body">
+                <p style="color:var(--text2);font-size:13px;margin-bottom:14px">
+                  Ce code protège l'accès à la page publique <a href="/wiseplay" target="_blank" style="color:var(--accent)">/wiseplay</a>,
+                  où les personnes que tu invites peuvent choisir leurs chaînes et récupérer leur propre lien M3U.
+                  Laisse le champ vide pour désactiver complètement l'accès.
+                </p>
+                <div class="field" style="margin-bottom:0">
+                  <label for="wp-access-code">Code d'accès</label>
+                  <div class="wp-code-row">
+                    <input type="text" id="wp-access-code" class="add-source-input" style="margin-bottom:0" placeholder="Code pour /wiseplay (vide = désactivé)">
+                    <button class="btn-outline-sm" onclick="generateWpCode()" title="Générer un code aléatoire">🎲 Générer</button>
+                    <button class="add-source-btn" style="width:auto;padding:9px 20px" onclick="saveSettings()">💾 Enregistrer</button>
+                  </div>
+                </div>
+                <div class="wp-link-box" id="wp-link-box" style="display:none">
+                  <span id="wp-link-text" style="flex:1;overflow:hidden;text-overflow:ellipsis"></span>
+                  <button class="btn-outline-sm" style="flex-shrink:0" onclick="copyWpLink()">📋 Copier</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUB: Système -->
+          <div class="subpage" id="sub-rg-system">
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title">🖥️ Informations système</div>
+                <button class="btn-outline-sm" onclick="loadSystemInfo()">↻ Actualiser</button>
+              </div>
+              <div class="card-body">
+                <div class="sys-grid" id="sys-info">chargement…</div>
+              </div>
+              <div class="card-head" style="justify-content:flex-end;border-top:1px solid var(--border);border-bottom:none">
+                <button class="btn-danger" onclick="restartAddon()">🔄 Redémarrer l'addon</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUB: Logs -->
+          <div class="subpage" id="sub-rg-logs">
+            <div class="card">
+              <div class="card-head logs-toolbar">
+                <div class="logs-stats" id="logs-stats">
+                  <span class="log-stat" id="stat-total"><b>0</b> total</span>
+                  <span class="log-stat ok" id="stat-2xx"><b>0</b> 2xx</span>
+                  <span class="log-stat warn" id="stat-4xx"><b>0</b> 4xx</span>
+                  <span class="log-stat err" id="stat-5xx"><b>0</b> 5xx</span>
+                </div>
+                <div class="logs-group logs-search">
+                  <input type="search" id="logs-search" placeholder="Filtrer chemin, IP, méthode…" oninput="renderLogs()">
+                  <span class="search-ico">🔍</span>
+                </div>
+                <div class="logs-group">
+                  <label>Méthode</label>
+                  <select class="logs-select" id="logs-method" onchange="renderLogs()">
+                    <option value="">Toutes</option>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="DELETE">DELETE</option>
+                  </select>
+                </div>
+                <div class="logs-group">
+                  <label>Auto-refresh</label>
+                  <select class="logs-select" id="logs-interval" onchange="restartLogPolling()">
+                    <option value="2000">2s</option>
+                    <option value="5000" selected>5s</option>
+                    <option value="10000">10s</option>
+                    <option value="0">Off</option>
+                  </select>
+                </div>
+                <button class="logs-pausebtn" id="logs-pausebtn" onclick="toggleLogPause()">⏸️ Pause</button>
+                <button class="btn-outline-sm" onclick="exportLogs()">⬇️ Exporter</button>
+                <button class="btn-outline-sm" onclick="clearLogs()">🗑️ Vider</button>
+                <div class="logs-status" style="margin-left:auto">
+                  <div class="logs-dot" id="logs-dot"></div>
+                  <span id="logs-statustext">Live</span>
+                </div>
+              </div>
+              <div class="card-body" style="padding:0">
+                <div class="logs-list" id="logs-list">
+                  <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs…</p></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1099,6 +1135,7 @@
       </div>
       <div class="player-body">
         <video class="player-frame" id="player-frame" controls autoplay></video>
+        <div class="player-status" id="player-status"></div>
       </div>
     </div>
   </div>
@@ -1146,7 +1183,7 @@ async function apiFetch(url, opts) {
     if (r.status === 401) {
         $('#dashboard').classList.remove('active');
         $('#login-screen').style.display = 'flex';
-        toast("Session expir\u00e9e, reconnecte-toi", "error");
+        toast("Session expirée, reconnecte-toi", "error");
         throw new Error('unauthenticated');
     }
     return r;
@@ -1206,77 +1243,77 @@ function closeSidebar() {
     document.querySelector('.sidebar')?.classList.remove('open');
     document.querySelector('.sidebar-backdrop')?.classList.remove('open');
 }
+
+const PAGE_SUBTITLES = {
+    dashboard: "Statistiques de votre proxy de chaînes",
+    stremio: "Chaînes, logos, catégories, flux et playlists de l'addon",
+    catalog: "Explorer et tester toutes les chaînes disponibles",
+    settings: "Wiseplay, système et journal des requêtes"
+};
+
 function navigateTo(page) {
     _lastPage = page;
     try { if (location.pathname !== '/dashboard/' + page) history.pushState(null, '', '/dashboard/' + page); } catch(e){}
     closeSidebar();
-    try {
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.sidebar-nav > .nav-item').forEach(n => n.classList.remove('active'));
 
-        const pageEl = $(`#page-${page}`);
-        const navEl = document.querySelector(`[data-page="${page}"]`);
-        
-        pageEl.classList.add('active');
-        navEl?.classList.add('active');
-        
-        // Force page visibility as fallback
-        pageEl.style.display = 'block';
-        pageEl.style.visibility = 'visible';
-        pageEl.style.opacity = '1';
+    const pageEl = $(`#page-${page}`);
+    const navEl = document.querySelector(`.sidebar-nav [data-page="${page}"]`);
+    if (!pageEl) return;
+    pageEl.classList.add('active');
+    navEl?.classList.add('active');
 
-        const subtitles = {
-            dashboard: 'Statistiques de votre proxy de chaînes',
-            sources: 'Gérer vos sources personnalisées',
-            catalog: 'Explorer toutes les chaînes disponibles',
-            logs: 'Journal en direct des requêtes passées sur votre proxy',
-            settings: 'Logos, EPG et catégories personnalisables',
-            programs: 'Programme en cours des chaînes populaires',
-            channels: 'Gestion complète : nom, logo, flux, EPG',
-            playlists: 'Regroupez vos chaînes favorites en collections'
-        };
-        const subEl = document.querySelector('.page.active .page-sub');
-        if (subEl) subEl.textContent = subtitles[page] || '';
+    const subEl = document.querySelector('.page.active > .page-header .page-sub');
+    if (subEl) subEl.textContent = PAGE_SUBTITLES[page] || '';
 
-        if (page === 'sources') { loadManualChannels(); loadActivity("activity-list-src"); }
-        if (page === 'logs') { loadLogs(); }
-        if (page === 'settings') { loadSettings(); }
-        if (page === 'channels') { loadTvChannels(); }
-        if (page === 'playlists') { loadPlaylists(); }
-        if (page === 'programs') { loadNow(); }
-        if (page === 'catalog') {
-            console.log('navigateTo: catalog page, ALL.dlstreams.length=', ALL?.dlstreams?.length);
-            if (!ALL.dlstreams.length) { 
-                loadCatalog('dlstreams').then(render).catch(e => toast('Erreur chargement catalogue: ' + e.message, 'error')); 
-            } else { 
-                try { 
-                    console.log('Calling render()'); 
-                    render(); 
-                } catch(e) { 
-                    console.error('Erreur render:', e); 
-                    toast('Erreur render: ' + e.message, 'error'); 
-                } 
-            }
-        }
-    } catch(err) {
-        console.error('navigateTo error:', err);
-        toast('Erreur navigation: ' + err.message, 'error');
+    if (page === 'stremio') {
+        const activeSub = document.querySelector('#page-stremio .subnav-item.active')?.dataset.sub || 'st-channels';
+        loadStremioSub(activeSub);
     }
-    
-    // Fallback: ensure page is visible after a short delay
-    setTimeout(() => {
-        const activePage = document.querySelector('.page.active');
-        if (activePage) {
-            activePage.style.display = 'block';
-            activePage.style.visibility = 'visible';
-            activePage.style.opacity = '1';
+    if (page === 'settings') {
+        const activeSub = document.querySelector('#page-settings .subnav-item.active')?.dataset.sub || 'rg-wiseplay';
+        loadSettingsSub(activeSub);
+    }
+    if (page === 'catalog') {
+        if (!ALL.dlstreams.length) {
+            loadCatalog('dlstreams').then(render).catch(e => toast('Erreur chargement catalogue: ' + e.message, 'error'));
+        } else {
+            render();
         }
-    }, 100);
+    }
 }
 window.addEventListener('popstate', () => {
     const p = (location.pathname.split('/dashboard/')[1] || 'dashboard').replace(/\/+$/, '');
     if (p && p !== _lastPage && document.getElementById('page-' + p)) navigateTo(p);
 });
+
+// ---- Sous-onglets Stremio ----
+function switchStremioSub(sub){
+    document.querySelectorAll('#page-stremio .subnav-item').forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
+    document.querySelectorAll('#page-stremio .subpage').forEach(p => p.classList.toggle('active', p.id === 'sub-' + sub));
+    loadStremioSub(sub);
+}
+function loadStremioSub(sub){
+    if (sub === 'st-channels') loadTvChannels();
+    else if (sub === 'st-categories') loadSettings();
+    else if (sub === 'st-playlists') loadPlaylists();
+    else if (sub === 'st-programs') loadNow();
+    else if (sub === 'st-add') { loadManualChannels(); loadActivity('activity-list-src'); }
+    else if (sub === 'st-general') loadSettings();
+}
+
+// ---- Sous-onglets Réglages ----
+function switchSettingsSub(sub){
+    document.querySelectorAll('#page-settings .subnav-item').forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
+    document.querySelectorAll('#page-settings .subpage').forEach(p => p.classList.toggle('active', p.id === 'sub-' + sub));
+    loadSettingsSub(sub);
+}
+function loadSettingsSub(sub){
+    if (sub === 'rg-wiseplay') loadSettings();
+    else if (sub === 'rg-system') loadSystemInfo();
+    else if (sub === 'rg-logs') loadLogs();
+}
 
 async function refreshStats(){
     try{
@@ -1300,7 +1337,6 @@ async function refreshStats(){
         LAST_TOP = d.top_channels || [];
         LAST_REC = d.recent_plays || [];
         renderChannelsCard();
-        loadNow();
         const ut = $("#update-time");
         ut.classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
@@ -1336,7 +1372,7 @@ let CHART_RANGE = 60;
 let LAST_HIST = [], LAST_HIST_ERR = [];
 function setChartRange(mins){
     CHART_RANGE = mins;
-    document.querySelectorAll('.range-btn').forEach(b=>b.classList.toggle('active', Number(b.dataset.range)===mins));
+    document.querySelectorAll('.range-btn[data-range]').forEach(b=>b.classList.toggle('active', Number(b.dataset.range)===mins));
     renderAreaChart(LAST_HIST);
     renderErrChart(LAST_HIST_ERR);
 }
@@ -1536,7 +1572,7 @@ function renderNow(){
     const q = ($("#now-q").value || "").toLowerCase().trim();
     let list = _NOW_CACHE;
     if(!list || !list.length){
-        el.innerHTML = '<div class="fav-empty">EPG pas encore chargé — va dans Réglages pour le rafraîchir</div>';
+        el.innerHTML = '<div class="fav-empty">EPG pas encore chargé — va dans Stremio → Général pour le rafraîchir</div>';
         if(tot) tot.textContent = '';
         return;
     }
@@ -1598,7 +1634,7 @@ async function loadActivity(targetId) {
     }
 }
 
-// Sources manuelles
+// Chaînes ajoutées manuellement
 async function loadManualChannels(){
     try{
         const r = await apiFetch("/api/manual-channels");
@@ -1713,9 +1749,7 @@ async function loadCatalog(src){
 }
 
 function render(){
-    try {
-        console.log('render() called, CURRENT=', CURRENT, 'ALL.dlstreams.length=', ALL?.dlstreams?.length, 'list element:', document.getElementById('list'));
-        const q = $("#q").value.toLowerCase().trim();
+    const q = $("#q").value.toLowerCase().trim();
     const words = q ? q.split(/\s+/) : [];
     const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
 
@@ -1738,19 +1772,7 @@ function render(){
     }
 
     const list = $("#list");
-    if(!list){
-        console.error('render(): #list element not found');
-        // Try to find it again
-        const list2 = document.getElementById('list');
-        if(!list2){
-            console.error('render(): #list element still not found after document.getElementById');
-            return;
-        }
-        list = list2;
-    }
-    // Ensure list is visible
-    list.style.display = 'block';
-    list.style.visibility = 'visible';
+    if(!list) return;
     if(!items.length){
         list.innerHTML = '<div class="fav-empty">aucun résultat — essaie un autre filtre</div>';
         return;
@@ -1769,7 +1791,7 @@ function render(){
         const meta = plays
             ? `${flag} · ${plays} lecture${plays>1?'s':''}`
             : `${flag} · ${CURRENT==="vavoo" ? 'Vavoo' : '#' + c.id}`;
-        return `<a class="chan-card" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}">
+        return `<a class="chan-card" href="${href}" target="_blank" title="${escapeHtml(c.name)}" data-play="${href}" data-key="${escapeHtml(key)}">
             <div class="chan-tile">
                 <img class="chan-logo" src="${logoUrl}" alt="" loading="lazy">
                 <span class="chan-check ${checkCls(key)}" onclick="event.preventDefault();event.stopPropagation();checkStream('${escapeHtml(key)}')">${checkLabel(key)}</span>
@@ -1781,10 +1803,6 @@ function render(){
             </div>
         </a>`;
     }).join("");
-    } catch(err) {
-        console.error('render() error:', err);
-        toast('Erreur render: ' + err.message, 'error');
-    }
 }
 
 const CHECKED = (()=>{ try{ return JSON.parse(localStorage.getItem("dl_checked")||"{}"); }catch(e){ return {}; } })();
@@ -1813,6 +1831,61 @@ async function checkStream(key){
         if (e.message !== 'unauthenticated') CHECKED[key] = {state:"ko", ms:0};
     }
     render();
+}
+
+// Test en masse (bouton "Tester tout") via /api/check-batch
+async function testAllVisible(){
+    const q = $("#q").value.toLowerCase().trim();
+    const words = q ? q.split(/\s+/) : [];
+    const lang = LANG_FILTER === "all" ? null : LANG_FILTER;
+    const matches = (ALL[CURRENT]||[]).filter(c => {
+        if (lang && c.lang !== lang) return false;
+        return words.every(w => (c.name||"").toLowerCase().includes(w));
+    }).slice(0, 200);
+    if(!matches.length){ toast('Aucune chaîne à tester', 'warn'); return; }
+
+    const btn = $("#batch-test-btn");
+    const prog = $("#batch-progress");
+    const label = $("#batch-progress-label");
+    const fill = $("#batch-bar-fill");
+    if(btn) btn.disabled = true;
+    prog.classList.add('show');
+    label.textContent = `0/${matches.length}`;
+    fill.style.width = '0%';
+
+    matches.forEach(c => { CHECKED[(CURRENT==="vavoo"?"vavoo:":"dlstreams:")+c.id] = {state:"busy"}; });
+    render();
+
+    // items envoyés au backend (id encodé pour vavoo) + table de correspondance vers la clé locale (id brut)
+    const items = matches.map(c => ({ src: CURRENT, id: CURRENT==="vavoo" ? b64u(c.id) : c.id }));
+    const keyMap = {}; // clé "src:idEnvoyé" -> clé locale "src:idBrut"
+    matches.forEach((c, i) => {
+        const sentKey = `${items[i].src}:${items[i].id}`;
+        keyMap[sentKey] = (CURRENT==="vavoo"?"vavoo:":"dlstreams:")+c.id;
+    });
+    try{
+        const r = await apiFetch('/api/check-batch', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({items})
+        });
+        const d = await r.json();
+        let done = 0, okCount = 0;
+        (d.results||[]).forEach(res => {
+            const localKey = keyMap[res.key] || res.key;
+            CHECKED[localKey] = {state: res.ok ? "ok" : "ko", ms: res.ms};
+            if(res.ok) okCount++;
+            done++;
+        });
+        saveChecked();
+        label.textContent = `${done}/${matches.length}`;
+        fill.style.width = '100%';
+        toast(`🧪 Test terminé : ${okCount}/${done} flux OK`, okCount === done ? 'success' : 'warn');
+    }catch(e){
+        if (e.message !== 'unauthenticated') toast('❌ Erreur lors du test en masse', 'error');
+    }
+    render();
+    if(btn) btn.disabled = false;
+    setTimeout(()=>{ prog.classList.remove('show'); }, 2000);
 }
 
 // Export M3U
@@ -1856,12 +1929,20 @@ async function loadSettings(){
         const r = await apiFetch("/api/settings");
         const d = await r.json();
         _settings = d.settings;
+        const st = _settings.stremio || {};
         $('#set-logos').checked = !!_settings.logos;
         $('#set-epg').checked = !!_settings.epg;
         $('#set-epg-url').value = _settings.epg_url || '';
+        $('#set-manifest-name').value = st.manifest_name || '';
+        $('#set-manifest-desc').value = st.manifest_desc || '';
+        $('#set-default-lang').value = st.default_lang || 'fr';
+        $('#set-include-dl').checked = st.include_dlstreams !== false;
+        $('#set-include-vv').checked = st.include_vavoo !== false;
         $('#wp-access-code').value = _settings.wiseplay?.access_code || '';
+        updateWpStatus();
         const e = d.epg || {};
-        $('#epg-status').textContent = e.at
+        const epgStatusEl = $('#epg-status');
+        if(epgStatusEl) epgStatusEl.textContent = e.at
             ? `Dernière MAJ ${new Date(e.at*1000).toLocaleTimeString('fr-FR')} · ${e.covered}/${e.channels} chaînes`
             : 'EPG pas encore chargé';
         renderGenreEditor(d);
@@ -1870,6 +1951,7 @@ async function loadSettings(){
 
 function renderGenreEditor(d){
     const box = $('#genre-edit');
+    if(!box) return;
     box.innerHTML = '';
     const choices = d.genre_choices || [];
     const overrides = (_settings && _settings.genres) || {};
@@ -1900,9 +1982,109 @@ async function setGenre(key, value){
 }
 
 async function saveSettings(){
-    const body = {logos: $('#set-logos').checked, epg: $('#set-epg').checked, epg_url: $('#set-epg-url').value.trim(), wiseplay: {access_code: $('#wp-access-code').value.trim()}};
+    const body = {
+        logos: $('#set-logos').checked,
+        epg: $('#set-epg').checked,
+        epg_url: $('#set-epg-url').value.trim(),
+        stremio: {
+            manifest_name: $('#set-manifest-name').value.trim(),
+            manifest_desc: $('#set-manifest-desc').value.trim(),
+            default_lang: $('#set-default-lang').value,
+            include_dlstreams: $('#set-include-dl').checked,
+            include_vavoo: $('#set-include-vv').checked,
+        },
+        wiseplay: {access_code: $('#wp-access-code').value.trim()}
+    };
     const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-    if(r.ok){ toast('Réglages enregistrés','success'); } else toast('Erreur d\'enregistrement','error');
+    if(r.ok){
+        toast('Réglages enregistrés','success');
+        updateWpStatus();
+    } else toast('Erreur d\'enregistrement','error');
+}
+
+// ---- Wiseplay (amélioré) ----
+function generateWpCode(){
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for(let i=0;i<8;i++) code += chars[Math.floor(Math.random()*chars.length)];
+    $('#wp-access-code').value = code;
+    updateWpStatus();
+    toast('Code généré — pense à Enregistrer', 'success');
+}
+function updateWpStatus(){
+    const code = $('#wp-access-code').value.trim();
+    const badge = $('#wp-status-badge');
+    const linkBox = $('#wp-link-box');
+    const linkText = $('#wp-link-text');
+    if(code){
+        badge.className = 'wp-status on';
+        badge.textContent = '● Activé';
+        const link = `${BASE}/wiseplay?code=${encodeURIComponent(code)}`;
+        linkText.textContent = link;
+        linkBox.style.display = 'flex';
+        linkBox.dataset.link = link;
+    }else{
+        badge.className = 'wp-status off';
+        badge.textContent = '● Désactivé';
+        linkBox.style.display = 'none';
+    }
+}
+$('#wp-access-code').addEventListener('input', updateWpStatus);
+function copyWpLink(){
+    const link = $('#wp-link-box').dataset.link || '';
+    if(!link) return;
+    navigator.clipboard.writeText(link).then(
+        ()=>toast('✅ Lien copié', 'success'),
+        ()=>toast('Erreur de copie', 'error')
+    );
+}
+
+// ---- Système ----
+function fmtBytes(b){
+    if(b === null || b === undefined) return "—";
+    if(b >= 1073741824) return (b/1073741824).toFixed(1) + " Go";
+    if(b >= 1048576) return (b/1048576).toFixed(1) + " Mo";
+    if(b >= 1024) return (b/1024).toFixed(1) + " Ko";
+    return b + " o";
+}
+function sysRows(rows){
+    return rows.map(([k,v]) => `<div class="sys-row"><div class="sys-key">${escapeHtml(k)}</div><div class="sys-val">${escapeHtml(String(v))}</div></div>`).join('');
+}
+async function loadSystemInfo(){
+    const el = $('#sys-info');
+    if(!el) return;
+    try{
+        const r = await apiFetch('/api/system');
+        const d = await r.json();
+        const rows = [
+            ['Version', d.version],
+            ['Python', d.python],
+            ['Plateforme', d.platform],
+            ['CPUs', d.cpus],
+            ['PID', d.pid],
+            ['Port', d.port],
+            ['Uptime', fmtDur(d.uptime)],
+            ['Démarré le', d.started_at],
+            ['Chaînes totales', d.channels_total],
+            ['Cache dlstreams', `${d.cache?.dlstreams?.count ?? '—'} (${fmtAge(d.cache?.dlstreams?.age_seconds)})`],
+            ['Cache vavoo', `${d.cache?.vavoo?.count ?? '—'} (${fmtAge(d.cache?.vavoo?.age_seconds)})`],
+        ];
+        if(d.memory && d.memory.rss != null) rows.push(['Mémoire (RSS)', fmtBytes(d.memory.rss)]);
+        if(d.memory && d.memory.percent != null) rows.push(['Mémoire système', d.memory.percent.toFixed(1) + '%']);
+        if(d.disk) rows.push(['Disque libre', fmtBytes(d.disk.free) + ' / ' + fmtBytes(d.disk.total)]);
+        el.innerHTML = sysRows(rows);
+    }catch(err){
+        if(err.message !== 'unauthenticated') el.innerHTML = '<div class="fav-empty">Erreur de chargement</div>';
+    }
+}
+async function restartAddon(){
+    if(!confirm("Redémarrer l'addon maintenant ? Les connexions en cours seront coupées quelques secondes.")) return;
+    try{
+        await apiFetch('/api/restart', {method:'POST'});
+        toast('🔄 Redémarrage en cours…', 'success');
+    }catch(e){
+        if(e.message !== 'unauthenticated') toast('Erreur lors du redémarrage', 'error');
+    }
 }
 
 function tvStreamRowHtml(url, label){
@@ -2002,22 +2184,21 @@ function openTvModal(id, src){
     $('#tv-modal-src').value = c.src;
     $('#tv-modal-id-input').value = c.id;
     $('#tv-modal-src-input').value = c.src;
-    
-    // Pre-fill with override or auto value
+
     const nameVal = c.override_name || c.name;
     $('#tv-modal-name').value = nameVal;
     $('#tv-modal-orig-name').textContent = c.override_name ? `Original: ${c.name}` : 'Auto (nom d\'origine)';
-    
+
     const logoVal = c.override_logo || c.auto_logo;
     $('#tv-modal-logo').value = logoVal;
     $('#tv-modal-logo-preview').src = logoVal;
     $('#tv-modal-logo-preview').style.display = logoVal ? 'block' : 'none';
     $('#tv-modal-orig-logo').textContent = c.override_logo ? `Override` : `Auto: ${c.auto_logo}`;
-    
+
     renderTvStreamRows(c.override_streams);
     $('#tv-modal-orig-stream').textContent = (c.override_streams && c.override_streams.length)
         ? `${c.override_streams.length} flux perso` : `Auto: ${c.auto_stream}`;
-    
+
     const epgVal = c.override_epg || c.auto_epg;
     $('#tv-modal-epg').value = epgVal;
     $('#tv-modal-orig-epg').textContent = c.override_epg ? `Override` : `Auto: ${c.auto_epg || '—'}`;
@@ -2029,7 +2210,6 @@ function openTvModal(id, src){
 let _TV_CHANNELS = [];
 async function loadTvChannels(){
     try{
-        // Ensure catalog is loaded
         if(!ALL.dlstreams.length) await loadCatalog('dlstreams');
         if(!ALL.vavoo.length) await loadCatalog('vavoo');
 
@@ -2040,62 +2220,46 @@ async function loadTvChannels(){
         const s = d.settings.stremio || {};
 
         _TV_CHANNELS = [];
-        [...(ALL.dlstreams||[]), ...(ALL.vavoo||[])].forEach(c => {
+        [...(ALL.dlstreams||[])].forEach(c => {
             const id = c.id;
             const autoLogo = `/logo/dlstreams/${id}.png`;
             const autoStream = `/hls/${id}/index.m3u8`;
             const autoEpg = window._EPG_MAP[id] || '';
             _TV_CHANNELS.push({
-                id,
-                src: 'dlstreams',
-                name: c.name,
-                orig_name: c.name,
+                id, src: 'dlstreams', name: c.name, orig_name: c.name,
                 override_name: s.channel_names?.[id],
                 override_logo: s.channel_logos?.[id],
                 override_streams: s.channel_streams?.[id] || [],
                 override_epg: s.channel_epg?.[id],
-                auto_logo: autoLogo,
-                auto_stream: autoStream,
-                auto_epg: autoEpg,
+                override_stream: (s.channel_streams?.[id] || [])[0]?.url || '',
+                auto_logo: autoLogo, auto_stream: autoStream, auto_epg: autoEpg,
             });
         });
         [...(ALL.vavoo||[])].forEach(c => {
-            if (!_TV_CHANNELS.some(x => x.id === c.id && x.src === 'vavoo')) {
-                const autoLogo = `/logo/vavoo/${b64u(c.id)}.png`;
-                const autoStream = `/vhls?v=${b64u(c.id)}`;
-                const autoEpg = window._EPG_MAP[c.id] || '';
-                _TV_CHANNELS.push({
-                    id: c.id,
-                    src: 'vavoo',
-                    name: c.name,
-                    orig_name: c.name,
-                    override_name: s.channel_names?.[c.id],
-                    override_logo: s.channel_logos?.[c.id],
-                    override_streams: s.channel_streams?.[c.id] || [],
-                    override_epg: s.channel_epg?.[c.id],
-                    auto_logo: autoLogo,
-                    auto_stream: autoStream,
-                    auto_epg: autoEpg,
-                });
-            }
+            const autoLogo = `/logo/vavoo/${b64u(c.id)}.png`;
+            const autoStream = `/vhls?v=${b64u(c.id)}`;
+            const autoEpg = window._EPG_MAP[c.id] || '';
+            _TV_CHANNELS.push({
+                id: c.id, src: 'vavoo', name: c.name, orig_name: c.name,
+                override_name: s.channel_names?.[c.id],
+                override_logo: s.channel_logos?.[c.id],
+                override_streams: s.channel_streams?.[c.id] || [],
+                override_epg: s.channel_epg?.[c.id],
+                override_stream: (s.channel_streams?.[c.id] || [])[0]?.url || '',
+                auto_logo: autoLogo, auto_stream: autoStream, auto_epg: autoEpg,
+            });
         });
-        // Custom channels
         const custom = s.custom_channels || {};
         for(const [cid, cc] of Object.entries(custom)){
             _TV_CHANNELS.push({
-                id: cid,
-                src: 'custom',
-                name: cc.name,
-                orig_name: cc.name,
-                override_name: cc.name,
-                override_logo: cc.logo,
+                id: cid, src: 'custom', name: cc.name, orig_name: cc.name,
+                override_name: cc.name, override_logo: cc.logo,
                 override_stream: (cc.streams || [])[0] || '',
                 override_epg: cc.epg,
-                auto_logo: cc.logo || '',
-                auto_stream: (cc.streams || [])[0] || '',
-                auto_epg: cc.epg || '',
+                auto_logo: cc.logo || '', auto_stream: (cc.streams || [])[0] || '', auto_epg: cc.epg || '',
             });
-}
+        }
+        renderTvChannels();
     }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur chargement chaînes: ' + err.message,'error'); }
 }
 let _TV_TAB = 'all';
@@ -2119,8 +2283,7 @@ function renderTvChannels(){
     if(q) channels = channels.filter(c =>
         (c.id||'').toLowerCase().includes(q) ||
         (c.name||'').toLowerCase().includes(q) ||
-        (c.src||'').toLowerCase().includes(q) ||
-        (c.epg_id||'').toLowerCase().includes(q)
+        (c.src||'').toLowerCase().includes(q)
     );
     if(cnt) cnt.textContent = channels.length + (channels.length>1?' chaînes':' chaîne');
     if(!channels.length){
@@ -2129,13 +2292,9 @@ function renderTvChannels(){
     }
     list.innerHTML = '<div class="tv-ch-row tv-ch-head"><div style="width:50px">Logo</div><div>Nom</div><div style="width:100px">Source</div><div style="width:90px">EPG</div><div style="width:90px">Flux</div><div style="width:80px"></div></div>' +
         channels.map(c => {
-            const hasName = !!c.override_name;
-            const hasLogo = !!c.override_logo;
-            const hasStream = !!c.override_stream;
-            const hasEpg = !!c.override_epg;
             const logoHtml = c.override_logo ? `<img src="${escapeHtml(c.override_logo)}" style="width:36px;height:20px;object-fit:cover;border-radius:3px;border:1px solid var(--border)">` : `<span style="color:var(--muted);font-size:11px">Auto</span>`;
             const streamHtml = c.override_stream ? `<span class="tv-stream ok">${escapeHtml(c.override_stream).substring(0,35)}…</span>` : `<span class="tv-stream missing">Auto</span>`;
-            const epgHtml = c.override_epg ? `<span class="tv-epg ok">${escapeHtml(c.override_epg)}</span>` : (c.epg_id ? `<span class="tv-epg warn">${escapeHtml(c.epg_id)}</span>` : `<span class="tv-epg missing">—</span>`);
+            const epgHtml = c.override_epg ? `<span class="tv-epg ok">${escapeHtml(c.override_epg)}</span>` : (c.auto_epg ? `<span class="tv-epg warn">${escapeHtml(c.auto_epg)}</span>` : `<span class="tv-epg missing">—</span>`);
             const nameHtml = c.override_name ? `<span class="tv-name custom">${escapeHtml(c.override_name)}</span>` : `<span class="tv-name auto">${escapeHtml(c.name)}</span>`;
             const rowClick = c.src === 'custom' ? `editCustomChannel('${escapeHtml(c.id)}')` : `openTvModal('${escapeHtml(c.id)}','${escapeHtml(c.src)}')`;
             return `<div class="tv-ch-row" data-id="${escapeHtml(c.id)}" data-src="${escapeHtml(c.src)}" onclick="${rowClick}">
@@ -2149,7 +2308,7 @@ function renderTvChannels(){
         }).join('');
 }
 
-// Custom channel management
+// Chaîne personnalisée
 let _editingCustomId = null;
 
 function openAddCustomChannel(){
@@ -2180,7 +2339,7 @@ async function saveCustomChannel(){
     const logo = $('#tv-custom-logo').value.trim();
     const streams = $('#tv-custom-streams').value.trim().split('\n').map(s=>s.trim()).filter(Boolean);
     const epg = $('#tv-custom-epg').value.trim();
-    
+
     if(!id || !name || !streams.length){
         toast('ID, nom et au moins un flux requis','error');
         return;
@@ -2189,10 +2348,10 @@ async function saveCustomChannel(){
         toast('ID: lettres, chiffres, _ et - uniquement','error');
         return;
     }
-    
+
     const st = _settings.stremio || {};
-    const custom = st.custom_channels || {};
-    
+    const custom = { ...(st.custom_channels || {}) };
+
     if(!_editingCustomId && custom[id]){
         toast('Cet ID existe déjà','error');
         return;
@@ -2201,14 +2360,12 @@ async function saveCustomChannel(){
         toast('Cet ID existe déjà','error');
         return;
     }
-    
-    // Remove old if renaming
     if(_editingCustomId && _editingCustomId !== id){
         delete custom[_editingCustomId];
     }
-    
+
     custom[id] = { name, logo, streams, epg };
-    
+
     const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stremio:{...st, custom_channels:custom}})});
     if(r.ok){
         toast('Chaîne personnalisée enregistrée','success');
@@ -2252,7 +2409,7 @@ async function deleteCustomChannel(){
 
 async function refreshEpg(){
     const st = $('#epg-status');
-    st.textContent = 'Rafraîchissement en cours…';
+    if(st) st.textContent = 'Rafraîchissement en cours…';
     try{
         const r = await apiFetch("/api/epg/refresh", {method:'POST'});
         if(r.ok){ toast('Rafraîchissement EPG lancé','success'); setTimeout(loadSettings, 4000); }
@@ -2260,6 +2417,7 @@ async function refreshEpg(){
     }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur','error'); }
 }
 
+// ---- Lecteur intégré (test de flux) ----
 let _hls = null;
 function closePlayer(){
     const video = $("#player-frame");
@@ -2267,16 +2425,32 @@ function closePlayer(){
     video.src = "";
     if (_hls) { _hls.destroy(); _hls = null; }
     $("#player-modal").classList.remove("active");
+    const status = $("#player-status");
+    status.classList.remove('show','ok','ko');
 }
 function openPlayer(url, title){
     $("#player-title").textContent = title;
     const video = $("#player-frame");
+    const status = $("#player-status");
+    status.classList.remove('show','ok','ko');
     if (_hls) { _hls.destroy(); _hls = null; }
+    const t0 = performance.now();
     if (window.Hls && Hls.isSupported()) {
         _hls = new Hls();
         _hls.loadSource(url);
         _hls.attachMedia(video);
-        _hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+        _hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play().catch(()=>{});
+            const ms = Math.round(performance.now() - t0);
+            status.textContent = `✓ Flux chargé en ${ms}ms`;
+            status.classList.add('show','ok');
+        });
+        _hls.on(Hls.Events.ERROR, (evt, data) => {
+            if(data.fatal){
+                status.textContent = `✗ Erreur de lecture (${data.type})`;
+                status.classList.add('show','ko');
+            }
+        });
     } else {
         video.src = url;
         video.play().catch(()=>{});
@@ -2290,8 +2464,8 @@ document.addEventListener("click", (e)=>{
     const card = e.target.closest(".chan-card, .channel-item");
     if(card && card.dataset.play){
         e.preventDefault();
-        const name = (card.querySelector(".chan-name") || card.querySelector(".name")).textContent;
-        openPlayer(card.dataset.play, name);
+        const nameEl = card.querySelector(".chan-name") || card.querySelector(".name");
+        openPlayer(card.dataset.play, nameEl ? nameEl.textContent : '');
     }
 });
 document.addEventListener("click", (e)=>{
@@ -2355,8 +2529,8 @@ $("#lang-filter").addEventListener("change", (e) => {
 });
 if($("#lang-filter")) $("#lang-filter").value = LANG_FILTER;
 if($("#catalog-sort")) $("#catalog-sort").value = SORT;
-document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",async ()=>{
-    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+document.querySelectorAll("#page-catalog .tab[data-src]").forEach(b=>b.addEventListener("click",async ()=>{
+    document.querySelectorAll("#page-catalog .tab[data-src]").forEach(x=>x.classList.remove("active"));
     b.classList.add("active");
     CURRENT = b.dataset.src;
     if(!ALL[CURRENT].length) await loadCatalog(CURRENT);
@@ -2371,7 +2545,9 @@ let logsPaused = false;
 function restartLogPolling() {
     if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
     if (logsPaused) return;
-    const ms = Number(document.getElementById('logs-interval').value);
+    const sel = document.getElementById('logs-interval');
+    if(!sel) return;
+    const ms = Number(sel.value);
     if (ms > 0) logsInterval = setInterval(loadLogs, ms);
 }
 
@@ -2403,11 +2579,12 @@ async function loadLogs() {
 }
 
 function updateLogsBadge() {
-    const badge = document.getElementById('logs-badge');
-    if (!badge) return;
     const errs = allLogs.filter(l => l.code >= 400).length;
-    if (errs) { badge.style.display = 'inline-block'; badge.textContent = errs; }
-    else badge.style.display = 'none';
+    document.querySelectorAll('#logs-badge, #logs-badge-sub').forEach(badge => {
+        if (!badge) return;
+        if (errs) { badge.style.display = 'inline-block'; badge.textContent = errs; }
+        else badge.style.display = 'none';
+    });
 }
 
 function updateLogsStats() {
@@ -2426,8 +2603,11 @@ function updateLogsStats() {
 }
 
 function renderLogs() {
-    const methodFilter = document.getElementById('logs-method').value;
-    const search = document.getElementById('logs-search').value.trim().toLowerCase();
+    const methodSel = document.getElementById('logs-method');
+    const searchEl = document.getElementById('logs-search');
+    if(!methodSel || !searchEl) return;
+    const methodFilter = methodSel.value;
+    const search = searchEl.value.trim().toLowerCase();
 
     let filtered = [...allLogs].reverse();
     if (methodFilter) filtered = filtered.filter(l => l.method === methodFilter);
@@ -2484,30 +2664,19 @@ async function clearLogs() {
     } catch (e) { toast('❌ ' + e.message, 'error'); }
 }
 
-// ---- PAGE SYSTEME ----
-function fmtBytes(b){
-    if(b === null) return "—";
-    if(b >= 1073741824) return (b/1073741824).toFixed(1) + " Go";
-    if(b >= 1048576) return (b/1048576).toFixed(1) + " Mo";
-    if(b >= 1024) return (b/1024).toFixed(1) + " Ko";
-    return b + " o";
-}
-function sysRows(rows){
-    return rows.map(([k,v]) => `<div class="sys-row"><div class="sys-key">${escapeHtml(k)}</div><div class="sys-val">${escapeHtml(String(v))}</div></div>`).join('');
-}
 async function boot(){
     await Promise.all([refreshStats(), loadCatalog("dlstreams"), loadPlays()]);
     render();
-    loadLogs();
     loadLive();
-    restartLogPolling();
     setInterval(() => { if (!document.hidden) refreshStats(); }, 30000);
     setInterval(() => { if (!document.hidden) loadLive(); }, 5000);
+    setInterval(() => { if (!document.hidden && !logsPaused) loadLogs(); }, 15000);
+    loadLogs();
     const hp = (location.pathname.split('/dashboard/')[1] || '').replace(/\/+$/, '');
     if (hp && hp !== 'dashboard' && document.getElementById('page-' + hp)) navigateTo(hp);
 }
 
-// ===== PLAYLISTS =====
+// ===== PLAYLISTS (Stremio) =====
 let PLAYLISTS = [];
 let PL_CURRENT = null;
 async function loadPlaylists(){
