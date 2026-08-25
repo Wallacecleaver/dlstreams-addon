@@ -439,14 +439,39 @@
   .btn-danger:disabled { opacity:.6; cursor:not-allowed; }
 
   /* Wiseplay settings card (Réglages) */
-  .wp-code-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  .wp-code-row input { flex:1; min-width:160px; }
-  .wp-status { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:5px 12px; border-radius:20px; }
+  .wp-hero { position:relative; overflow:hidden; border-radius:16px; padding:28px;
+    background:linear-gradient(150deg, rgba(229,62,62,0.10), var(--surface) 55%);
+    border:1px solid rgba(229,62,62,0.18); margin-bottom:20px; }
+  .wp-hero::after { content:''; position:absolute; top:-30%; right:-10%; width:280px; height:280px; border-radius:50%;
+    background:radial-gradient(circle, rgba(229,62,62,.18), transparent 70%); pointer-events:none; }
+  .wp-hero-top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; position:relative; z-index:1; }
+  .wp-hero-brand { display:flex; align-items:center; gap:14px; }
+  .wp-hero-icon { width:52px; height:52px; border-radius:14px; flex-shrink:0;
+    background:linear-gradient(135deg,var(--accent),#ff7a59); display:grid; place-items:center;
+    font-size:24px; box-shadow:0 8px 24px rgba(229,62,62,.35); }
+  .wp-hero-title { font-family:var(--font-display); font-size:26px; letter-spacing:.4px; color:var(--text); line-height:1; }
+  .wp-hero-desc { font-size:13px; color:var(--text2); margin-top:4px; max-width:480px; line-height:1.5; }
+  .wp-feature-list { display:flex; gap:18px; flex-wrap:wrap; margin-top:18px; position:relative; z-index:1; }
+  .wp-feature { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--text2); font-weight:600; }
+  .wp-feature .ico { color:var(--green); }
+  .wp-code-card { position:relative; z-index:1; margin-top:22px; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:18px 20px; }
+  .wp-code-label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:700; margin-bottom:8px; }
+  .wp-code-input { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; color:var(--text); font-family:var(--font-mono); font-size:22px; letter-spacing:2px;
+    font-weight:700; text-align:center; text-transform:uppercase; }
+  .wp-code-input:focus { outline:none; border-color:var(--accent); }
+  .wp-code-input::placeholder { font-size:13px; letter-spacing:.3px; text-transform:none; font-weight:500; color:var(--muted); }
+  .wp-code-actions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+  .wp-code-actions button { flex:1; min-width:120px; }
+  .wp-status { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:6px 14px; border-radius:20px; }
   .wp-status.on { color:var(--green); background:rgba(72,187,120,.1); border:1px solid rgba(72,187,120,.35); }
   .wp-status.off { color:var(--muted); background:var(--surface2); border:1px solid var(--border); }
-  .wp-link-box { display:flex; align-items:center; gap:8px; background:var(--input-bg); border:1px solid var(--border);
-    border-radius:8px; padding:9px 12px; margin-top:10px; font-family:var(--font-mono); font-size:12px; color:var(--text2);
-    overflow-x:auto; white-space:nowrap; }
+  .wp-link-box { display:none; align-items:center; gap:10px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; padding:12px 16px; margin-top:14px; font-family:var(--font-mono); font-size:13px; color:var(--text);
+    position:relative; z-index:1; }
+  .wp-link-box.show { display:flex; }
+  .wp-link-box span { flex:1; overflow-x:auto; white-space:nowrap; }
 
   /* Sub-tabs used inside Stremio page */
   .subnav { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:10px;
@@ -518,9 +543,20 @@
         <div class="sidebar-nav">
           <div class="nav-section-label">Menu</div>
           <button class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">📊 Vue d'ensemble</button>
-          <button class="nav-item" data-page="stremio" onclick="navigateTo('stremio')">🎬 Stremio</button>
           <button class="nav-item" data-page="catalog" onclick="navigateTo('catalog')">📺 Catalogue</button>
-          <button class="nav-item" data-page="settings" onclick="navigateTo('settings')">⚙️ Réglages<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
+          <button class="nav-item" data-page="logs" onclick="navigateTo('logs')">📋 Logs<span class="nav-badge" id="logs-badge" style="display:none">0</span></button>
+
+          <div class="nav-section-label">Stremio</div>
+          <button class="nav-item" data-page="st-channels" onclick="navigateTo('st-channels')">📺 Chaînes</button>
+          <button class="nav-item" data-page="st-categories" onclick="navigateTo('st-categories')">🗂️ Catégories</button>
+          <button class="nav-item" data-page="st-playlists" onclick="navigateTo('st-playlists')">🎵 Playlists</button>
+          <button class="nav-item" data-page="st-programs" onclick="navigateTo('st-programs')">🕐 Programmes</button>
+          <button class="nav-item" data-page="rg-add" onclick="navigateTo('rg-add')">➕ Ajouter une chaîne</button>
+
+          <div class="nav-section-label">Réglages</div>
+          <button class="nav-item" data-page="rg-wiseplay" onclick="navigateTo('rg-wiseplay')">📱 Wiseplay</button>
+          <button class="nav-item" data-page="rg-general" onclick="navigateTo('rg-general')">🎨 Général</button>
+          <button class="nav-item" data-page="rg-system" onclick="navigateTo('rg-system')">🖥️ Système</button>
         </div>
         <div class="sidebar-bottom">
           <button class="btn-logout" onclick="logout()">↪ Déconnexion</button>
@@ -650,319 +686,334 @@
           </div>
         </div>
 
-        <!-- PAGE: STREMIO -->
-        <div class="page" id="page-stremio">
+        <!-- PAGE: CHAINES -->
+        <div class="page" id="page-st-channels">
           <div class="page-header">
             <div>
-              <div class="page-title">Stremio</div>
-              <div class="page-sub">Chaînes, logos, catégories, flux et playlists de l'addon</div>
+              <div class="page-title">Chaînes</div>
+              <div class="page-sub">Nom, logo, flux et EPG de chaque chaîne de l'addon</div>
             </div>
           </div>
-
-          <div class="subnav">
-            <button class="subnav-item active" data-sub="st-channels" onclick="switchStremioSub('st-channels')">📺 Chaînes</button>
-            <button class="subnav-item" data-sub="st-categories" onclick="switchStremioSub('st-categories')">🗂️ Catégories</button>
-            <button class="subnav-item" data-sub="st-playlists" onclick="switchStremioSub('st-playlists')">🎵 Playlists</button>
-            <button class="subnav-item" data-sub="st-programs" onclick="switchStremioSub('st-programs')">🕐 Programmes</button>
-            <button class="subnav-item" data-sub="st-add" onclick="switchStremioSub('st-add')">➕ Ajouter une chaîne</button>
-            <button class="subnav-item" data-sub="st-general" onclick="switchStremioSub('st-general')">🎨 Général</button>
-          </div>
-
-          <!-- SUB: Chaînes -->
-          <div class="subpage active" id="sub-st-channels">
-            <div class="card">
-              <div class="card-head">
-                <div class="tabs" style="margin-bottom:8px">
-                  <button class="tab active" data-tv-tab="all" onclick="switchTvTab('all')">📺 Toutes</button>
-                  <button class="tab" data-tv-tab="custom" onclick="switchTvTab('custom')">⭐ Personnalisées</button>
-                </div>
-                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                  <div class="catalog-search" style="min-width:280px;flex:1">
-                    <span class="search-ico">🔍</span>
-                    <input type="search" id="tv-ch-search" placeholder="Filtrer (nom, ID, source, EPG)…" oninput="renderTvChannels()">
-                  </div>
-                  <span class="card-desc" id="tv-ch-count"></span>
-                  <button class="btn-outline-sm" onclick="loadTvChannels()">↻ Rafraîchir</button>
-                  <button class="add-source-btn" id="tv-add-custom-btn" style="display:none;width:auto" onclick="openAddCustomChannel()">➕ Ajouter chaîne</button>
-                </div>
+          <div class="card">
+            <div class="card-head">
+              <div class="tabs" style="margin-bottom:8px">
+                <button class="tab active" data-tv-tab="all" onclick="switchTvTab('all')">📺 Toutes</button>
+                <button class="tab" data-tv-tab="custom" onclick="switchTvTab('custom')">⭐ Personnalisées</button>
               </div>
-              <div class="card-body" style="padding-top:8px">
-                <div class="tv-ch-table" id="tv-ch-list">
-                  <div class="tv-empty">Chargement…</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- SUB: Catégories -->
-          <div class="subpage" id="sub-st-categories">
-            <div class="card">
-              <div class="card-head"><div class="card-title">🗂️ Catégories des chaînes populaires</div></div>
-              <div class="card-body">
-                <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Attribuez une catégorie aux chaînes populaires. Elles alimentent le filtre « genre » de Stremio.</p>
-                <div id="genre-edit" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">chargement…</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- SUB: Playlists -->
-          <div class="subpage" id="sub-st-playlists">
-            <div class="page-header" style="margin-bottom:16px">
-              <div class="page-sub">Regroupez vos chaînes favorites en collections exportables en M3U</div>
-              <div class="header-actions">
-                <input type="text" id="pl-new-name" placeholder="Nom de la playlist…" style="background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-size:13px">
-                <button class="btn-add" onclick="createPlaylist()">➕ Créer</button>
-              </div>
-            </div>
-            <div class="channel-list" id="playlists-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
-              <div class="fav-empty">chargement…</div>
-            </div>
-          </div>
-
-          <!-- SUB: Programmes -->
-          <div class="subpage" id="sub-st-programs">
-            <div class="card">
-              <div class="card-head" style="gap:12px">
-                <div class="catalog-search">
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div class="catalog-search" style="min-width:280px;flex:1">
                   <span class="search-ico">🔍</span>
-                  <input type="search" id="now-q" placeholder="Rechercher une chaîne ou un programme…" oninput="renderNow()">
+                  <input type="search" id="tv-ch-search" placeholder="Filtrer (nom, ID, source, EPG)…" oninput="renderTvChannels()">
                 </div>
-                <span class="card-desc" id="now-total" style="white-space:nowrap"></span>
-                <button class="btn-outline-sm" onclick="loadNow(true)" title="Rafraîchir les programmes">↻</button>
-              </div>
-              <div class="card-body" id="now-list" style="padding-top:8px">
-                <div class="fav-empty">EPG pas encore chargé — va dans Stremio → Général pour le rafraîchir</div>
+                <span class="card-desc" id="tv-ch-count"></span>
+                <button class="btn-outline-sm" onclick="loadTvChannels()">↻ Rafraîchir</button>
+                <button class="add-source-btn" id="tv-add-custom-btn" style="display:none;width:auto" onclick="openAddCustomChannel()">➕ Ajouter chaîne</button>
               </div>
             </div>
-          </div>
-
-          <!-- SUB: Ajouter une chaîne -->
-          <div class="subpage" id="sub-st-add">
-            <div class="card">
-              <div class="card-head"><div class="card-title">📡 Ajouter une chaîne via le scraper W Addon TV</div></div>
-              <div class="card-body">
-                <div class="add-source-box">
-                  <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page W Addon TV (ex: https://dlstreams.st/watch.php?id=121)">
-                  <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
-                  <div class="add-source-result" id="add-source-result"></div>
-                  <div class="add-source-preview" id="add-source-preview" style="display:none"></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-head">
-                <div class="card-title">📋 Chaînes ajoutées manuellement</div>
-                <span class="card-desc" id="manual-count" style="font-size:12px;color:var(--muted)"></span>
-              </div>
-              <div class="card-body">
-                <div class="manual-channels-list" id="manual-channels-list">
-                  <div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-head"><div class="card-title">🕒 Activité récente</div></div>
-              <div class="card-body">
-                <div id="activity-list-src" style="font-size:13px;color:var(--text2)">chargement…</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- SUB: Général -->
-          <div class="subpage" id="sub-st-general">
-            <div class="card">
-              <div class="card-head"><div class="card-title">📝 Manifest de l'addon</div></div>
-              <div class="card-body">
-                <div class="form-row">
-                  <label>Nom de l'addon</label>
-                  <input type="text" id="set-manifest-name" placeholder="W Addon TV">
-                </div>
-                <div class="form-row">
-                  <label>Description</label>
-                  <input type="text" id="set-manifest-desc" placeholder="Chaînes TV en direct via dlstreams + Vavoo…">
-                </div>
-                <div class="form-row">
-                  <label>Langue par défaut</label>
-                  <select id="set-default-lang">
-                    <option value="fr">🇫🇷 Français</option>
-                    <option value="en">🇬🇧 English</option>
-                    <option value="es">🇪🇸 Español</option>
-                    <option value="de">🇩🇪 Deutsch</option>
-                    <option value="it">🇮🇹 Italiano</option>
-                    <option value="ar">🇸🇦 Arabe</option>
-                    <option value="pt">🇵🇹 Português</option>
-                  </select>
-                </div>
-                <button class="add-source-btn" style="width:auto;padding:10px 20px" onclick="saveSettings()">💾 Enregistrer</button>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-head"><div class="card-title">🎨 Affichage & sources</div></div>
-              <div class="card-body">
-                <label class="toggle-row">
-                  <div>
-                    <div class="toggle-title">Logos réels des chaînes</div>
-                    <div class="toggle-sub">Vraies logos des chaînes populaires, sinon posters générés</div>
-                  </div>
-                  <input type="checkbox" id="set-logos" onchange="saveSettings()">
-                </label>
-                <label class="toggle-row">
-                  <div>
-                    <div class="toggle-title">EPG — programme en cours</div>
-                    <div class="toggle-sub">Affiche « Maintenant / À suivre » sur les chaînes couvertes</div>
-                  </div>
-                  <input type="checkbox" id="set-epg" onchange="saveSettings()">
-                </label>
-                <label class="toggle-row">
-                  <div>
-                    <div class="toggle-title">Inclure les chaînes W Addon TV</div>
-                    <div class="toggle-sub">Affiche les chaînes dlstreams dans le catalogue Stremio</div>
-                  </div>
-                  <input type="checkbox" id="set-include-dl" onchange="saveSettings()">
-                </label>
-                <label class="toggle-row">
-                  <div>
-                    <div class="toggle-title">Inclure les chaînes Vavoo</div>
-                    <div class="toggle-sub">Affiche les chaînes Vavoo dans le catalogue Stremio</div>
-                  </div>
-                  <input type="checkbox" id="set-include-vv" onchange="saveSettings()">
-                </label>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-head"><div class="card-title">📡 Source EPG (XMLTV)</div></div>
-              <div class="card-body">
-                <input class="add-source-input" id="set-epg-url" type="url" placeholder="URL du fichier XMLTV (.xml ou .xml.gz)">
-                <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
-                  <button class="add-source-btn" style="width:auto;padding:10px 20px" onclick="saveSettings()">💾 Enregistrer</button>
-                  <button class="btn-outline-sm" onclick="refreshEpg()">↻ Rafraîchir l'EPG</button>
-                  <span id="epg-status" style="color:var(--text2);font-size:13px">chargement…</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Modal édition chaîne (existantes) -->
-          <div class="modal" id="tv-ch-modal">
-            <div class="modal-content tv-modal">
-              <div class="modal-header">
-                <h3 id="tv-modal-title">Éditer la chaîne</h3>
-                <button class="modal-close" onclick="closeTvModal()">&times;</button>
-              </div>
-              <div class="modal-body">
-                <input type="hidden" id="tv-modal-id">
-                <input type="hidden" id="tv-modal-src">
-
-                <div class="form-row">
-                  <label>ID (lecture seule)</label>
-                  <input type="text" id="tv-modal-id-input" readonly style="background:var(--surface2);color:var(--text2)">
-                </div>
-                <div class="form-row">
-                  <label>Source</label>
-                  <input type="text" id="tv-modal-src-input" readonly style="background:var(--surface2);color:var(--text2);text-transform:uppercase">
-                </div>
-
-                <div class="form-row">
-                  <label>Nom de la chaîne</label>
-                  <input type="text" id="tv-modal-name" placeholder="Nom personnalisé (vide = auto)">
-                  <span id="tv-modal-orig-name" style="font-size:11px;color:var(--muted)"></span>
-                </div>
-
-                <div class="form-row">
-                  <label>Logo (URL png/jpg)</label>
-                  <input type="url" id="tv-modal-logo" placeholder="https://.../logo.png (vide = auto)">
-                  <img id="tv-modal-logo-preview" src="" alt="" style="width:48px;height:27px;object-fit:cover;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
-                  <span id="tv-modal-orig-logo" style="font-size:11px;color:var(--muted)"></span>
-                </div>
-
-                <div class="form-row">
-                  <label>Flux personnalisés (m3u8/mpd) — texte + lien, plusieurs possibles</label>
-                  <div id="tv-modal-streams"></div>
-                  <button type="button" class="btn-outline-sm" onclick="addTvStreamRow()" style="margin-top:6px">➕ Ajouter un flux</button>
-                  <span id="tv-modal-orig-stream" style="font-size:11px;color:var(--muted);display:block;margin-top:5px"></span>
-                </div>
-
-                <div class="form-row">
-                  <label>EPG (ID xmltv)</label>
-                  <input type="text" id="tv-modal-epg" placeholder="ID xmltv pour l'EPG (vide = auto)">
-                  <span id="tv-modal-orig-epg" style="font-size:11px;color:var(--muted)"></span>
-                </div>
-
-                <div class="form-actions">
-                  <button class="btn-outline-sm" onclick="resetTvModal()">↺ Réinitialiser</button>
-                  <button class="btn-outline-sm" onclick="deleteTvChannel()">🗑️ Supprimer override</button>
-                  <button class="add-source-btn" style="width:auto" onclick="saveTvChannel()">💾 Enregistrer</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Modal chaîne personnalisée -->
-          <div class="modal" id="tv-custom-modal">
-            <div class="modal-content tv-modal">
-              <div class="modal-header">
-                <h3 id="tv-custom-modal-title">Ajouter chaîne personnalisée</h3>
-                <button class="modal-close" onclick="closeCustomChannelModal()">&times;</button>
-              </div>
-              <div class="modal-body">
-                <input type="hidden" id="tv-custom-id">
-                <div class="form-row">
-                  <label>ID unique (lettres, chiffres, _ et -)</label>
-                  <input type="text" id="tv-custom-id-input" placeholder="ex: ma-chaine-1">
-                </div>
-                <div class="form-row">
-                  <label>Nom de la chaîne</label>
-                  <input type="text" id="tv-custom-name" placeholder="Nom affiché dans Stremio">
-                </div>
-                <div class="form-row">
-                  <label>Logo (URL png/jpg)</label>
-                  <input type="url" id="tv-custom-logo" placeholder="https://.../logo.png" oninput="$('#tv-custom-logo-preview').src=this.value;$('#tv-custom-logo-preview').style.display=this.value?'block':'none'">
-                  <img id="tv-custom-logo-preview" src="" alt="" style="width:48px;height:27px;object-fit:cover;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
-                </div>
-                <div class="form-row">
-                  <label>Flux (un par ligne, m3u8/mpd)</label>
-                  <textarea id="tv-custom-streams" rows="4" placeholder="https://.../flux1.m3u8" style="resize:vertical;font-family:var(--font-mono)"></textarea>
-                </div>
-                <div class="form-row">
-                  <label>EPG (ID xmltv, optionnel)</label>
-                  <input type="text" id="tv-custom-epg" placeholder="ID xmltv (facultatif)">
-                </div>
-                <div class="form-actions">
-                  <button class="btn-outline-sm" onclick="closeCustomChannelModal()">Annuler</button>
-                  <button class="btn-danger" id="tv-custom-delete-btn" style="display:none" onclick="deleteCustomChannel()">🗑️ Supprimer</button>
-                  <button class="add-source-btn" style="width:auto" onclick="saveCustomChannel()">💾 Enregistrer</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Modal playlist -->
-          <div class="modal" id="pl-modal">
-            <div class="modal-content" style="max-width:640px">
-              <div class="modal-header">
-                <h3 id="pl-modal-title">Playlist</h3>
-                <button class="modal-close" onclick="closePlModal()">&times;</button>
-              </div>
-              <div class="modal-body">
-                <div class="search-bar" style="margin-bottom:14px">
-                  <input type="search" id="pl-add-search" placeholder="Rechercher une chaîne à ajouter…" oninput="renderPlAddResults()">
-                </div>
-                <div id="pl-add-results" style="max-height:160px;overflow-y:auto;margin-bottom:16px"></div>
-                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-weight:700">Chaînes dans la playlist</div>
-                <div id="pl-channels-list"></div>
-                <div class="form-actions">
-                  <button class="btn-outline-sm" onclick="exportPlaylistM3U()">⬇️ Export M3U</button>
-                  <button class="btn-danger" onclick="deletePlaylist()">🗑️ Supprimer la playlist</button>
-                </div>
+            <div class="card-body" style="padding-top:8px">
+              <div class="tv-ch-table" id="tv-ch-list">
+                <div class="tv-empty">Chargement…</div>
               </div>
             </div>
           </div>
         </div>
 
+        <!-- PAGE: CATEGORIES -->
+        <div class="page" id="page-st-categories">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Catégories</div>
+              <div class="page-sub">Classement par genre des chaînes populaires dans Stremio</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="card-title">🗂️ Catégories des chaînes populaires</div></div>
+            <div class="card-body">
+              <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Attribuez une catégorie aux chaînes populaires. Elles alimentent le filtre « genre » de Stremio.</p>
+              <div id="genre-edit" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">chargement…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: PLAYLISTS -->
+        <div class="page" id="page-st-playlists">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Playlists</div>
+              <div class="page-sub">Regroupez vos chaînes favorites en collections exportables en M3U</div>
+            </div>
+            <div class="header-actions">
+              <input type="text" id="pl-new-name" placeholder="Nom de la playlist…" style="background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-size:13px">
+              <button class="btn-add" onclick="createPlaylist()">➕ Créer</button>
+            </div>
+          </div>
+          <div class="channel-list" id="playlists-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+            <div class="fav-empty">chargement…</div>
+          </div>
+        </div>
+
+        <!-- PAGE: PROGRAMMES -->
+        <div class="page" id="page-st-programs">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Programmes</div>
+              <div class="page-sub">Ce qui passe en ce moment sur les chaînes couvertes par l'EPG</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head" style="gap:12px">
+              <div class="catalog-search">
+                <span class="search-ico">🔍</span>
+                <input type="search" id="now-q" placeholder="Rechercher une chaîne ou un programme…" oninput="renderNow()">
+              </div>
+              <span class="card-desc" id="now-total" style="white-space:nowrap"></span>
+              <button class="btn-outline-sm" onclick="loadNow(true)" title="Rafraîchir les programmes">↻</button>
+            </div>
+            <div class="card-body" id="now-list" style="padding-top:8px">
+              <div class="fav-empty">EPG pas encore chargé — va dans Réglages → Général pour le rafraîchir</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: AJOUTER UNE CHAINE -->
+        <div class="page" id="page-rg-add">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Ajouter une chaîne</div>
+              <div class="page-sub">Scraper une page W Addon TV et gérer les sources manuelles</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="card-title">📡 Ajouter une chaîne via le scraper W Addon TV</div></div>
+            <div class="card-body">
+              <div class="add-source-box">
+                <input class="add-source-input" id="source-url" type="url" placeholder="Collez l'URL d'une page W Addon TV (ex: https://dlstreams.st/watch.php?id=121)">
+                <button class="add-source-btn" id="add-source-btn">🔍 Scraper & Ajouter</button>
+                <div class="add-source-result" id="add-source-result"></div>
+                <div class="add-source-preview" id="add-source-preview" style="display:none"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">📋 Chaînes ajoutées manuellement</div>
+              <span class="card-desc" id="manual-count" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+            <div class="card-body">
+              <div class="manual-channels-list" id="manual-channels-list">
+                <div style="color:var(--muted);text-align:center;padding:30px;grid-column:1/-1">Aucune source ajoutée</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🕒 Activité récente</div></div>
+            <div class="card-body">
+              <div id="activity-list-src" style="font-size:13px;color:var(--text2)">chargement…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: GENERAL -->
+        <div class="page" id="page-rg-general">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Général</div>
+              <div class="page-sub">Manifest, affichage et EPG de l'addon</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="card-title">📝 Manifest de l'addon</div></div>
+            <div class="card-body">
+              <div class="form-row">
+                <label>Nom de l'addon</label>
+                <input type="text" id="set-manifest-name" placeholder="W Addon TV">
+              </div>
+              <div class="form-row">
+                <label>Description</label>
+                <input type="text" id="set-manifest-desc" placeholder="Chaînes TV en direct via dlstreams + Vavoo…">
+              </div>
+              <div class="form-row">
+                <label>Langue par défaut</label>
+                <select id="set-default-lang">
+                  <option value="fr">🇫🇷 Français</option>
+                  <option value="en">🇬🇧 English</option>
+                  <option value="es">🇪🇸 Español</option>
+                  <option value="de">🇩🇪 Deutsch</option>
+                  <option value="it">🇮🇹 Italiano</option>
+                  <option value="ar">🇸🇦 Arabe</option>
+                  <option value="pt">🇵🇹 Português</option>
+                </select>
+              </div>
+              <button class="add-source-btn" style="width:auto;padding:10px 20px" onclick="saveSettings()">💾 Enregistrer</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">🎨 Affichage & sources</div></div>
+            <div class="card-body">
+              <label class="toggle-row">
+                <div>
+                  <div class="toggle-title">Logos réels des chaînes</div>
+                  <div class="toggle-sub">Vraies logos des chaînes populaires, sinon posters générés</div>
+                </div>
+                <input type="checkbox" id="set-logos" onchange="saveSettings()">
+              </label>
+              <label class="toggle-row">
+                <div>
+                  <div class="toggle-title">EPG — programme en cours</div>
+                  <div class="toggle-sub">Affiche « Maintenant / À suivre » sur les chaînes couvertes</div>
+                </div>
+                <input type="checkbox" id="set-epg" onchange="saveSettings()">
+              </label>
+              <label class="toggle-row">
+                <div>
+                  <div class="toggle-title">Inclure les chaînes W Addon TV</div>
+                  <div class="toggle-sub">Affiche les chaînes dlstreams dans le catalogue Stremio</div>
+                </div>
+                <input type="checkbox" id="set-include-dl" onchange="saveSettings()">
+              </label>
+              <label class="toggle-row">
+                <div>
+                  <div class="toggle-title">Inclure les chaînes Vavoo</div>
+                  <div class="toggle-sub">Affiche les chaînes Vavoo dans le catalogue Stremio</div>
+                </div>
+                <input type="checkbox" id="set-include-vv" onchange="saveSettings()">
+              </label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">📡 Source EPG (XMLTV)</div></div>
+            <div class="card-body">
+              <input class="add-source-input" id="set-epg-url" type="url" placeholder="URL du fichier XMLTV (.xml ou .xml.gz)">
+              <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
+                <button class="add-source-btn" style="width:auto;padding:10px 20px" onclick="saveSettings()">💾 Enregistrer</button>
+                <button class="btn-outline-sm" onclick="refreshEpg()">↻ Rafraîchir l'EPG</button>
+                <span id="epg-status" style="color:var(--text2);font-size:13px">chargement…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal édition chaîne (existantes) -->
+        <div class="modal" id="tv-ch-modal">
+          <div class="modal-content tv-modal">
+            <div class="modal-header">
+              <h3 id="tv-modal-title">Éditer la chaîne</h3>
+              <button class="modal-close" onclick="closeTvModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="tv-modal-id">
+              <input type="hidden" id="tv-modal-src">
+
+              <div class="form-row">
+                <label>ID (lecture seule)</label>
+                <input type="text" id="tv-modal-id-input" readonly style="background:var(--surface2);color:var(--text2)">
+              </div>
+              <div class="form-row">
+                <label>Source</label>
+                <input type="text" id="tv-modal-src-input" readonly style="background:var(--surface2);color:var(--text2);text-transform:uppercase">
+              </div>
+
+              <div class="form-row">
+                <label>Nom de la chaîne</label>
+                <input type="text" id="tv-modal-name" placeholder="Nom personnalisé (vide = auto)">
+                <span id="tv-modal-orig-name" style="font-size:11px;color:var(--muted)"></span>
+              </div>
+
+              <div class="form-row">
+                <label>Logo (URL png/jpg)</label>
+                <input type="url" id="tv-modal-logo" placeholder="https://.../logo.png (vide = auto)">
+                <img id="tv-modal-logo-preview" src="" alt="" style="width:48px;height:27px;object-fit:cover;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
+                <span id="tv-modal-orig-logo" style="font-size:11px;color:var(--muted)"></span>
+              </div>
+
+              <div class="form-row">
+                <label>Flux personnalisés (m3u8/mpd) — texte + lien, plusieurs possibles</label>
+                <div id="tv-modal-streams"></div>
+                <button type="button" class="btn-outline-sm" onclick="addTvStreamRow()" style="margin-top:6px">➕ Ajouter un flux</button>
+                <span id="tv-modal-orig-stream" style="font-size:11px;color:var(--muted);display:block;margin-top:5px"></span>
+              </div>
+
+              <div class="form-row">
+                <label>EPG (ID xmltv)</label>
+                <input type="text" id="tv-modal-epg" placeholder="ID xmltv pour l'EPG (vide = auto)">
+                <span id="tv-modal-orig-epg" style="font-size:11px;color:var(--muted)"></span>
+              </div>
+
+              <div class="form-actions">
+                <button class="btn-outline-sm" onclick="resetTvModal()">↺ Réinitialiser</button>
+                <button class="btn-outline-sm" onclick="deleteTvChannel()">🗑️ Supprimer override</button>
+                <button class="add-source-btn" style="width:auto" onclick="saveTvChannel()">💾 Enregistrer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal chaîne personnalisée -->
+        <div class="modal" id="tv-custom-modal">
+          <div class="modal-content tv-modal">
+            <div class="modal-header">
+              <h3 id="tv-custom-modal-title">Ajouter chaîne personnalisée</h3>
+              <button class="modal-close" onclick="closeCustomChannelModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="tv-custom-id">
+              <div class="form-row">
+                <label>ID unique (lettres, chiffres, _ et -)</label>
+                <input type="text" id="tv-custom-id-input" placeholder="ex: ma-chaine-1">
+              </div>
+              <div class="form-row">
+                <label>Nom de la chaîne</label>
+                <input type="text" id="tv-custom-name" placeholder="Nom affiché dans Stremio">
+              </div>
+              <div class="form-row">
+                <label>Logo (URL png/jpg)</label>
+                <input type="url" id="tv-custom-logo" placeholder="https://.../logo.png" oninput="$('#tv-custom-logo-preview').src=this.value;$('#tv-custom-logo-preview').style.display=this.value?'block':'none'">
+                <img id="tv-custom-logo-preview" src="" alt="" style="width:48px;height:27px;object-fit:cover;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
+              </div>
+              <div class="form-row">
+                <label>Flux (un par ligne, m3u8/mpd)</label>
+                <textarea id="tv-custom-streams" rows="4" placeholder="https://.../flux1.m3u8" style="resize:vertical;font-family:var(--font-mono)"></textarea>
+              </div>
+              <div class="form-row">
+                <label>EPG (ID xmltv, optionnel)</label>
+                <input type="text" id="tv-custom-epg" placeholder="ID xmltv (facultatif)">
+              </div>
+              <div class="form-actions">
+                <button class="btn-outline-sm" onclick="closeCustomChannelModal()">Annuler</button>
+                <button class="btn-danger" id="tv-custom-delete-btn" style="display:none" onclick="deleteCustomChannel()">🗑️ Supprimer</button>
+                <button class="add-source-btn" style="width:auto" onclick="saveCustomChannel()">💾 Enregistrer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal playlist -->
+        <div class="modal" id="pl-modal">
+          <div class="modal-content" style="max-width:640px">
+            <div class="modal-header">
+              <h3 id="pl-modal-title">Playlist</h3>
+              <button class="modal-close" onclick="closePlModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="search-bar" style="margin-bottom:14px">
+                <input type="search" id="pl-add-search" placeholder="Rechercher une chaîne à ajouter…" oninput="renderPlAddResults()">
+              </div>
+              <div id="pl-add-results" style="max-height:160px;overflow-y:auto;margin-bottom:16px"></div>
+              <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-weight:700">Chaînes dans la playlist</div>
+              <div id="pl-channels-list"></div>
+              <div class="form-actions">
+                <button class="btn-outline-sm" onclick="exportPlaylistM3U()">⬇️ Export M3U</button>
+                <button class="btn-danger" onclick="deletePlaylist()">🗑️ Supprimer la playlist</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: CATALOG -->
         <!-- PAGE: CATALOG -->
         <div class="page" id="page-catalog">
           <div class="page-header">
@@ -1014,110 +1065,119 @@
           </div>
         </div>
 
-        <!-- PAGE: REGLAGES -->
-        <div class="page" id="page-settings">
+        <!-- PAGE: WISEPLAY -->
+        <div class="page" id="page-rg-wiseplay">
           <div class="page-header">
             <div>
-              <div class="page-title">Réglages</div>
-              <div class="page-sub">Wiseplay, système et journal des requêtes</div>
+              <div class="page-title">Wiseplay</div>
+              <div class="page-sub">Accès à la page publique où tes proches choisissent leurs chaînes</div>
             </div>
           </div>
 
-          <div class="subnav">
-            <button class="subnav-item active" data-sub="rg-wiseplay" onclick="switchSettingsSub('rg-wiseplay')">📱 Wiseplay</button>
-            <button class="subnav-item" data-sub="rg-system" onclick="switchSettingsSub('rg-system')">🖥️ Système</button>
-            <button class="subnav-item" data-sub="rg-logs" onclick="switchSettingsSub('rg-logs')">📋 Logs<span class="nav-badge" id="logs-badge-sub" style="display:none">0</span></button>
-          </div>
-
-          <!-- SUB: Wiseplay -->
-          <div class="subpage active" id="sub-rg-wiseplay">
-            <div class="card">
-              <div class="card-head">
-                <div class="card-title">📱 Accès Wiseplay</div>
-                <span class="wp-status off" id="wp-status-badge">● Désactivé</span>
+          <div class="wp-hero">
+            <div class="wp-hero-top">
+              <div class="wp-hero-brand">
+                <div class="wp-hero-icon">📱</div>
+                <div>
+                  <div class="wp-hero-title">Accès Wiseplay</div>
+                  <div class="wp-hero-desc">Protège l'accès à la page publique <a href="/wiseplay" target="_blank" style="color:var(--accent)">/wiseplay</a>, où les personnes que tu invites choisissent leurs chaînes et récupèrent leur propre lien M3U.</div>
+                </div>
               </div>
-              <div class="card-body">
-                <p style="color:var(--text2);font-size:13px;margin-bottom:14px">
-                  Ce code protège l'accès à la page publique <a href="/wiseplay" target="_blank" style="color:var(--accent)">/wiseplay</a>,
-                  où les personnes que tu invites peuvent choisir leurs chaînes et récupérer leur propre lien M3U.
-                  Laisse le champ vide pour désactiver complètement l'accès.
-                </p>
-                <div class="field" style="margin-bottom:0">
-                  <label for="wp-access-code">Code d'accès</label>
-                  <div class="wp-code-row">
-                    <input type="text" id="wp-access-code" class="add-source-input" style="margin-bottom:0" placeholder="Code pour /wiseplay (vide = désactivé)">
-                    <button class="btn-outline-sm" onclick="generateWpCode()" title="Générer un code aléatoire">🎲 Générer</button>
-                    <button class="add-source-btn" style="width:auto;padding:9px 20px" onclick="saveSettings()">💾 Enregistrer</button>
-                  </div>
-                </div>
-                <div class="wp-link-box" id="wp-link-box" style="display:none">
-                  <span id="wp-link-text" style="flex:1;overflow:hidden;text-overflow:ellipsis"></span>
-                  <button class="btn-outline-sm" style="flex-shrink:0" onclick="copyWpLink()">📋 Copier</button>
-                </div>
+              <span class="wp-status off" id="wp-status-badge">● Désactivé</span>
+            </div>
+
+            <div class="wp-feature-list">
+              <span class="wp-feature"><span class="ico">✓</span> Choix des chaînes par tes proches</span>
+              <span class="wp-feature"><span class="ico">✓</span> Lien M3U personnel généré</span>
+              <span class="wp-feature"><span class="ico">✓</span> Rien à installer de leur côté</span>
+            </div>
+
+            <div class="wp-code-card">
+              <div class="wp-code-label">Code d'accès</div>
+              <input type="text" id="wp-access-code" class="wp-code-input" placeholder="Vide = accès désactivé">
+              <div class="wp-code-actions">
+                <button class="btn-outline-sm" onclick="generateWpCode()" title="Générer un code aléatoire">🎲 Générer un code</button>
+                <button class="add-source-btn" style="width:auto" onclick="saveSettings()">💾 Enregistrer</button>
+              </div>
+              <div class="wp-link-box" id="wp-link-box">
+                <span id="wp-link-text"></span>
+                <button class="btn-outline-sm" style="flex-shrink:0" onclick="copyWpLink()">📋 Copier le lien</button>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- SUB: Système -->
-          <div class="subpage" id="sub-rg-system">
-            <div class="card">
-              <div class="card-head">
-                <div class="card-title">🖥️ Informations système</div>
-                <button class="btn-outline-sm" onclick="loadSystemInfo()">↻ Actualiser</button>
-              </div>
-              <div class="card-body">
-                <div class="sys-grid" id="sys-info">chargement…</div>
-              </div>
-              <div class="card-head" style="justify-content:flex-end;border-top:1px solid var(--border);border-bottom:none">
-                <button class="btn-danger" onclick="restartAddon()">🔄 Redémarrer l'addon</button>
-              </div>
+        <!-- PAGE: SYSTEME -->
+        <div class="page" id="page-rg-system">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Système</div>
+              <div class="page-sub">Informations serveur et redémarrage de l'addon</div>
             </div>
           </div>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">🖥️ Informations système</div>
+              <button class="btn-outline-sm" onclick="loadSystemInfo()">↻ Actualiser</button>
+            </div>
+            <div class="card-body">
+              <div class="sys-grid" id="sys-info">chargement…</div>
+            </div>
+            <div class="card-head" style="justify-content:flex-end;border-top:1px solid var(--border);border-bottom:none">
+              <button class="btn-danger" onclick="restartAddon()">🔄 Redémarrer l'addon</button>
+            </div>
+          </div>
+        </div>
 
-          <!-- SUB: Logs -->
-          <div class="subpage" id="sub-rg-logs">
-            <div class="card">
-              <div class="card-head logs-toolbar">
-                <div class="logs-stats" id="logs-stats">
-                  <span class="log-stat" id="stat-total"><b>0</b> total</span>
-                  <span class="log-stat ok" id="stat-2xx"><b>0</b> 2xx</span>
-                  <span class="log-stat warn" id="stat-4xx"><b>0</b> 4xx</span>
-                  <span class="log-stat err" id="stat-5xx"><b>0</b> 5xx</span>
-                </div>
-                <div class="logs-group logs-search">
-                  <input type="search" id="logs-search" placeholder="Filtrer chemin, IP, méthode…" oninput="renderLogs()">
-                  <span class="search-ico">🔍</span>
-                </div>
-                <div class="logs-group">
-                  <label>Méthode</label>
-                  <select class="logs-select" id="logs-method" onchange="renderLogs()">
-                    <option value="">Toutes</option>
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="DELETE">DELETE</option>
-                  </select>
-                </div>
-                <div class="logs-group">
-                  <label>Auto-refresh</label>
-                  <select class="logs-select" id="logs-interval" onchange="restartLogPolling()">
-                    <option value="2000">2s</option>
-                    <option value="5000" selected>5s</option>
-                    <option value="10000">10s</option>
-                    <option value="0">Off</option>
-                  </select>
-                </div>
-                <button class="logs-pausebtn" id="logs-pausebtn" onclick="toggleLogPause()">⏸️ Pause</button>
-                <button class="btn-outline-sm" onclick="exportLogs()">⬇️ Exporter</button>
-                <button class="btn-outline-sm" onclick="clearLogs()">🗑️ Vider</button>
-                <div class="logs-status" style="margin-left:auto">
-                  <div class="logs-dot" id="logs-dot"></div>
-                  <span id="logs-statustext">Live</span>
-                </div>
+        <!-- PAGE: LOGS -->
+        <div class="page" id="page-logs">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Logs</div>
+              <div class="page-sub">Journal des requêtes en temps réel</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head logs-toolbar">
+              <div class="logs-stats" id="logs-stats">
+                <span class="log-stat" id="stat-total"><b>0</b> total</span>
+                <span class="log-stat ok" id="stat-2xx"><b>0</b> 2xx</span>
+                <span class="log-stat warn" id="stat-4xx"><b>0</b> 4xx</span>
+                <span class="log-stat err" id="stat-5xx"><b>0</b> 5xx</span>
               </div>
-              <div class="card-body" style="padding:0">
-                <div class="logs-list" id="logs-list">
-                  <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs…</p></div>
-                </div>
+              <div class="logs-group logs-search">
+                <input type="search" id="logs-search" placeholder="Filtrer chemin, IP, méthode…" oninput="renderLogs()">
+                <span class="search-ico">🔍</span>
+              </div>
+              <div class="logs-group">
+                <label>Méthode</label>
+                <select class="logs-select" id="logs-method" onchange="renderLogs()">
+                  <option value="">Toutes</option>
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+              </div>
+              <div class="logs-group">
+                <label>Auto-refresh</label>
+                <select class="logs-select" id="logs-interval" onchange="restartLogPolling()">
+                  <option value="2000">2s</option>
+                  <option value="5000" selected>5s</option>
+                  <option value="10000">10s</option>
+                  <option value="0">Off</option>
+                </select>
+              </div>
+              <button class="logs-pausebtn" id="logs-pausebtn" onclick="toggleLogPause()">⏸️ Pause</button>
+              <button class="btn-outline-sm" onclick="exportLogs()">⬇️ Exporter</button>
+              <button class="btn-outline-sm" onclick="clearLogs()">🗑️ Vider</button>
+              <div class="logs-status" style="margin-left:auto">
+                <div class="logs-dot" id="logs-dot"></div>
+                <span id="logs-statustext">Live</span>
+              </div>
+            </div>
+            <div class="card-body" style="padding:0">
+              <div class="logs-list" id="logs-list">
+                <div class="logs-empty"><div class="icon">📋</div><p>En attente de logs…</p></div>
               </div>
             </div>
           </div>
@@ -1244,13 +1304,6 @@ function closeSidebar() {
     document.querySelector('.sidebar-backdrop')?.classList.remove('open');
 }
 
-const PAGE_SUBTITLES = {
-    dashboard: "Statistiques de votre proxy de chaînes",
-    stremio: "Chaînes, logos, catégories, flux et playlists de l'addon",
-    catalog: "Explorer et tester toutes les chaînes disponibles",
-    settings: "Wiseplay, système et journal des requêtes"
-};
-
 function navigateTo(page) {
     _lastPage = page;
     try { if (location.pathname !== '/dashboard/' + page) history.pushState(null, '', '/dashboard/' + page); } catch(e){}
@@ -1264,17 +1317,6 @@ function navigateTo(page) {
     pageEl.classList.add('active');
     navEl?.classList.add('active');
 
-    const subEl = document.querySelector('.page.active > .page-header .page-sub');
-    if (subEl) subEl.textContent = PAGE_SUBTITLES[page] || '';
-
-    if (page === 'stremio') {
-        const activeSub = document.querySelector('#page-stremio .subnav-item.active')?.dataset.sub || 'st-channels';
-        loadStremioSub(activeSub);
-    }
-    if (page === 'settings') {
-        const activeSub = document.querySelector('#page-settings .subnav-item.active')?.dataset.sub || 'rg-wiseplay';
-        loadSettingsSub(activeSub);
-    }
     if (page === 'catalog') {
         if (!ALL.dlstreams.length) {
             loadCatalog('dlstreams').then(render).catch(e => toast('Erreur chargement catalogue: ' + e.message, 'error'));
@@ -1282,38 +1324,20 @@ function navigateTo(page) {
             render();
         }
     }
+    else if (page === 'logs') { loadLogs(); restartLogPolling(); }
+    else if (page === 'st-channels') loadTvChannels();
+    else if (page === 'st-categories') loadSettings();
+    else if (page === 'st-playlists') loadPlaylists();
+    else if (page === 'st-programs') loadNow();
+    else if (page === 'rg-add') { loadManualChannels(); loadActivity('activity-list-src'); }
+    else if (page === 'rg-general') loadSettings();
+    else if (page === 'rg-wiseplay') loadSettings();
+    else if (page === 'rg-system') loadSystemInfo();
 }
 window.addEventListener('popstate', () => {
     const p = (location.pathname.split('/dashboard/')[1] || 'dashboard').replace(/\/+$/, '');
     if (p && p !== _lastPage && document.getElementById('page-' + p)) navigateTo(p);
 });
-
-// ---- Sous-onglets Stremio ----
-function switchStremioSub(sub){
-    document.querySelectorAll('#page-stremio .subnav-item').forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
-    document.querySelectorAll('#page-stremio .subpage').forEach(p => p.classList.toggle('active', p.id === 'sub-' + sub));
-    loadStremioSub(sub);
-}
-function loadStremioSub(sub){
-    if (sub === 'st-channels') loadTvChannels();
-    else if (sub === 'st-categories') loadSettings();
-    else if (sub === 'st-playlists') loadPlaylists();
-    else if (sub === 'st-programs') loadNow();
-    else if (sub === 'st-add') { loadManualChannels(); loadActivity('activity-list-src'); }
-    else if (sub === 'st-general') loadSettings();
-}
-
-// ---- Sous-onglets Réglages ----
-function switchSettingsSub(sub){
-    document.querySelectorAll('#page-settings .subnav-item').forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
-    document.querySelectorAll('#page-settings .subpage').forEach(p => p.classList.toggle('active', p.id === 'sub-' + sub));
-    loadSettingsSub(sub);
-}
-function loadSettingsSub(sub){
-    if (sub === 'rg-wiseplay') loadSettings();
-    else if (sub === 'rg-system') loadSystemInfo();
-    else if (sub === 'rg-logs') loadLogs();
-}
 
 async function refreshStats(){
     try{
@@ -2021,12 +2045,12 @@ function updateWpStatus(){
         badge.textContent = '● Activé';
         const link = `${BASE}/wiseplay?code=${encodeURIComponent(code)}`;
         linkText.textContent = link;
-        linkBox.style.display = 'flex';
+        linkBox.classList.add('show');
         linkBox.dataset.link = link;
     }else{
         badge.className = 'wp-status off';
         badge.textContent = '● Désactivé';
-        linkBox.style.display = 'none';
+        linkBox.classList.remove('show');
     }
 }
 $('#wp-access-code').addEventListener('input', updateWpStatus);
@@ -2580,7 +2604,7 @@ async function loadLogs() {
 
 function updateLogsBadge() {
     const errs = allLogs.filter(l => l.code >= 400).length;
-    document.querySelectorAll('#logs-badge, #logs-badge-sub').forEach(badge => {
+    document.querySelectorAll('#logs-badge').forEach(badge => {
         if (!badge) return;
         if (errs) { badge.style.display = 'inline-block'; badge.textContent = errs; }
         else badge.style.display = 'none';
