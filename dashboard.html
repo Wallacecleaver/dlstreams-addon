@@ -552,11 +552,10 @@
           <button class="nav-item" data-page="st-playlists" onclick="navigateTo('st-playlists')">🎵 Playlists</button>
           <button class="nav-item" data-page="st-programs" onclick="navigateTo('st-programs')">🕐 Programmes</button>
           <button class="nav-item" data-page="rg-add" onclick="navigateTo('rg-add')">➕ Ajouter une chaîne</button>
+          <button class="nav-item" data-page="rg-general" onclick="navigateTo('rg-general')">🎨 Général</button>
 
           <div class="nav-section-label">Réglages</div>
           <button class="nav-item" data-page="rg-wiseplay" onclick="navigateTo('rg-wiseplay')">📱 Wiseplay</button>
-          <button class="nav-item" data-page="rg-general" onclick="navigateTo('rg-general')">🎨 Général</button>
-          <button class="nav-item" data-page="rg-system" onclick="navigateTo('rg-system')">🖥️ Système</button>
         </div>
         <div class="sidebar-bottom">
           <button class="btn-logout" onclick="logout()">↪ Déconnexion</button>
@@ -1107,28 +1106,6 @@
           </div>
         </div>
 
-        <!-- PAGE: SYSTEME -->
-        <div class="page" id="page-rg-system">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Système</div>
-              <div class="page-sub">Informations serveur et redémarrage de l'addon</div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-head">
-              <div class="card-title">🖥️ Informations système</div>
-              <button class="btn-outline-sm" onclick="loadSystemInfo()">↻ Actualiser</button>
-            </div>
-            <div class="card-body">
-              <div class="sys-grid" id="sys-info">chargement…</div>
-            </div>
-            <div class="card-head" style="justify-content:flex-end;border-top:1px solid var(--border);border-bottom:none">
-              <button class="btn-danger" onclick="restartAddon()">🔄 Redémarrer l'addon</button>
-            </div>
-          </div>
-        </div>
-
         <!-- PAGE: LOGS -->
         <div class="page" id="page-logs">
           <div class="page-header">
@@ -1332,7 +1309,6 @@ function navigateTo(page) {
     else if (page === 'rg-add') { loadManualChannels(); loadActivity('activity-list-src'); }
     else if (page === 'rg-general') loadSettings();
     else if (page === 'rg-wiseplay') loadSettings();
-    else if (page === 'rg-system') loadSystemInfo();
 }
 window.addEventListener('popstate', () => {
     const p = (location.pathname.split('/dashboard/')[1] || 'dashboard').replace(/\/+$/, '');
@@ -2061,54 +2037,6 @@ function copyWpLink(){
         ()=>toast('✅ Lien copié', 'success'),
         ()=>toast('Erreur de copie', 'error')
     );
-}
-
-// ---- Système ----
-function fmtBytes(b){
-    if(b === null || b === undefined) return "—";
-    if(b >= 1073741824) return (b/1073741824).toFixed(1) + " Go";
-    if(b >= 1048576) return (b/1048576).toFixed(1) + " Mo";
-    if(b >= 1024) return (b/1024).toFixed(1) + " Ko";
-    return b + " o";
-}
-function sysRows(rows){
-    return rows.map(([k,v]) => `<div class="sys-row"><div class="sys-key">${escapeHtml(k)}</div><div class="sys-val">${escapeHtml(String(v))}</div></div>`).join('');
-}
-async function loadSystemInfo(){
-    const el = $('#sys-info');
-    if(!el) return;
-    try{
-        const r = await apiFetch('/api/system');
-        const d = await r.json();
-        const rows = [
-            ['Version', d.version],
-            ['Python', d.python],
-            ['Plateforme', d.platform],
-            ['CPUs', d.cpus],
-            ['PID', d.pid],
-            ['Port', d.port],
-            ['Uptime', fmtDur(d.uptime)],
-            ['Démarré le', d.started_at],
-            ['Chaînes totales', d.channels_total],
-            ['Cache dlstreams', `${d.cache?.dlstreams?.count ?? '—'} (${fmtAge(d.cache?.dlstreams?.age_seconds)})`],
-            ['Cache vavoo', `${d.cache?.vavoo?.count ?? '—'} (${fmtAge(d.cache?.vavoo?.age_seconds)})`],
-        ];
-        if(d.memory && d.memory.rss != null) rows.push(['Mémoire (RSS)', fmtBytes(d.memory.rss)]);
-        if(d.memory && d.memory.percent != null) rows.push(['Mémoire système', d.memory.percent.toFixed(1) + '%']);
-        if(d.disk) rows.push(['Disque libre', fmtBytes(d.disk.free) + ' / ' + fmtBytes(d.disk.total)]);
-        el.innerHTML = sysRows(rows);
-    }catch(err){
-        if(err.message !== 'unauthenticated') el.innerHTML = '<div class="fav-empty">Erreur de chargement</div>';
-    }
-}
-async function restartAddon(){
-    if(!confirm("Redémarrer l'addon maintenant ? Les connexions en cours seront coupées quelques secondes.")) return;
-    try{
-        await apiFetch('/api/restart', {method:'POST'});
-        toast('🔄 Redémarrage en cours…', 'success');
-    }catch(e){
-        if(e.message !== 'unauthenticated') toast('Erreur lors du redémarrage', 'error');
-    }
 }
 
 function tvStreamRowHtml(url, label){
