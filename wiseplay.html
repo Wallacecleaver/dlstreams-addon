@@ -15,7 +15,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:var(--font-body);min-height:100vh}
 
-/* ---- Ecran de connexion (plein ecran, comme le dashboard) ---- */
+/* ---- Ecran de connexion ---- */
 #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;padding:20px}
 #login-screen::before{content:'';position:fixed;top:-200px;left:50%;transform:translateX(-50%);
   width:600px;height:500px;background:radial-gradient(ellipse,rgba(229,62,62,.10) 0%,transparent 70%);pointer-events:none}
@@ -36,12 +36,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);min-hei
 .login-error{font-size:12px;color:var(--accent);text-align:center;margin-top:10px;padding:8px 12px;
   background:rgba(229,62,62,.08);border:1px solid rgba(229,62,62,.2);border-radius:8px;display:none}
 .btn-primary{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:13px;
-  font-family:var(--font-body);font-size:14px;font-weight:700;cursor:pointer;transition:background .2s}
-.btn-primary:hover{background:#c53030}
+  font-family:var(--font-body);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s}
+.btn-primary:hover{background:#c53030;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.6;cursor:not-allowed;transform:none}
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
 .shake{animation:shake .4s}
 
-/* ---- App (apres connexion) ---- */
+/* ---- App ---- */
 #app{display:none;flex-direction:column;min-height:100vh}
 #app.active{display:flex}
 header{position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:10px;padding:13px 16px;
@@ -73,19 +74,23 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
   padding:13px 15px;font-family:var(--font-mono);font-size:12px;color:var(--text);word-break:break-all;margin-bottom:12px}
 .hero .btn-primary{position:relative;z-index:1}
 
-/* ---- Cartes generiques ---- */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+/* ---- Cartes ---- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;
+  transition:border-color .2s;}
 .card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;
   border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(229,62,62,.04),rgba(229,62,62,0))}
 .card-title{font-size:14px;font-weight:800;color:var(--text)}
-.card-count{font-size:11px;color:var(--muted);font-weight:600}
+.card-count{font-size:11px;color:var(--muted);font-weight:700;font-family:var(--font-mono)}
+.header-actions{display:flex;gap:6px}
 
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 15px;border-radius:9px;font-size:12px;font-weight:700;
   font-family:var(--font-body);cursor:pointer;border:none;transition:.2s;white-space:nowrap}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-ghost:disabled{opacity:.4;cursor:not-allowed}
 .btn-danger{background:rgba(239,68,68,.12);border:1px solid var(--error);color:var(--error)}
 .btn-danger:hover{background:var(--error);color:#fff}
+.btn-xs{padding:6px 10px;font-size:11px;border-radius:7px}
 
 /* ---- Sources ---- */
 .src-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
@@ -99,6 +104,9 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
 .toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:all .2s}
 .toggle:checked{background:var(--accent-dim);border-color:rgba(229,62,62,.4)}
 .toggle:checked::after{left:22px;background:var(--accent)}
+.toggle.sm{width:36px;height:21px}
+.toggle.sm::after{width:15px;height:15px}
+.toggle.sm:checked::after{left:17px}
 
 /* ---- Chaines ---- */
 .ch-search{position:relative;padding:12px 16px;border-bottom:1px solid var(--border)}
@@ -106,29 +114,36 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
 .ch-search input{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:9px;
   padding:9px 12px 9px 30px;color:var(--text);font-size:13px;font-family:var(--font-body)}
 .ch-search input:focus{outline:none;border-color:var(--accent)}
-.ch-list{max-height:420px;overflow-y:auto}
-.ch-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);transition:background .15s}
+.ch-list{max-height:440px;overflow-y:auto}
+.ch-group-header{position:sticky;top:0;z-index:2;padding:7px 16px;font-size:10px;text-transform:uppercase;
+  letter-spacing:.7px;color:var(--muted);font-weight:800;background:var(--surface2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:6px}
+.ch-row{display:flex;align-items:center;gap:11px;padding:10px 16px;border-bottom:1px solid var(--border);transition:background .15s}
 .ch-row:last-child{border-bottom:none}
 .ch-row:hover{background:var(--card-hover)}
-.ch-logo{width:42px;height:24px;border-radius:5px;object-fit:cover;background:var(--surface2);flex-shrink:0}
+.ch-logo{width:40px;height:23px;border-radius:5px;object-fit:cover;background:var(--surface2);flex-shrink:0}
 .ch-info{flex:1;min-width:0}
 .ch-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ch-meta{font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;letter-spacing:.3px}
+.ch-meta{display:flex;align-items:center;gap:5px;margin-top:2px}
+.ch-src-pill{font-size:9px;font-weight:800;padding:1px 6px;border-radius:5px;letter-spacing:.3px}
+.ch-src-pill.dlstreams{background:rgba(229,62,62,.14);color:var(--accent)}
+.ch-src-pill.vavoo{background:rgba(96,165,250,.14);color:#60a5fa}
 
 /* ---- Playlists ---- */
 .pl-create{display:flex;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)}
 .pl-create input{flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;
   color:var(--text);font-size:13px;font-family:var(--font-body)}
 .pl-create input:focus{outline:none;border-color:var(--accent)}
-.pl-item{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border)}
+.pl-item{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
 .pl-item:last-child{border-bottom:none}
-.pl-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#ff7a59);
-  display:grid;place-items:center;font-size:14px;flex-shrink:0}
+.pl-item:hover{background:var(--card-hover)}
+.pl-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#ff7a59);
+  display:grid;place-items:center;font-size:15px;flex-shrink:0;overflow:hidden}
+.pl-icon img{width:100%;height:100%;object-fit:cover}
 .pl-info{flex:1;min-width:0}
 .pl-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pl-meta{font-size:11px;color:var(--muted);margin-top:1px}
-.pl-actions{display:flex;gap:6px;flex-shrink:0}
-.pl-actions .btn{padding:7px 10px;font-size:11px}
+.pl-chevron{color:var(--muted);font-size:14px;flex-shrink:0}
 
 .empty{text-align:center;padding:34px 20px;color:var(--muted);font-size:13px}
 .empty .ico{font-size:26px;opacity:.4;margin-bottom:8px}
@@ -142,6 +157,46 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.success{border-color:var(--green)}
 .toast.error{border-color:var(--error)}
+
+/* ---- Modal (edition playlist) ---- */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;display:none;align-items:flex-end;justify-content:center}
+.modal.active{display:flex}
+.modal-content{width:100%;max-width:520px;background:var(--surface);border:1px solid var(--border);
+  border-radius:18px 18px 0 0;max-height:92vh;display:flex;flex-direction:column;
+  box-shadow:0 -20px 60px rgba(0,0,0,.5);animation:slideUp .25s cubic-bezier(.22,1,.36,1)}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+@media (min-width:560px){
+  .modal{align-items:center}
+  .modal-content{border-radius:18px;max-height:85vh}
+}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.modal-header h3{font-size:15px;font-weight:800}
+.modal-close{background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;width:30px;height:30px;
+  display:grid;place-items:center;border-radius:7px;transition:all .2s}
+.modal-close:hover{background:var(--surface2);color:var(--text)}
+.modal-body{padding:18px;overflow-y:auto}
+.form-row{margin-bottom:16px}
+.form-row label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;font-weight:700}
+.form-row input[type=text],.form-row input[type=url]{width:100%;background:var(--input-bg);border:1px solid var(--border);
+  border-radius:9px;padding:11px 13px;color:var(--text);font-size:13px;font-family:var(--font-body)}
+.form-row input:focus{outline:none;border-color:var(--accent)}
+.logo-row{display:flex;gap:10px;align-items:center}
+.logo-row input{flex:1}
+.logo-preview{width:44px;height:44px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);
+  object-fit:cover;flex-shrink:0}
+.pl-search-results{max-height:150px;overflow-y:auto;margin-top:8px;border:1px solid var(--border);border-radius:9px}
+.pl-search-results:empty{display:none}
+.pl-add-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.pl-add-row:last-child{border-bottom:none}
+.pl-add-row .ch-name{flex:1;font-size:12px}
+.pl-current-list{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:9px}
+.pl-current-list:empty::after{content:'Aucune chaîne — cherche-en ci-dessus';display:block;padding:16px;text-align:center;color:var(--muted);font-size:12px}
+.pl-current-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border)}
+.pl-current-row:last-child{border-bottom:none}
+.pl-current-row .ch-name{flex:1;font-size:12px}
+.pl-remove-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:5px;transition:all .15s}
+.pl-remove-btn:hover{color:var(--error);background:rgba(239,68,68,.1)}
+.form-actions{display:flex;gap:10px;justify-content:space-between;margin-top:6px;padding-top:16px;border-top:1px solid var(--border)}
 
 @media (max-width:480px){
   main{padding:14px 12px 32px}
@@ -211,9 +266,16 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
   <div class="section">
     <div class="section-title">📺 Chaînes</div>
     <div class="card">
+      <div class="card-header">
+        <span class="card-count" id="ch-count">0/0 actives</span>
+        <div class="header-actions">
+          <button class="btn btn-ghost btn-xs" onclick="toggleAllChannels(true)">Tout activer</button>
+          <button class="btn btn-ghost btn-xs" onclick="toggleAllChannels(false)">Tout désactiver</button>
+        </div>
+      </div>
       <div class="ch-search">
         <span class="ico">🔍</span>
-        <input type="search" id="ch-filter" placeholder="Filtrer les chaînes…" oninput="renderChannels(_lastChMap,_lastAllChannels)">
+        <input type="search" id="ch-filter" placeholder="Filtrer les chaînes…" oninput="renderChannels()">
       </div>
       <div class="ch-list" id="channels-container"><div class="empty">Chargement…</div></div>
     </div>
@@ -234,11 +296,54 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
 <div class="footer">W Addon TV · <a href="/playlist.m3u">Playlist M3U directe</a></div>
 </div>
 
+<!-- Modal edition playlist -->
+<div class="modal" id="pl-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="pl-modal-title">Playlist</h3>
+      <button class="modal-close" onclick="closePlModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Nom</label>
+        <input type="text" id="pl-edit-name" placeholder="Nom de la playlist">
+      </div>
+      <div class="form-row">
+        <label>Logo (URL, optionnel)</label>
+        <div class="logo-row">
+          <img class="logo-preview" id="pl-edit-logo-preview" src="" alt="" onerror="this.style.visibility='hidden'">
+          <input type="url" id="pl-edit-logo" placeholder="https://…/logo.png" oninput="updatePlLogoPreview()">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Lien M3U de cette playlist</label>
+        <div class="m3u-box" id="pl-m3u-url" style="margin-bottom:8px"></div>
+        <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="copyPlaylistM3U()">📋 Copier ce lien</button>
+      </div>
+      <div class="form-row">
+        <label>Ajouter des chaînes</label>
+        <input type="search" id="pl-add-search" placeholder="Rechercher une chaîne…" oninput="renderPlAddResults()">
+        <div class="pl-search-results" id="pl-add-results"></div>
+      </div>
+      <div class="form-row">
+        <label>Chaînes dans la playlist (<span id="pl-current-count">0</span>)</label>
+        <div class="pl-current-list" id="pl-channels-list"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-danger" onclick="deletePlaylist()">🗑️ Supprimer</button>
+        <button class="btn-primary" style="width:auto;padding:10px 24px" onclick="savePlaylistEdits()">💾 Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast">Copié !</div>
 <script>
 const BASE = location.origin;
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
+const LANG_NAMES = {fr:"🇫🇷 Français",en:"🇬🇧 English",es:"🇪🇸 Español",de:"🇩🇪 Deutsch",it:"🇮🇹 Italiano",ar:"🇸🇦 Arabe",pt:"🇵🇹 Português"};
+function langLabel(l){ return LANG_NAMES[l] || "🌐 Autres"; }
 
 function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
@@ -253,16 +358,25 @@ function buildM3UUrl(){
 const code = $("#access-code").value.trim();
 return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&code=${encodeURIComponent(code)}`;
 }
+function buildPlaylistM3UUrl(name){
+const code = $("#access-code").value.trim();
+return `${BASE}/playlist.m3u?base=${encodeURIComponent(BASE)}&code=${encodeURIComponent(code)}&playlist=${encodeURIComponent(name)}`;
+}
 
 function updateM3UDisplay(){
 $("#m3u-url").textContent = buildM3UUrl();
 }
 
-function copyM3U(){
-navigator.clipboard.writeText(buildM3UUrl()).then(
-()=>showToast("✅ Lien M3U copié !","success"),
+function copyToClipboard(text, okMsg){
+navigator.clipboard.writeText(text).then(
+()=>showToast(okMsg || "✅ Copié !","success"),
 ()=>showToast("Erreur copie","error")
 );
+}
+function copyM3U(){ copyToClipboard(buildM3UUrl(), "✅ Lien M3U copié !"); }
+function copyPlaylistM3U(){
+if(!_editingPlaylist) return;
+copyToClipboard(buildPlaylistM3UUrl(_editingPlaylist), "✅ Lien de la playlist copié !");
 }
 
 async function api(path, opts={}){
@@ -308,7 +422,6 @@ $("#access-code").value = "";
 $("#access-code").focus();
 });
 
-// Reconnexion auto si un code est déjà enregistré sur cet appareil
 (function(){
 const saved = localStorage.getItem("wiseplay_code");
 if(saved){
@@ -322,7 +435,9 @@ async function loadConfig(){
 try{
 const wp = await api("/api/wiseplay/config");
 renderSources(wp.sources||{});
-renderChannels(wp.channels||{}, wp.all_channels||[]);
+_lastChMap = wp.channels || {};
+_lastAllChannels = wp.all_channels || [];
+renderChannels();
 renderPlaylists(wp.playlists||{});
 updateM3UDisplay();
 }catch(e){
@@ -345,52 +460,87 @@ showToast("Sources enregistrées","success");
 
 // Channels
 let _lastChMap = {}, _lastAllChannels = [];
-function renderChannels(chMap, allChannels){
-_lastChMap = chMap || {};
-_lastAllChannels = allChannels || [];
+function updateChCount(){
+const total = _lastAllChannels.length;
+const active = _lastAllChannels.filter(c => _lastChMap[c.id] !== false).length;
+$("#ch-count").textContent = `${active}/${total} actives`;
+}
+function renderChannels(){
 const container = $("#channels-container");
-if(!allChannels || !allChannels.length){
+if(!_lastAllChannels.length){
 container.innerHTML = '<div class="empty"><div class="ico">📭</div>Aucune chaîne disponible</div>';
+updateChCount();
 return;
 }
 const q = ($("#ch-filter").value || "").toLowerCase().trim();
-const list = q ? allChannels.filter(c => (c.name||"").toLowerCase().includes(q)) : allChannels;
+const list = q ? _lastAllChannels.filter(c => (c.name||"").toLowerCase().includes(q)) : _lastAllChannels;
+updateChCount();
 if(!list.length){
 container.innerHTML = '<div class="empty"><div class="ico">🔍</div>Aucun résultat</div>';
 return;
 }
-container.innerHTML = list.map(c=>{
+const groups = {};
+list.forEach(c => { const l = c.lang || "other"; (groups[l] = groups[l] || []).push(c); });
+const order = Object.keys(groups).sort((a,b) => (a==="fr"?-1:b==="fr"?1:0) || a.localeCompare(b));
+container.innerHTML = order.map(lang => {
+const items = groups[lang].sort((a,b)=>(a.name||"").localeCompare(b.name||"",'fr'));
+const rows = items.map(c=>{
 const id = c.id;
-const active = (chMap||{})[id] !== false;
+const active = _lastChMap[id] !== false;
 const logo = c.logo || "";
+const srcPill = c.src ? `<span class="ch-src-pill ${c.src}">${c.src==='vavoo'?'VV':'TV'}</span>` : '';
 return `<div class="ch-row" data-id="${escapeHtml(id)}">
-<img class="ch-logo" src="${escapeHtml(logo)}" alt="" onerror="this.style.display='none'">
+<img class="ch-logo" src="${escapeHtml(logo)}" alt="" onerror="this.style.visibility='hidden'">
 <div class="ch-info">
 <div class="ch-name">${escapeHtml(c.name)}</div>
-<div class="ch-meta">${c.lang?.toUpperCase()||"FR"}</div>
+<div class="ch-meta">${srcPill}</div>
 </div>
 <input type="checkbox" class="toggle" ${active?"checked":""} onchange="toggleChannel('${escapeHtml(id)}',this.checked)">
 </div>`;
 }).join("");
+return `<div class="ch-group-header">${langLabel(lang)} · ${items.length}</div>${rows}`;
+}).join("");
 }
 function toggleChannel(id, checked){
+_lastChMap[id] = checked;
+updateChCount();
 const chMap = JSON.parse(localStorage.getItem("waddontv_channels_pending")||"{}");
 chMap[id] = checked;
 localStorage.setItem("waddontv_channels_pending", JSON.stringify(chMap));
-saveChannels();
+saveChannelsMap({[id]: checked});
 }
-function saveChannels(){
-const chMap = JSON.parse(localStorage.getItem("waddontv_channels_pending")||"{}");
-const body = {channels: chMap};
-fetch(`${BASE}/api/wiseplay/config?code=${encodeURIComponent($("#access-code").value.trim())}`, {
-method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)
-}).then(r=>r.json()).then(d=>{
+async function saveChannelsMap(partial){
+try{
+await api("/api/wiseplay/config", {method:"POST", body:{channels: partial}});
 showToast("Chaînes enregistrées","success");
-}).catch(e=>showToast("Erreur: "+e.message,"error"));
+}catch(e){showToast("Erreur: "+e.message,"error");}
+}
+async function toggleAllChannels(enable){
+const chMap = {};
+_lastAllChannels.forEach(c => { chMap[c.id] = enable; _lastChMap[c.id] = enable; });
+renderChannels();
+try{
+await api("/api/wiseplay/config", {method:"POST", body:{channels: chMap}});
+localStorage.setItem("waddontv_channels_pending", JSON.stringify(chMap));
+showToast(enable ? "✅ Toutes les chaînes activées" : "Toutes les chaînes désactivées","success");
+}catch(e){ showToast(e.message,"error"); }
 }
 
 // Playlists
 let currentPlaylists = {};
+let _editingPlaylist = null;
+let _plEditChannels = [];
+
+function plChannelsOf(name){
+const p = currentPlaylists[name];
+if(!p) return [];
+return Array.isArray(p) ? p.slice() : (p.channels || []).slice();
+}
+function plLogoOf(name){
+const p = currentPlaylists[name];
+return (p && !Array.isArray(p) && p.logo) || "";
+}
+
 function renderPlaylists(plMap){
 currentPlaylists = plMap || {};
 const container = $("#playlists-container");
@@ -400,49 +550,123 @@ container.innerHTML = '<div class="empty"><div class="ico">🎵</div>Aucune play
 return;
 }
 container.innerHTML = names.map(name=>{
-const channels = currentPlaylists[name]||[];
-return `<div class="pl-item">
-<div class="pl-icon">🎵</div>
+const channels = plChannelsOf(name);
+const logo = plLogoOf(name);
+const icon = logo ? `<img src="${escapeHtml(logo)}" alt="" onerror="this.parentElement.textContent='🎵'">` : '🎵';
+return `<div class="pl-item" onclick="openPlModal('${escapeHtml(name)}')">
+<div class="pl-icon">${icon}</div>
 <div class="pl-info">
 <div class="pl-name">${escapeHtml(name)}</div>
 <div class="pl-meta">${channels.length} chaîne${channels.length>1?'s':''}</div>
 </div>
-<div class="pl-actions">
-<button class="btn btn-ghost" onclick="editPlaylist('${escapeHtml(name)}')">✏️</button>
-<button class="btn btn-danger" onclick="deletePlaylist('${escapeHtml(name)}')">🗑️</button>
-</div>
+<span class="pl-chevron">›</span>
 </div>`;
 }).join("");
 }
 async function addPlaylist(){
 const name = $("#new-playlist-name").value.trim();
 if(!name){ showToast("Nom requis","error"); return; }
+if(currentPlaylists[name]){ showToast("Ce nom existe déjà","error"); return; }
 try{
-await api("/api/wiseplay/config", {method:"POST", body:{playlists: {[name]: []}}});
+await api("/api/wiseplay/config", {method:"POST", body:{playlists: {[name]: {channels: [], logo: ""}}}});
 $("#new-playlist-name").value = "";
-loadConfig();
+await loadConfig();
 showToast("Playlist créée","success");
+openPlModal(name);
 }catch(e){showToast(e.message,"error");}
-}
-function editPlaylist(name){
-const current = (currentPlaylists[name]||[]).join(", ");
-const input = prompt(`IDs des chaînes pour "${name}" (séparés par des virgules) :`, current);
-if(input === null) return;
-const list = input.split(",").map(s=>s.trim()).filter(Boolean);
-api("/api/wiseplay/config", {method:"POST", body:{playlists: {[name]: list}}}).then(
-()=>{loadConfig(); showToast("Playlist mise à jour","success");}
-).catch(e=>showToast(e.message,"error"));
-}
-function deletePlaylist(name){
-if(!confirm(`Supprimer "${name}" ?`)) return;
-api("/api/wiseplay/config", {method:"POST", body:{playlists: {"_delete": name}}}).then(
-()=>{loadConfig(); showToast("Playlist supprimée","success");}
-).catch(e=>showToast(e.message,"error"));
 }
 $("#create-playlist-btn").addEventListener("click", addPlaylist);
 $("#new-playlist-name").addEventListener("keydown", e=>{ if(e.key==="Enter") addPlaylist(); });
 
-// M3U copy
+function openPlModal(name){
+_editingPlaylist = name;
+_plEditChannels = plChannelsOf(name);
+$("#pl-modal-title").textContent = "🎵 " + name;
+$("#pl-edit-name").value = name;
+$("#pl-edit-logo").value = plLogoOf(name);
+updatePlLogoPreview();
+$("#pl-m3u-url").textContent = buildPlaylistM3UUrl(name);
+$("#pl-add-search").value = '';
+$("#pl-add-results").innerHTML = '';
+renderPlCurrentList();
+$("#pl-modal").classList.add('active');
+}
+function closePlModal(){
+$("#pl-modal").classList.remove('active');
+_editingPlaylist = null;
+_plEditChannels = [];
+}
+function updatePlLogoPreview(){
+const url = $("#pl-edit-logo").value.trim();
+const img = $("#pl-edit-logo-preview");
+img.style.visibility = url ? 'visible' : 'hidden';
+img.src = url;
+}
+function channelNameById(id){
+const c = _lastAllChannels.find(c => c.id === id);
+return c ? c.name : id;
+}
+function renderPlCurrentList(){
+$("#pl-current-count").textContent = _plEditChannels.length;
+const el = $("#pl-channels-list");
+if(!_plEditChannels.length){ el.innerHTML = ''; return; }
+el.innerHTML = _plEditChannels.map(id => `
+<div class="pl-current-row">
+<span class="ch-name">${escapeHtml(channelNameById(id))}</span>
+<button class="pl-remove-btn" onclick="removeChannelFromEdit('${escapeHtml(id)}')" title="Retirer">✕</button>
+</div>`).join('');
+}
+function removeChannelFromEdit(id){
+_plEditChannels = _plEditChannels.filter(x => x !== id);
+renderPlCurrentList();
+renderPlAddResults();
+}
+function addChannelToEdit(id){
+if(!_plEditChannels.includes(id)) _plEditChannels.push(id);
+renderPlCurrentList();
+renderPlAddResults();
+}
+function renderPlAddResults(){
+const q = ($("#pl-add-search").value || '').toLowerCase().trim();
+const el = $("#pl-add-results");
+if(!q){ el.innerHTML = ''; return; }
+const matches = _lastAllChannels.filter(c => (c.name||'').toLowerCase().includes(q) && !_plEditChannels.includes(c.id)).slice(0, 25);
+if(!matches.length){ el.innerHTML = '<div class="pl-add-row"><span class="ch-name" style="color:var(--muted)">Aucun résultat</span></div>'; return; }
+el.innerHTML = matches.map(c => `
+<div class="pl-add-row">
+<span class="ch-name">${escapeHtml(c.name)}</span>
+<button class="btn btn-ghost btn-xs" onclick="addChannelToEdit('${escapeHtml(c.id)}')">➕</button>
+</div>`).join('');
+}
+async function savePlaylistEdits(){
+const newName = $("#pl-edit-name").value.trim();
+const logo = $("#pl-edit-logo").value.trim();
+if(!newName){ showToast("Nom requis","error"); return; }
+const oldName = _editingPlaylist;
+if(newName !== oldName && currentPlaylists[newName]){ showToast("Ce nom existe déjà","error"); return; }
+const payload = {};
+if(newName !== oldName) payload._delete = oldName;
+payload[newName] = {channels: _plEditChannels, logo};
+try{
+await api("/api/wiseplay/config", {method:"POST", body:{playlists: payload}});
+await loadConfig();
+showToast("Playlist enregistrée","success");
+closePlModal();
+}catch(e){ showToast(e.message,"error"); }
+}
+async function deletePlaylist(){
+if(!_editingPlaylist) return;
+if(!confirm(`Supprimer "${_editingPlaylist}" ?`)) return;
+try{
+await api("/api/wiseplay/config", {method:"POST", body:{playlists: {"_delete": _editingPlaylist}}});
+await loadConfig();
+closePlModal();
+showToast("Playlist supprimée","success");
+}catch(e){ showToast(e.message,"error"); }
+}
+$("#pl-modal").addEventListener("click", e=>{ if(e.target === e.currentTarget) closePlModal(); });
+
+// M3U copy (lien global)
 $("#copy-m3u-btn").addEventListener("click", copyM3U);
 </script>
 </body>
