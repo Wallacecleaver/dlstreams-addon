@@ -980,9 +980,16 @@ def _public_stats() -> dict:
 def _build_m3u(qs: dict) -> str:
     base = qs.get("base", [""])[0] or ""
     code = qs.get("code", [""])[0]
+    playlist_name = qs.get("playlist", [""])[0]
     wp = _settings.get("wiseplay", {})
     stored_code = wp.get("access_code", "")
     wiseplay_mode = bool(code) and bool(stored_code) and code == stored_code
+
+    playlist_filter = None
+    if wiseplay_mode and playlist_name:
+        pl = wp.get("playlists", {}).get(playlist_name)
+        pl_channels = pl.get("channels", []) if isinstance(pl, dict) else (pl or [])
+        playlist_filter = {str(cid) for cid in pl_channels}
 
     if wiseplay_mode:
         ch_toggles = wp.get("channels", {})
@@ -998,7 +1005,10 @@ def _build_m3u(qs: dict) -> str:
     if include_dlstreams:
         all_ch = channels()
         for ch in all_ch:
-            if ch_toggles.get(str(ch["id"])) is False:
+            if playlist_filter is not None:
+                if str(ch["id"]) not in playlist_filter:
+                    continue
+            elif ch_toggles.get(str(ch["id"])) is False:
                 continue
             href = f"{base}/hls/{ch['id']}/index.m3u8"
             grp = (ch.get("lang") or "other").upper()
@@ -1008,7 +1018,10 @@ def _build_m3u(qs: dict) -> str:
     if include_vavoo:
         vavoo_ch = vavoo_channels()
         for ch in vavoo_ch:
-            if ch_toggles.get(str(ch["id"])) is False:
+            if playlist_filter is not None:
+                if str(ch["id"]) not in playlist_filter:
+                    continue
+            elif ch_toggles.get(str(ch["id"])) is False:
                 continue
             enc = _b64u(ch["id"])
             href = f"{base}/vhls?v={enc}"
@@ -1016,14 +1029,15 @@ def _build_m3u(qs: dict) -> str:
             logo = ch.get("logo", "")
             lines.append(f'#EXTINF:-1 tvg-id="vavoo:{ch["id"]}" tvg-logo="{logo}" group-title="{grp}",{ch["name"]}')
             lines.append(href)
-    st = _settings.get("stremio", {})
-    for cid, cc in st.get("custom_channels", {}).items():
-        for idx, stream_url in enumerate(cc.get("streams", [])):
-            href = f"{base}/hls/custom/{cid}/s{idx}/index.m3u8"
-            grp = "CUSTOM"
-            logo = cc.get("logo", "")
-            lines.append(f'#EXTINF:-1 tvg-id="custom:{cid}" tvg-logo="{logo}" group-title="{grp}",{cc.get("name", cid)}')
-            lines.append(href)
+    if playlist_filter is None:
+        st = _settings.get("stremio", {})
+        for cid, cc in st.get("custom_channels", {}).items():
+            for idx, stream_url in enumerate(cc.get("streams", [])):
+                href = f"{base}/hls/custom/{cid}/s{idx}/index.m3u8"
+                grp = "CUSTOM"
+                logo = cc.get("logo", "")
+                lines.append(f'#EXTINF:-1 tvg-id="custom:{cid}" tvg-logo="{logo}" group-title="{grp}",{cc.get("name", cid)}')
+                lines.append(href)
     return "\n".join(lines)
 
 def _daily_totals() -> list[dict]:
@@ -1728,7 +1742,22 @@ class Handler(BaseHTTPRequestHandler):
                 wp["channels"] = {str(k): bool(v) for k, v in data["channels"].items()}
                 changed = True
             if "playlists" in data and isinstance(data["playlists"], dict):
-                wp["playlists"] = {str(k): [str(x) for x in v] for k, v in data["playlists"].items()}
+                payload = data["playlists"]
+                wp.setdefault("playlists", {})
+                if "_delete" in payload:
+                    wp["playlists"].pop(str(payload["_delete"]), None)
+                for k, v in payload.items():
+                    if k == "_delete":
+                        continue
+                    k = str(k)
+                    existing = wp["playlists"].get(k)
+                    existing_logo = existing.get("logo", "") if isinstance(existing, dict) else ""
+                    if isinstance(v, dict):
+                        pl_channels = [str(x) for x in v.get("channels", [])]
+                        pl_logo = str(v["logo"]) if "logo" in v else existing_logo
+                        wp["playlists"][k] = {"channels": pl_channels, "logo": pl_logo}
+                    elif isinstance(v, list):
+                        wp["playlists"][k] = {"channels": [str(x) for x in v], "logo": existing_logo}
                 changed = True
             if "sources" in data and isinstance(data["sources"], dict):
                 for k in ("dlstreams", "vavoo"):
@@ -1839,7 +1868,7 @@ class Handler(BaseHTTPRequestHandler):
                 stored_code = _settings.get("wiseplay", {}).get("access_code", "")
                 if not stored_code or code != stored_code:
                     return self._send(401, json.dumps({"success": False, "error": "Code invalide ou non configuré"}).encode(), "application/json")
-                all_ch = channels() + vavoo_channels()
+                all_ch = [dict(c, src="dlstreams") for c in channels()] + [dict(c, src="vavoo") for c in vavoo_channels()]
                 wp = _settings.get("wiseplay", {})
                 return self._send(200, json.dumps({
                     **wp,
