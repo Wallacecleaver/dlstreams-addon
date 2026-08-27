@@ -41,6 +41,26 @@ _PASSWORD_GENERATED = "DASHBOARD_PASSWORD" not in os.environ
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD") or secrets.token_urlsafe(9)
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 SITE = "https://dlstreams.st"
+
+# MediaFlow Proxy (Light) — sert les sources DURES (VegetaTv, flux captés au navigateur) qui ont
+# besoin d'une session/re-proxy des segments. Configuré via .env (MEDIAFLOW_URL, MEDIAFLOW_PASSWORD).
+MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "").rstrip("/")
+MEDIAFLOW_PASSWORD = os.environ.get("MEDIAFLOW_PASSWORD", "")
+
+def _mfp_hls(src_url: str, referer: str = "", ua: str = "") -> str:
+    """Emballe une source HLS via MFP Light (/proxy/hls) : re-proxifie les segments avec les bons
+    headers. `""` si MFP non configuré. Les lignes contendues ferment la connexion ~26s ; en HLS le
+    player re-demande les segments sur des connexions fraîches -> survit au kick (cf. loobox)."""
+    if not MEDIAFLOW_URL:
+        return ""
+    params = {"api_password": MEDIAFLOW_PASSWORD, "d": src_url}
+    if ua:
+        params["h_user-agent"] = ua
+    if referer:
+        params["h_referer"] = referer
+        params["h_origin"] = referer
+    return f"{MEDIAFLOW_URL}/proxy/hls/manifest.m3u8?{urllib.parse.urlencode(params)}"
+
 _CH_TTL = 1800
 _START_TIME = time.time()
 _request_count = 0
@@ -124,6 +144,94 @@ def _init_logo_mapping():
 
 _init_logo_mapping()
 
+# ============================================================
+# LOGOS LOCAUX (dossier LOGOS/<CATEGORIE>/*.png) — curés, rapprochés par nom.
+# Sert aussi de source de vérité pour la CATEGORIE (le dossier = le genre).
+# ============================================================
+_LOGOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LOGOS")
+_FOLDER2GENRE = {
+    "SPORT": "Sports", "CINEMA": "Cinéma", "DOCU": "Documentaire",
+    "INFOS": "Actualités", "JEUNESSE": "Jeunesse", "MUSIC": "Musique",
+    "GENERAL": "Télévision",
+}
+# mots de qualité / statut à ignorer dans le rapprochement
+_LOGO_NOISE = {"hd", "fhd", "uhd", "4k", "hevc", "h264", "h265", "vip", "mcdonald",
+    "mcdonalds", "backup", "event", "events", "only", "during", "live", "direct",
+    "tv", "access"}
+# tags PAYS : retirés seulement s'ils ne sont pas en 1re position (garder "France 2/3/4/5")
+_LOGO_COUNTRY = {"france", "italy", "italia", "poland", "polska", "spain", "espana",
+    "greece", "portugal", "germany", "deutschland", "uk", "usa", "international", "gr"}
+_LOGO_ALIAS = {"canalfrance": "canal", "canalplus": "canal"}
+
+def _logo_key(name: str) -> str:
+    """Clé tolérante de rapprochement nom de chaîne <-> nom de fichier logo.
+
+    Gère les particularités Vavoo (suffixe provider ` |D`/`|E`/`|H`, tags
+    `(BACKUP)`/`[EVENT ONLY]`, qualité HD/FHD, tag pays en fin de nom)."""
+    import unicodedata, re
+    s = name.rsplit(".", 1)[0]
+    s = re.sub(r"[\s_-]*logo[\s_-]*$", "", s, flags=re.I)
+    s = s.replace("&amp;", "&").split("|")[0]           # suffixe provider Vavoo
+    s = re.sub(r"\(.*?\)|\[.*?\]", "", s)               # (BACKUP) [EVENT ONLY]
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
+    s = s.replace("+", " ")
+    parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _LOGO_NOISE]
+    parts = [w for i, w in enumerate(parts) if not (i > 0 and w in _LOGO_COUNTRY)]
+    parts = ["sport" if w == "sports" else w for w in parts]
+    k = "".join(parts)
+    return _LOGO_ALIAS.get(k, k)
+
+_LOCAL_LOGO: dict[str, tuple[str, str]] = {}   # key -> (genre, chemin absolu .png)
+
+def _init_local_logos():
+    _LOCAL_LOGO.clear()
+    try:
+        for cat in os.listdir(_LOGOS_DIR):
+            genre = _FOLDER2GENRE.get(cat.upper())
+            d = os.path.join(_LOGOS_DIR, cat)
+            if not genre or not os.path.isdir(d):
+                continue
+            for f in os.listdir(d):
+                if f.lower().endswith(".png"):
+                    k = _logo_key(f)
+                    if k and k not in _LOCAL_LOGO:
+                        _LOCAL_LOGO[k] = (genre, os.path.join(d, f))
+    except Exception:
+        pass
+
+_init_local_logos()
+
+_local_logo_lookup_cache: dict[str, tuple[str, str] | None] = {}
+
+def _local_logo_for(name: str):
+    """(chemin_png, genre) si un logo curé correspond au nom, sinon None."""
+    if not name:
+        return None
+    if name in _local_logo_lookup_cache:
+        return _local_logo_lookup_cache[name]
+    hit = _LOCAL_LOGO.get(_logo_key(name))
+    res = (hit[1], hit[0]) if hit else None
+    if len(_local_logo_lookup_cache) > 4000:
+        _local_logo_lookup_cache.clear()
+    _local_logo_lookup_cache[name] = res
+    return res
+
+_local_logo_bytes_cache: dict[str, bytes] = {}
+
+def _read_local_logo(path: str) -> bytes | None:
+    b = _local_logo_bytes_cache.get(path)
+    if b is None:
+        try:
+            with open(path, "rb") as f:
+                b = f.read()
+            if b[:3] not in (b"\xff\xd8\xff", b"\x89PN"):
+                b = None
+        except Exception:
+            b = None
+        if b is not None:
+            _local_logo_bytes_cache[path] = b
+    return b
+
 _SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_settings.json")
 _SETTINGS_DEFAULT = {
     "logos": True,
@@ -135,6 +243,7 @@ _SETTINGS_DEFAULT = {
         "manifest_desc": "",
         "include_dlstreams": True,
         "include_vavoo": True,
+        "include_vegetatv": True,
         "default_lang": "fr",
         "channel_names": {},
         "channel_logos": {},
@@ -148,7 +257,8 @@ _SETTINGS_DEFAULT = {
         "playlists": {},
         "sources": {
             "dlstreams": True,
-            "vavoo": True
+            "vavoo": True,
+            "vegetatv": True
         }
     }
 }
@@ -347,6 +457,23 @@ def _genres_for(name: str) -> list[str]:
 
 def _detect_lang(name: str) -> str:
     n = name.lower()
+    # Marqueurs de région clairement non francophones : ils priment sur les noms de marque
+    # (bein sports, canal+...) qui existent aussi dans des déclinaisons internationales.
+    foreign_markers = ["mena", "malaysia", "malaisie", "poland", "polska", "czechia", "czech",
+        "australia", "australie", "deutschland", "germany", "italia", "espana", "españa", "spain",
+        "brazil", "brasil", "nederland", "netherlands", "romania", "bulgaria", "hungary", "magyar",
+        "sweden", "norway", "denmark", "finland", "greece", "turkey", "türkiye", "india", "pakistan",
+        "english"]
+    if any(m in n for m in foreign_markers):
+        if any(x in n for x in ["english", "uk", "usa", "espn", "fox", "cnn", "nbc", "sky sports"]):
+            return "en"
+        if any(x in n for x in ["españa", "espana", "spain", "movistar"]):
+            return "es"
+        if any(x in n for x in ["deutschland", "germany", " de ", "ard", "zdf"]):
+            return "de"
+        if any(x in n for x in ["italia", "italy", " it ", "rai"]):
+            return "it"
+        return "other"
     if any(x in n for x in ["france", "français", "french", " fr ", "tf1", "france 2", "france 3", "m6", "canal+", "rmc", "l'équipe", "arte", "bein sports"]):
         return "fr"
     if any(x in n for x in ["uk", "english", "usa", "espn", "fox", "cnn", "nbc", "sky sports"]):
@@ -364,10 +491,14 @@ def _detect_lang(name: str) -> str:
     return "other"
 
 def _genre_for(name: str) -> list[str]:
+    # Catégorie curée (dossier LOGOS/<CAT>/) = source de vérité si la chaîne y figure.
+    loc = _local_logo_for(name)
+    if loc:
+        return [loc[1]]
     n = name.lower().strip()
     if any(k in n for k in ["sport", "foot", "tennis", "racing", "formula", "f1 racing", "golf", "cycl",
         "beinsport", "bein", "eurosport", "rmc sport", "canal+ sport", "ufc", "boxe",
-        "mma", "wwe", "équipe", "equipe", "olymp", "auto moto"]):
+        "mma", "wwe", "équipe", "equipe", "olymp", "auto moto", "ligue 1", "ligue1", "ligue 2", "ligue2"]):
         return ["Sports"]
     if any(k in n for k in ["news", "info", "bfm", "cnews", "france info", "cnn", "bbc", "sky news",
         "al jazeera", "rt ", "euronews", "lcp", "public senat", "parlement"]):
@@ -861,6 +992,239 @@ def vavoo_resolve(vurl: str) -> str:
         return d[0].get("url") or d[0].get("streamUrl") or ""
     return ""
 
+# ============================================================
+# VEGETATV — source live via spool distant health-checké (server_status.json) + registre
+# chaîne->serveurs + resolve() load-balancé byte-testé, servi via MFP. Portage stdlib de
+# app/vegetatv.py de loobox. AUCUN lien avec dlstreams/vavoo (source à part).
+# ============================================================
+_VEGETA_SPOOL = "http://vegetatv.duckdns.org/data/server_status.json"
+_VEGETA_UA = "Lavf/60"
+_VEGETA_SPOOL_TTL = 120
+_VEGETA_REG_TTL = 45 * 60
+_VEGETA_MAX_SERVERS = 8       # serveurs `up` (les + rapides) ingérés — cap RAM/temps
+_VEGETA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_vegetatv.json")
+_VEGETA_FR = re.compile(r"\b(FR|FRA|FRANCE|FRENCH|FRANCAIS|FRANÇAIS)\b", re.I)
+# Préfixe pays étranger : le code (CA/UK/BE…) suivi d'un séparateur — QUI VARIE selon la ligne :
+# « | », « : », « ▎ », « ‖ », « ▐ », « ┃ », ou un simple espace. loobox n'attendait que « | ».
+_VEGETA_SEP_CH = "|:▎‖▐┃"
+_VEGETA_NOTFR = re.compile(
+    r"^\s*(?:CA|AR|US|UK|BE|CH|DE|ES|IT|PT|NL|MA|DZ|TN|TR|QC|CD|SN|CI)(?:[\-\s]*FR)?\s*[" + _VEGETA_SEP_CH + r"]"
+    r"|\b(?:QUEBEC|QUÉBEC|CANADA|CANADIAN|ARABIC|ARABE|ONTARIO|MONTREAL)\b", re.I)
+_VEGETA_PREFIX = re.compile(r"^\s*[A-Za-z0-9]{1,4}\s*[" + _VEGETA_SEP_CH + r"]\s*")
+_VEGETA_SEP = re.compile(r"#{2,}|={3,}|\*{3,}|▬{2,}")
+
+def _vegeta_clean_name(name: str) -> str:
+    """Retire le préfixe fournisseur/pays (« FR| », « BE ▎ », « UK: ») pour un affichage propre."""
+    return _VEGETA_PREFIX.sub("", name or "").strip()
+_vegeta_spool_cache: dict = {"at": 0.0, "servers": []}
+_vegeta_reg: dict = {"at": 0.0, "reg": {}}
+
+def _vegeta_json(url: str, timeout: int = 20):
+    req = urllib.request.Request(url, headers={"User-Agent": _VEGETA_UA})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+def _vegeta_chkey(name: str) -> str:
+    """Clé canonique d'une chaîne (retire le préfixe fournisseur « XX| », normalise, dé-pluralise).
+    Regroupe la même chaîne à travers les serveurs et sert d'id Stremio."""
+    s = re.sub(r"^[^|]{1,15}\|\s*", "", name or "")
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().replace("+", " plus ")
+    s = re.sub(r"\(\d+\)|\[[^\]]*\]", " ", s)
+    out = []
+    for w in re.split(r"[^a-z0-9]+", s):
+        if not w:
+            continue
+        if len(w) > 3 and w.endswith("s"):
+            w = w[:-1]
+        out.append(w)
+    return " ".join(out)
+
+def _vegeta_is_fr(name: str, group: str) -> bool:
+    txt = f"{name} {group}"
+    if _VEGETA_NOTFR.search(txt):
+        return False
+    return bool(_VEGETA_FR.search(txt))
+
+def _vegeta_parse_spool(data: dict) -> list:
+    out = []
+    for raw_url, s in (data.get("servers") or {}).items():
+        if s.get("kind") != "xtream":
+            continue
+        u = s.get("url") or raw_url
+        m = re.match(r"(https?://[^/]+)/get\.php\?(.*)", u)
+        if not m:
+            continue
+        base = m.group(1)
+        params = dict(urllib.parse.parse_qsl(m.group(2)))
+        usr, pw = params.get("username"), params.get("password")
+        if not (usr and pw):
+            continue
+        out.append({"key": f"{base}|{usr}", "base": base, "username": usr, "password": pw,
+                    "rtt": int(s.get("response_time_ms") or 999999), "up": bool(s.get("up"))})
+    return out
+
+def _vegeta_spool(force: bool = False) -> list:
+    if (not force and _vegeta_spool_cache["servers"]
+            and time.time() - _vegeta_spool_cache["at"] < _VEGETA_SPOOL_TTL):
+        return _vegeta_spool_cache["servers"]
+    try:
+        servers = _vegeta_parse_spool(_vegeta_json(_VEGETA_SPOOL))
+        if servers:
+            _vegeta_spool_cache.update(at=time.time(), servers=servers)
+    except Exception:
+        pass
+    return _vegeta_spool_cache["servers"]
+
+def _vegeta_api_channels(server: dict) -> list:
+    """Live FR d'un serveur via player_api (get_live_categories + get_live_streams)."""
+    base, u, p = server["base"], server["username"], server["password"]
+    api = f"{base}/player_api.php?username={urllib.parse.quote(u)}&password={urllib.parse.quote(p)}"
+    try:
+        cats = _vegeta_json(api + "&action=get_live_categories", timeout=30)
+        catmap = {str(c.get("category_id")): c.get("category_name", "") for c in cats}
+        streams = _vegeta_json(api + "&action=get_live_streams", timeout=60)
+    except Exception:
+        return []
+    out = []
+    for s in streams if isinstance(streams, list) else []:
+        sid = s.get("stream_id")
+        raw = (s.get("name") or "").strip()
+        if sid is None or not raw or _VEGETA_SEP.search(raw):
+            continue
+        group = catmap.get(str(s.get("category_id")), "")
+        if not _vegeta_is_fr(raw, group):     # filtre sur le nom BRUT (préfixe + group taggés FR)
+            continue
+        name = _vegeta_clean_name(raw) or raw  # nettoie le préfixe pour l'affichage ET le regroupement
+        out.append({"name": name, "logo": s.get("stream_icon") or "", "sid": str(sid)})
+    return out
+
+def _vegeta_ingest() -> int:
+    """Reconstruit le registre chaîne->serveurs depuis les serveurs `up` les + rapides. -> nb chaînes.
+    Jamais écrasé par du vide (échec réseau -> ancien registre conservé)."""
+    servers = [s for s in _vegeta_spool(force=True) if s["up"]]
+    servers.sort(key=lambda s: s["rtt"])
+    reg: dict = {}
+    for s in servers[:_VEGETA_MAX_SERVERS]:
+        for c in _vegeta_api_channels(s):
+            k = _vegeta_chkey(c["name"])
+            if not k:
+                continue
+            e = reg.setdefault(k, {"display": c["name"], "logo": c["logo"], "refs": []})
+            e["refs"].append({"key": s["key"], "sid": c["sid"]})
+    if reg:
+        _vegeta_reg.update(at=time.time(), reg=reg)
+        try:
+            with open(_VEGETA_FILE, "w", encoding="utf-8") as f:
+                json.dump({"at": time.time(), "reg": reg}, f, ensure_ascii=False)
+        except Exception:
+            pass
+    return len(reg)
+
+def _vegeta_load_reg() -> dict:
+    if _vegeta_reg["reg"] and time.time() - _vegeta_reg["at"] < _VEGETA_REG_TTL:
+        return _vegeta_reg["reg"]
+    try:
+        with open(_VEGETA_FILE, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        if isinstance(d.get("reg"), dict):
+            _vegeta_reg.update(at=d.get("at", 0.0), reg=d["reg"])
+    except Exception:
+        pass
+    return _vegeta_reg["reg"]
+
+def vegetatv_channels(country: str = "France") -> list:
+    reg = _vegeta_load_reg()
+    return [{"id": k, "name": v.get("display", ""), "logo": v.get("logo", ""), "lang": "fr"}
+            for k, v in reg.items()]
+
+def _vegeta_ts(server: dict, sid: str) -> str:
+    return f"{server['base']}/live/{server['username']}/{server['password']}/{sid}.ts"
+
+def _vegeta_m3u8(server: dict, sid: str) -> str:
+    return f"{server['base']}/live/{server['username']}/{server['password']}/{sid}.m3u8"
+
+def _vegeta_delivers(url: str, secs: float = 4, cap: int = 200000) -> bool:
+    """Le flux crache-t-il vraiment ? Tire <= cap octets, True si > 50 Ko (écarte un 407/0 octet)."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _VEGETA_UA})
+        got, t = 0, time.time()
+        with urllib.request.urlopen(req, timeout=10) as r:
+            if getattr(r, "status", 200) != 200:
+                return False
+            while got <= cap and time.time() - t <= secs:
+                chunk = r.read(65536)
+                if not chunk:
+                    break
+                got += len(chunk)
+        return got > 50000
+    except Exception:
+        return False
+
+def _vegeta_pick(name_key: str):
+    """Load-balancer byte-testé : refs registre ∩ spool `up`, tri rtt, byte-test des 3 meilleurs."""
+    e = _vegeta_load_reg().get(name_key)
+    if not e:
+        return None
+    up = {s["key"]: s for s in _vegeta_spool() if s["up"]}
+    cands = [(up[r["key"]], r["sid"]) for r in e.get("refs", []) if r["key"] in up]
+    cands.sort(key=lambda c: c[0]["rtt"])
+    for server, sid in cands[:3]:
+        if _vegeta_delivers(_vegeta_ts(server, sid)):
+            return server, sid
+    return None
+
+def vegetatv_resolve(name_key: str) -> str:
+    """LECTURE : URL MFP HLS du 1er serveur qui livre. `""` si pas de MFP / tout KO / absente."""
+    if not MEDIAFLOW_URL:
+        return ""
+    picked = _vegeta_pick(name_key)
+    if not picked:
+        return ""
+    server, sid = picked
+    return _mfp_hls(_vegeta_m3u8(server, sid), ua=_VEGETA_UA)
+
+def _vegeta_warm():
+    """Thread de fond : ingestion initiale (registre vide/stale) puis rafraîchi chaque TTL."""
+    while True:
+        try:
+            _vegeta_load_reg()
+            if not _vegeta_reg["reg"] or time.time() - _vegeta_reg["at"] >= _VEGETA_REG_TTL:
+                n = _vegeta_ingest()
+                log.info(f"vegetatv: registre {n} chaines")
+        except Exception as e:
+            log.error(f"vegetatv warm: {e}")
+        time.sleep(_VEGETA_REG_TTL)
+
+# ============================================================
+# FLUX STREMIO — détection de qualité (par le nom) + format unifié « beau et propre ».
+# ============================================================
+_QUALITY_RE = [
+    (re.compile(r"\b(4k|uhd|2160p?|8k|ultra\s*hd)\b", re.I), ("4K", 4)),
+    (re.compile(r"\b(fhd|1080p?|full\s*hd)\b", re.I), ("FHD", 3)),
+    (re.compile(r"\b(hd|720p?)\b", re.I), ("HD", 2)),
+    (re.compile(r"\b(sd|480p?|360p?|ld)\b", re.I), ("SD", 1)),
+]
+
+def _quality_of(name: str) -> tuple[str, int]:
+    """Détecte la qualité depuis un nom de chaîne/flux (4K/FHD/HD/SD). ('', 0) si inconnue.
+    Instantané (aucun réseau) : la plupart des lignes taguent la qualité dans le nom."""
+    for rx, res in _QUALITY_RE:
+        if rx.search(name or ""):
+            return res
+    return "", 0
+
+def _stream_entry(emoji: str, provider: str, quality: str, detail: str, url: str,
+                  binge: str = "") -> dict:
+    """Objet stream Stremio cohérent : badge « provider + qualité » (2 lignes, style Torrentio)
+    + ligne de détail lisible. `bingeGroup` : Stremio garde la même source d'une fois sur l'autre."""
+    name = f"{emoji} {provider}".strip()
+    if quality:
+        name += f"\n{quality}"
+    s = {"name": name, "title": detail, "url": url}
+    if binge:
+        s["behaviorHints"] = {"bingeGroup": binge}
+    return s
+
 def _b64u(s: str) -> str:
     return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
 
@@ -979,32 +1343,70 @@ def _public_stats() -> dict:
 
 def _build_m3u(qs: dict) -> str:
     base = qs.get("base", [""])[0] or ""
-    include_vavoo = qs.get("vavoo", ["true"])[0] == "true"
+    code = qs.get("code", [""])[0]
+    playlist_name = qs.get("playlist", [""])[0]
+    wp = _settings.get("wiseplay", {})
+    stored_code = wp.get("access_code", "")
+    wiseplay_mode = bool(code) and bool(stored_code) and code == stored_code
+
+    playlist_filter = None
+    if wiseplay_mode and playlist_name:
+        pl = wp.get("playlists", {}).get(playlist_name)
+        pl_channels = pl.get("channels", []) if isinstance(pl, dict) else (pl or [])
+        playlist_filter = {str(cid) for cid in pl_channels}
+
+    if wiseplay_mode:
+        ch_toggles = wp.get("channels", {})
+        src = wp.get("sources", {"dlstreams": True, "vavoo": True, "vegetatv": True})
+        include_dlstreams = src.get("dlstreams", True)
+        include_vavoo = src.get("vavoo", True)
+        include_vegetatv = src.get("vegetatv", True)
+    else:
+        ch_toggles = {}
+        include_dlstreams = True
+        include_vavoo = qs.get("vavoo", ["true"])[0] == "true"
+        include_vegetatv = qs.get("vegetatv", ["true"])[0] == "true"
+
+    def _keep(cid) -> bool:
+        if playlist_filter is not None:
+            return str(cid) in playlist_filter
+        return ch_toggles.get(str(cid)) is not False
+
+    # group-title = GENRE (même taxo que Stremio : « sport dans sport »), plus la langue.
+    # tvg-logo pointe sur la route /logo de l'addon -> profite des logos curés (dossier LOGOS/).
     lines = ["#EXTM3U"]
-    all_ch = channels()
-    for ch in all_ch:
-        href = f"{base}/hls/{ch['id']}/index.m3u8"
-        grp = (ch.get("lang") or "other").upper()
-        logo = _CH_LOGO.get(str(ch.get("id")), "")
-        lines.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{logo}" group-title="{grp}",{ch["name"]}')
-        lines.append(href)
+    if include_dlstreams:
+        for ch in channels():
+            if not _keep(ch["id"]):
+                continue
+            enc = urllib.parse.quote(str(ch["id"]), safe="")
+            grp = _genres_for(ch["name"])[0]
+            lines.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{base}/logo/dlstreams/{enc}.png" group-title="{grp}",{ch["name"]}')
+            lines.append(f"{base}/hls/{ch['id']}/index.m3u8")
     if include_vavoo:
-        vavoo_ch = vavoo_channels()
-        for ch in vavoo_ch:
+        for ch in vavoo_channels():
+            if not _keep(ch["id"]):
+                continue
             enc = _b64u(ch["id"])
-            href = f"{base}/vhls?v={enc}"
-            grp = (ch.get("lang") or "other").upper()
-            logo = ch.get("logo", "")
-            lines.append(f'#EXTINF:-1 tvg-id="vavoo:{ch["id"]}" tvg-logo="{logo}" group-title="{grp}",{ch["name"]}')
-            lines.append(href)
-    st = _settings.get("stremio", {})
-    for cid, cc in st.get("custom_channels", {}).items():
-        for idx, stream_url in enumerate(cc.get("streams", [])):
-            href = f"{base}/hls/custom/{cid}/s{idx}/index.m3u8"
-            grp = "CUSTOM"
+            grp = _genres_for(ch["name"])[0]
+            lines.append(f'#EXTINF:-1 tvg-id="vavoo:{ch["id"]}" tvg-logo="{base}/logo/vavoo/{urllib.parse.quote(enc, safe="")}.png" group-title="{grp}",{ch["name"]}')
+            lines.append(f"{base}/vhls?v={enc}")
+    if include_vegetatv and MEDIAFLOW_URL:
+        for ch in vegetatv_channels():
+            if not _keep(ch["id"]):
+                continue
+            enc = _b64u(ch["id"])
+            grp = _genres_for(ch["name"])[0]
+            lines.append(f'#EXTINF:-1 tvg-id="vegetatv:{ch["id"]}" tvg-logo="{base}/logo/vegetatv/{urllib.parse.quote(enc, safe="")}.png" group-title="{grp}",{ch["name"]}')
+            lines.append(f"{base}/vghls?v={enc}")
+    if playlist_filter is None:
+        st = _settings.get("stremio", {})
+        for cid, cc in st.get("custom_channels", {}).items():
+            grp = _genres_for(cc.get("name", ""))[0]
             logo = cc.get("logo", "")
-            lines.append(f'#EXTINF:-1 tvg-id="custom:{cid}" tvg-logo="{logo}" group-title="{grp}",{cc.get("name", cid)}')
-            lines.append(href)
+            for idx, stream_url in enumerate(cc.get("streams", [])):
+                lines.append(f'#EXTINF:-1 tvg-id="custom:{cid}" tvg-logo="{logo}" group-title="{grp}",{cc.get("name", cid)}')
+                lines.append(f"{base}/hls/custom/{cid}/s{idx}/index.m3u8")
     return "\n".join(lines)
 
 def _daily_totals() -> list[dict]:
@@ -1097,7 +1499,7 @@ def _draw_text(buf: bytearray, w: int, text: str, x: int, y: int, scale: int, co
         for row in range(7):
             bits = glyph[row]
             for col in range(5):
-                if bits & (1 << (4 - col)):
+                if bits & (1 << col):
                     for dy in range(scale):
                         for dx in range(scale):
                             px, py = x + col * scale + dx, y + row * scale + dy
@@ -1223,23 +1625,24 @@ def _health_refresh(force: bool = False):
         )
 
 def _now_playing() -> list[dict]:
-    with _epg_lock:
-        if not _epg_data:
-            return []
-        out = []
-        for c in _POPULAR_CHANNELS:
-            cur, nxt = _epg_slot(c["id"])
-            if not cur:
-                continue
-            out.append({
-                "id": c["id"],
-                "name": c["name"],
-                "logo": f"/logo/dlstreams/{c['id']}.png",
-                "now": int(time.time()),
-                "cur": {"title": cur.get("title", ""), "desc": cur.get("desc", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
-                "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
-            })
-        return out
+    # NE PAS tenir _epg_lock ici : _epg_slot() le reprend lui-même et threading.Lock n'est PAS
+    # ré-entrant -> auto-deadlock qui empoisonnait le lock (cassait aussi /api/settings et /api/health).
+    if not _epg_data:
+        return []
+    out = []
+    for c in _POPULAR_CHANNELS:
+        cur, nxt = _epg_slot(c["id"])       # acquiert _epg_lock brièvement, par chaîne
+        if not cur:
+            continue
+        out.append({
+            "id": c["id"],
+            "name": c["name"],
+            "logo": f"/logo/dlstreams/{c['id']}.png",
+            "now": int(time.time()),
+            "cur": {"title": cur.get("title", ""), "desc": cur.get("desc", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
+            "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
+        })
+    return out
 
 def _logo_bytes(src: str, c: dict) -> bytes:
     if not _settings.get("logos", True):
@@ -1250,10 +1653,17 @@ def _logo_bytes(src: str, c: dict) -> bytes:
     manual = st.get("channel_logos", {}).get(cid)
     if manual:
         url = manual.strip()
-    elif src == "dlstreams":
-        url = _CH_LOGO.get(cid, "")
     else:
-        url = (c.get("logo") or "").strip()
+        # Logo local curé (le dossier LOGOS/) prime sur les logos distants.
+        loc = _local_logo_for(name)
+        if loc:
+            b = _read_local_logo(loc[0])
+            if b:
+                return b
+        if src == "dlstreams":
+            url = _CH_LOGO.get(cid, "")
+        else:
+            url = (c.get("logo") or "").strip()
     if not url and name:
         url = _LOGO_BY_NAME.get(_norm_name(name), "")
     if url and name:
@@ -1428,6 +1838,7 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(content_length) if content_length > 0 else b''
         u = urllib.parse.urlsplit(self.path)
         path = u.path
+        qs = urllib.parse.parse_qs(u.query)
         if path == "/api/auth":
             ip = self._client_ip()
             now = time.time()
@@ -1626,7 +2037,7 @@ class Handler(BaseHTTPRequestHandler):
                     _settings["wiseplay"]["playlists"] = {str(k): list(v) for k, v in wp["playlists"].items()}
                     changed = True
                 if isinstance(wp.get("sources"), dict):
-                    for k in ("dlstreams", "vavoo"):
+                    for k in ("dlstreams", "vavoo", "vegetatv"):
                         if isinstance(wp["sources"].get(k), bool):
                             _settings["wiseplay"]["sources"][k] = wp["sources"][k]
                     changed = True
@@ -1693,6 +2104,46 @@ class Handler(BaseHTTPRequestHandler):
                 _playlists_save()
                 return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
             return self._send(400, json.dumps({"success": False, "error": "action inconnue"}).encode(), "application/json")
+        if path == "/api/wiseplay/config":
+            code = qs.get("code", [""])[0]
+            stored_code = _settings.get("wiseplay", {}).get("access_code", "")
+            if not stored_code or code != stored_code:
+                return self._send(401, json.dumps({"success": False, "error": "Code invalide ou non configuré"}).encode(), "application/json")
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            changed = False
+            wp = _settings.setdefault("wiseplay", {})
+            if "channels" in data and isinstance(data["channels"], dict):
+                wp["channels"] = {str(k): bool(v) for k, v in data["channels"].items()}
+                changed = True
+            if "playlists" in data and isinstance(data["playlists"], dict):
+                payload = data["playlists"]
+                wp.setdefault("playlists", {})
+                if "_delete" in payload:
+                    wp["playlists"].pop(str(payload["_delete"]), None)
+                for k, v in payload.items():
+                    if k == "_delete":
+                        continue
+                    k = str(k)
+                    existing = wp["playlists"].get(k)
+                    existing_logo = existing.get("logo", "") if isinstance(existing, dict) else ""
+                    if isinstance(v, dict):
+                        pl_channels = [str(x) for x in v.get("channels", [])]
+                        pl_logo = str(v["logo"]) if "logo" in v else existing_logo
+                        wp["playlists"][k] = {"channels": pl_channels, "logo": pl_logo}
+                    elif isinstance(v, list):
+                        wp["playlists"][k] = {"channels": [str(x) for x in v], "logo": existing_logo}
+                changed = True
+            if "sources" in data and isinstance(data["sources"], dict):
+                for k in ("dlstreams", "vavoo", "vegetatv"):
+                    if k in data["sources"] and isinstance(data["sources"][k], bool):
+                        wp.setdefault("sources", {})[k] = data["sources"][k]
+                        changed = True
+            if changed:
+                _settings_save()
+            return self._send(200, json.dumps(wp).encode(), "application/json")
         return self._send(404, b"not found", "text/plain")
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
@@ -1711,6 +2162,11 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     if c is None:
                         c = {"id": url, "name": "Vavoo", "logo": ""}
+                elif src == "vegetatv":
+                    key = _unb64u(cid)
+                    c = next((x for x in vegetatv_channels()
+                        if str(x.get("id", "")).strip() == str(key).strip()),
+                        {"id": key, "name": "Vegeta TV", "logo": ""})
                 else:
                     c = next((x for x in channels() if str(x.get("id")) == str(cid)),
                         {"id": cid, "name": f"dlstreams {cid}", "logo": ""})
@@ -1794,33 +2250,14 @@ class Handler(BaseHTTPRequestHandler):
                 stored_code = _settings.get("wiseplay", {}).get("access_code", "")
                 if not stored_code or code != stored_code:
                     return self._send(401, json.dumps({"success": False, "error": "Code invalide ou non configuré"}).encode(), "application/json")
-                if self.command == "GET":
-                    all_ch = channels() + vavoo_channels()
-                    wp = _settings.get("wiseplay", {})
-                    return self._send(200, json.dumps({
-                        **wp,
-                        "all_channels": all_ch
-                    }).encode(), "application/json")
-                try:
-                    data = json.loads(body) if body else {}
-                except Exception:
-                    data = {}
-                changed = False
-                wp = _settings.setdefault("wiseplay", {})
-                if "channels" in data and isinstance(data["channels"], dict):
-                    wp["channels"] = {str(k): bool(v) for k, v in data["channels"].items()}
-                    changed = True
-                if "playlists" in data and isinstance(data["playlists"], dict):
-                    wp["playlists"] = {str(k): [str(x) for x in v] for k, v in data["playlists"].items()}
-                    changed = True
-                if "sources" in data and isinstance(data["sources"], dict):
-                    for k in ("dlstreams", "vavoo"):
-                        if k in data["sources"] and isinstance(data["sources"][k], bool):
-                            wp.setdefault("sources", {})[k] = data["sources"][k]
-                        changed = True
-                if changed:
-                    _settings_save()
-                return self._send(200, json.dumps(wp).encode(), "application/json")
+                all_ch = [dict(c, src="dlstreams") for c in channels()] + [dict(c, src="vavoo") for c in vavoo_channels()]
+                if MEDIAFLOW_URL:
+                    all_ch += [dict(c, src="vegetatv") for c in vegetatv_channels()]
+                wp = _settings.get("wiseplay", {})
+                return self._send(200, json.dumps({
+                    **wp,
+                    "all_channels": all_ch
+                }).encode(), "application/json")
             if path == "/api/activity":
                 if not self._require_auth():
                     return
@@ -1885,7 +2322,10 @@ class Handler(BaseHTTPRequestHandler):
                     _log_activity("Test flux public", f"#{cid} échec ({type(e).__name__})")
                     return self._send(200, json.dumps({"ok": False, "ms": ms, "error": str(e)}).encode(), "application/json")
             if path == "/api/health":
-                _health_refresh(force=True)
+                # Non-bloquant : renvoie le snapshot en cache ; rafraîchit en FOND si périmé
+                # (les sondes réseau 8s+8s ne doivent JAMAIS bloquer la requête du dashboard).
+                if time.time() - _health_snapshot.get("at", 0) >= _HEALTH_TTL:
+                    threading.Thread(target=_health_refresh, args=(True,), daemon=True).start()
                 return self._send(200, json.dumps({
                     "dlstreams": {"ok": _health_snapshot.get("dlstreams", {}).get("ok", False)},
                     "vavoo": {"ok": _health_snapshot.get("vavoo", {}).get("ok", False)},
@@ -1972,6 +2412,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not user_config.get("vavoo", True):
                         return self._send(200, json.dumps({"metas": []}).encode(), "application/json", True)
                     chans = [c for c in vavoo_channels() if c.get("lang") == lang_filter]
+                elif catid == "vegetatv":
+                    if not (MEDIAFLOW_URL and user_config.get("vegetatv", True)):
+                        return self._send(200, json.dumps({"metas": []}).encode(), "application/json", True)
+                    chans = vegetatv_channels()
                 else:
                     chans = channels(lang_filter=lang_filter)
                 q = params.get("search", "").lower().strip()
@@ -1991,6 +2435,9 @@ class Handler(BaseHTTPRequestHandler):
                 if source == "vavoo":
                     url = _unb64u(cid)
                     c = next((x for x in vavoo_channels() if x["id"] == url), {"id": url, "name": "Vavoo"})
+                elif source == "vegetatv":
+                    key = _unb64u(cid)
+                    c = next((x for x in vegetatv_channels() if x["id"] == key), {"id": key, "name": "Vegeta TV"})
                 else:
                     c = next((x for x in channels() if x["id"] == cid), {"id": cid, "name": f"dlstreams {cid}"})
                 return self._send(200, json.dumps({"meta": self._meta(c, source, user_config)}).encode(),
@@ -2002,37 +2449,53 @@ class Handler(BaseHTTPRequestHandler):
                 if source == "vavoo":
                     if not user_config.get("vavoo", True):
                         return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
-                    streams = [{"name": "Vavoo", "title": "📺 Direct", "url": f"{b}/vhls?v={cid}"}]
+                    nm = next((x["name"] for x in vavoo_channels() if x["id"] == _unb64u(cid)), "Vavoo")
+                    q, _r = _quality_of(nm)
+                    streams = [_stream_entry("📺", "Vavoo", q, "Direct — lecture immédiate",
+                        f"{b}/vhls?v={cid}", binge=f"vv-{cid}")]
+                    return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
+                if source == "vegetatv":
+                    if not (MEDIAFLOW_URL and user_config.get("vegetatv", True)):
+                        return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
+                    key = _unb64u(cid)
+                    url = vegetatv_resolve(key)
+                    if not url:
+                        return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
+                    nm = next((x["name"] for x in vegetatv_channels() if x["id"] == key), "Vegeta TV")
+                    q, _r = _quality_of(nm)
+                    streams = [_stream_entry("🐉", "Vegeta TV", q, "Direct via MediaFlow", url,
+                        binge=f"vg-{cid}")]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 st = _settings.get("stremio", {})
                 streams = []
                 custom_channels = st.get("custom_channels", {})
                 if cid in custom_channels:
                     cc = custom_channels[cid]
+                    cq, _r = _quality_of(cc.get("name", ""))
                     for idx, stream_url in enumerate(cc.get("streams", [])):
-                        streams.append({"name": "Personnalisé", "title": f"{cc.get('name', 'Custom')}  Source {idx+1}",
-                            "url": f"{b}/hls/custom/{cid}/s{idx}/index.m3u8"})
+                        streams.append(_stream_entry("⭐", cc.get("name", "Ma chaîne"), cq,
+                            f"Source {idx + 1}", f"{b}/hls/custom/{cid}/s{idx}/index.m3u8",
+                            binge=f"cu-{cid}"))
                     if streams:
                         return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 custom_streams = st.get("channel_streams", {}).get(cid, [])
                 if isinstance(custom_streams, str):
                     custom_streams = [{"url": custom_streams, "label": ""}]
                 for idx, sitem in enumerate(custom_streams):
-                    label = (sitem.get("label") if isinstance(sitem, dict) else "") or f"Flux perso {idx+1}"
-                    streams.append({"name": "Personnalisé", "title": f"⚙️ {label}",
-                        "url": f"{b}/hls/{cid}/custom_{idx}/index.m3u8"})
+                    label = (sitem.get("label") if isinstance(sitem, dict) else "") or f"Flux perso {idx + 1}"
+                    q, _r = _quality_of(label)
+                    streams.append(_stream_entry("⚙️", "Perso", q, label,
+                        f"{b}/hls/{cid}/custom_{idx}/index.m3u8", binge=f"cs-{cid}"))
                 if user_config.get("dlstreams", True):
                     ok = working_players(cid)
                     if ok:
-                        quality_pref = user_config.get("quality", "auto")
-                        streams.append({"name": "dlstreams", "title": "🔀 Auto (1er dispo)",
-                            "url": f"{b}/hls/{cid}/index.m3u8"})
+                        nm = next((x["name"] for x in channels() if x["id"] == cid), "")
+                        q, _r = _quality_of(nm)
+                        streams.append(_stream_entry("🔀", "dlstreams", q, "Auto — 1re source dispo",
+                            f"{b}/hls/{cid}/index.m3u8", binge=f"dl-{cid}"))
                         for idx, (i, label) in enumerate(ok):
-                            title = f"Source {idx+1}"
-                            if quality_pref != "auto":
-                                title = f"{quality_pref} {title}"
-                            streams.append({"name": "dlstreams", "title": title,
-                                "url": f"{b}/hls/{cid}/p{i}/index.m3u8"})
+                            streams.append(_stream_entry("▶️", "dlstreams", q, f"Source {idx + 1}",
+                                f"{b}/hls/{cid}/p{i}/index.m3u8", binge=f"dl-{cid}"))
                 return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
@@ -2092,6 +2555,19 @@ class Handler(BaseHTTPRequestHandler):
                 text = _proxy_get(real, hdr).decode("utf-8", "replace")
                 return self._send(200, _rewrite_playlist(text, real, henc, self._self_base()).encode(),
                     "application/vnd.apple.mpegurl")
+            if path == "/vghls":
+                # VegetaTv pour lecteurs M3U (Wiseplay/VLC) : résout (load-balance byte-testé) -> MFP,
+                # et renvoie le manifeste MFP (segments déjà en URLs MFP absolues).
+                key = _unb64u(qs["v"][0])
+                url = vegetatv_resolve(key)
+                if not url:
+                    return self._send(502, b"vegetatv: flux introuvable (contendu ?)", "text/plain")
+                _track_play("vegetatv", key)
+                try:
+                    text = _proxy_get(url, {"User-Agent": _VEGETA_UA}).decode("utf-8", "replace")
+                except Exception:
+                    return self._send(502, b"vegetatv: MFP injoignable", "text/plain")
+                return self._send(200, text.encode(), "application/vnd.apple.mpegurl")
             if path == "/px":
                 ub = qs["u"][0]
                 henc = qs.get("h", [""])[0]
@@ -2149,6 +2625,10 @@ class Handler(BaseHTTPRequestHandler):
         if uc.get("vavoo", True) and st.get("include_vavoo", True):
             catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
                 "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+        # VegetaTv : uniquement si MFP configuré (les lignes contendues sont injouables sans).
+        if MEDIAFLOW_URL and uc.get("vegetatv", True) and st.get("include_vegetatv", True):
+            catalogs.append({"type": "tv", "id": "vegetatv", "name": "🐉 Vegeta TV",
+                "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
         custom_channels = st.get("custom_channels", {})
         if custom_channels:
             catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
@@ -2166,14 +2646,14 @@ class Handler(BaseHTTPRequestHandler):
             "description": desc,
             "resources": ["catalog", "meta", "stream"],
             "types": ["tv"],
-            "idPrefixes": ["dlstreams:", "vavoo:", "custom:"],
+            "idPrefixes": ["dlstreams:", "vavoo:", "vegetatv:", "custom:"],
             "catalogs": catalogs,
             "behaviorHints": behavior
         }
     def _meta(self, c: dict, source: str, user_config: dict | None = None) -> dict:
         uc = user_config or {}
         raw_id = c["id"]
-        if source == "vavoo":
+        if source in ("vavoo", "vegetatv"):
             cid = _b64u(raw_id)
         elif source == "dlstreams":
             cid = raw_id
@@ -2272,6 +2752,8 @@ def main():
     threading.Thread(target=_warm_logos, daemon=True).start()
     threading.Thread(target=_epg_refresh, daemon=True).start()
     threading.Thread(target=_health_refresh, daemon=True).start()
+    if MEDIAFLOW_URL:                       # VegetaTv seulement si MFP est configuré
+        threading.Thread(target=_vegeta_warm, daemon=True).start()
     srv.serve_forever()
 
 def _warm_channels():
