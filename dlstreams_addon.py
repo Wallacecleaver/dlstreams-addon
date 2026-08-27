@@ -1225,6 +1225,155 @@ def _stream_entry(emoji: str, provider: str, quality: str, detail: str, url: str
         s["behaviorHints"] = {"bingeGroup": binge}
     return s
 
+# ============================================================
+# UNIFICATION (modèle tvmio) — fusionne dlstreams + Vavoo + VegetaTv en UN registre de
+# chaînes canoniques (par nom normalisé). 1 chaîne = tous les flux (toutes sources) au clic,
+# rangées par catégorie. Les variantes de qualité deviennent des flux, pas des chaînes.
+# ============================================================
+_CANON_NOISE = {"hd", "fhd", "uhd", "4k", "8k", "sd", "720", "1080", "2160", "720p", "1080p",
+    "2160p", "hevc", "h264", "h265", "vip", "raw", "local", "backup", "event", "events", "only",
+    "during", "live", "direct", "access", "mcdonald", "mcdonalds", "tv", "s1", "s2", "s3", "ld"}
+_CANON_COUNTRY = {"france", "french", "italy", "italia", "poland", "polska", "spain", "espana",
+    "greece", "portugal", "germany", "deutschland", "uk", "usa", "international", "gr", "be",
+    "ca", "us", "ar"}
+
+_CANON_MERGE = {}
+for _i in range(1, 20):
+    _CANON_MERGE[f"beinmax{_i}"] = f"beinsportmax{_i}"        # « beIN MAX 5 » = « beIN Sports Max 5 »
+    _CANON_MERGE[f"beinsportfrench{_i}"] = f"beinsport{_i}"   # « beIN Sport French 1 » = « beIN Sports 1 »
+
+def _canon_key(name: str) -> str:
+    """Clé canonique de FUSION cross-source (agressive : retire qualité/provider/pays/statut/«+»,
+    garde marque + numéro). Le même « beIN Sports 1 » de 3 sources -> même clé."""
+    s = (name or "").split("|")[0]
+    s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().replace("+", " ")
+    parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _CANON_NOISE]
+    parts = [w for i, w in enumerate(parts) if not (i > 0 and w in _CANON_COUNTRY)]
+    if parts and parts[0] == "fr":         # préfixe « FR … » en tête -> retiré (garde « France 2 »)
+        parts = parts[1:]
+    parts = ["sport" if w == "sports" else w for w in parts]
+    k = "".join(parts)
+    return _CANON_MERGE.get(k, k)
+
+_DISPLAY_ALIAS = {"ligue1": "Ligue 1+", "canal": "Canal+", "canalsport": "Canal+ Sport",
+    "canalfoot": "Canal+ Foot", "canalsport360": "Canal+ Sport 360",
+    "canalpremierleague": "Canal+ Premier League", "canalcinema": "Canal+ Cinéma",
+    "canalgrandecran": "Canal+ Grand Écran", "canalseries": "Canal+ Séries",
+    "canalkids": "Canal+ Kids", "canalj": "Canal J", "canaldocs": "Canal+ Docs",
+    "canalboxoffice": "Canal+ Box Office", "eurosport1": "Eurosport 1", "eurosport2": "Eurosport 2"}
+for _i in range(1, 20):
+    _DISPLAY_ALIAS[f"ligue1{_i}"] = f"Ligue 1+ {_i}"
+    _DISPLAY_ALIAS[f"beinsport{_i}"] = f"beIN Sports {_i}"
+    _DISPLAY_ALIAS[f"beinsportmax{_i}"] = f"beIN Sports Max {_i}"
+    _DISPLAY_ALIAS[f"rmcsport{_i}"] = f"RMC Sport {_i}"
+    _DISPLAY_ALIAS[f"dazn{_i}"] = f"DAZN {_i}"
+
+_CANON_TAGS = re.compile(
+    r"\b(HD|FHD|UHD|4K|8K|SD|720p?|1080p?|2160p?|HEVC|H26[45]|VIP|RAW|LOCAL|BACKUP|EVENT|ONLY|ACCESS|S[123])\b",
+    re.I)
+
+def _clean_display_raw(name: str) -> str:
+    """Nom d'affichage propre (retire suffixe provider, (BACKUP), qualité/statut)."""
+    s = (name or "").split("|")[0]
+    s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
+    s = _CANON_TAGS.sub("", s)
+    s = re.sub(r"\s+", " ", s).strip(" -·|▎‖▐┃")
+    return s or (name or "").strip()
+
+_SRC_RANK = {"dlstreams": 3, "vavoo": 2, "vegetatv": 1}   # priorité du nom d'affichage
+_CAT_ICON = {"Sports": "⚽", "Actualités": "📰", "Films & Séries": "🎬", "Cinéma": "🎥",
+    "Divertissement": "🎉", "Musique": "🎵", "Documentaire": "🌍", "Jeunesse": "🧸",
+    "Télévision": "📺"}
+# slugs ASCII pour les ids de catalogue (évite l'encodage % des accents dans l'URL Stremio)
+_CAT_SLUG = {"Sports": "sports", "Actualités": "actualites", "Films & Séries": "films-series",
+    "Cinéma": "cinema", "Divertissement": "divertissement", "Musique": "musique",
+    "Documentaire": "documentaire", "Jeunesse": "jeunesse", "Télévision": "television"}
+_SLUG_CAT = {v: k for k, v in _CAT_SLUG.items()}
+_unified_cache: dict = {"at": 0.0, "reg": None}
+_UNIFIED_TTL = 1800
+
+def _unified_registry() -> dict:
+    """Registre canonique {key -> {name, cat, logo, refs:[{src,id,q,qr}]}}, fusionné + caché."""
+    if _unified_cache["reg"] is not None and time.time() - _unified_cache["at"] < _UNIFIED_TTL:
+        return _unified_cache["reg"]
+    reg: dict = {}
+
+    def add(src, cid, raw):
+        key = _canon_key(raw)
+        if not key:
+            return
+        q, qr = _quality_of(raw)
+        e = reg.get(key)
+        if e is None:
+            e = reg[key] = {"key": key, "name": "", "refs": [], "_nr": -1}
+        e["refs"].append({"src": src, "id": str(cid), "q": q, "qr": qr})
+        rank = _SRC_RANK.get(src, 0)
+        if key in _DISPLAY_ALIAS:
+            e["name"] = _DISPLAY_ALIAS[key]
+            e["_nr"] = 99
+        elif rank > e["_nr"]:
+            e["name"] = _clean_display_raw(raw)
+            e["_nr"] = rank
+
+    for c in channels():
+        if c.get("lang") != "fr":     # dlstreams porte tout l'international -> on garde le FR
+            continue
+        add("dlstreams", c["id"], c["name"])
+    for c in vavoo_channels():        # déjà filtré FR
+        add("vavoo", c["id"], c["name"])
+    if MEDIAFLOW_URL:
+        for c in vegetatv_channels():  # déjà filtré FR
+            add("vegetatv", c["id"], c["name"])
+    for e in reg.values():
+        e["cat"] = _genre_for(e["name"])[0]
+        seen = set()
+        refs = []
+        for r in sorted(e["refs"], key=lambda r: -r["qr"]):   # dédup par (source, qualité)
+            sig = (r["src"], r["q"])
+            if sig in seen:
+                continue
+            seen.add(sig)
+            refs.append(r)
+        e["refs"] = refs
+    _unified_cache.update(at=time.time(), reg=reg)
+    return reg
+
+def _unified_invalidate():
+    _unified_cache.update(at=0.0, reg=None)
+
+def _unified_by_cat(cat: str) -> list:
+    out = [e for e in _unified_registry().values() if e["cat"] == cat]
+    out.sort(key=lambda e: e["name"].lower())
+    return out
+
+def unified_categories() -> list:
+    """Catégories NON VIDES, dans l'ordre de _GENRE_CHOICES (pour les catalogues Stremio)."""
+    present = {e["cat"] for e in _unified_registry().values()}
+    return [c for c in _GENRE_CHOICES if c in present]
+
+def unified_streams(key: str, base: str) -> list:
+    """Tous les flux d'une chaîne unifiée (toutes sources), badge source+qualité, meilleur d'abord.
+    URLs paresseuses (résolution au PLAY via /hls,/vhls,/vghls) -> réponse instantanée."""
+    e = _unified_registry().get(key)
+    if not e:
+        return []
+    scored = []
+    for r in e["refs"]:
+        src, q = r["src"], r["q"]
+        if src == "dlstreams":
+            emoji, prov, url = "🔀", "dlstreams", f"{base}/hls/{r['id']}/index.m3u8"
+        elif src == "vavoo":
+            emoji, prov, url = "📺", "Vavoo", f"{base}/vhls?v={_b64u(r['id'])}"
+        elif src == "vegetatv":
+            emoji, prov, url = "🐉", "Vegeta TV", f"{base}/vghls?v={_b64u(r['id'])}"
+        else:
+            continue
+        detail = prov + (f" · {q}" if q else "")
+        scored.append((r["qr"], _stream_entry(emoji, prov, q, detail, url, binge=f"u-{key}")))
+    scored.sort(key=lambda t: -t[0])
+    return [s for _, s in scored]
+
 def _b64u(s: str) -> str:
     return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
 
@@ -2167,6 +2316,10 @@ class Handler(BaseHTTPRequestHandler):
                     c = next((x for x in vegetatv_channels()
                         if str(x.get("id", "")).strip() == str(key).strip()),
                         {"id": key, "name": "Vegeta TV", "logo": ""})
+                elif src == "unified":
+                    key = _unb64u(cid)
+                    e = _unified_registry().get(key)
+                    c = {"id": key, "name": e["name"] if e else "TV", "logo": ""}
                 else:
                     c = next((x for x in channels() if str(x.get("id")) == str(cid)),
                         {"id": cid, "name": f"dlstreams {cid}", "logo": ""})
@@ -2241,6 +2394,24 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(list(_manual_channels.values())).encode(), "application/json")
+            if path == "/api/unified":
+                # Registre unifié (toutes sources fusionnées) pour le dashboard + le check des logos.
+                if not self._require_auth():
+                    return
+                base = self._self_base()
+                out = []
+                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
+                    enc = urllib.parse.quote(_b64u(e["key"]), safe="")
+                    out.append({
+                        "key": e["key"], "name": e["name"], "cat": e["cat"],
+                        "logo": f"{base}/logo/unified/{enc}.png",
+                        "sources": sorted({r["src"] for r in e["refs"]}),
+                        "flux": len(e["refs"]),
+                        "quals": list(dict.fromkeys(r["q"] for r in e["refs"] if r["q"])),
+                        "curated": _local_logo_for(e["name"]) is not None,
+                    })
+                return self._send(200, json.dumps({"channels": out, "total": len(out)}).encode(),
+                    "application/json")
             if path == "/api/playlists":
                 if not self._require_auth():
                     return
@@ -2404,99 +2575,49 @@ class Handler(BaseHTTPRequestHandler):
                     skip = int(params.get("skip") or 0)
                     metas = metas[skip:skip + 100]
                     return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
-                if catid == "dlstreams":
-                    if not user_config.get("dlstreams", True):
-                        return self._send(200, json.dumps({"metas": []}).encode(), "application/json", True)
-                    chans = channels(lang_filter=lang_filter)
-                elif catid == "vavoo":
-                    if not user_config.get("vavoo", True):
-                        return self._send(200, json.dumps({"metas": []}).encode(), "application/json", True)
-                    chans = [c for c in vavoo_channels() if c.get("lang") == lang_filter]
-                elif catid == "vegetatv":
-                    if not (MEDIAFLOW_URL and user_config.get("vegetatv", True)):
-                        return self._send(200, json.dumps({"metas": []}).encode(), "application/json", True)
-                    chans = vegetatv_channels()
-                else:
-                    chans = channels(lang_filter=lang_filter)
-                q = params.get("search", "").lower().strip()
-                if q:
-                    words = q.replace("+", " ").split()
-                    chans = [c for c in chans if all(w in c["name"].lower() for w in words)]
-                g = params.get("genre")
-                if g:
-                    chans = [c for c in chans if g in _genres_for(c["name"])]
-                skip = int(params.get("skip") or 0)
-                metas = [self._meta(c, catid, user_config) for c in chans[skip:skip + 100]]
-                return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
+                if catid.startswith("u_"):        # catalogue unifié d'une catégorie
+                    entries = _unified_by_cat(_SLUG_CAT.get(catid[2:], catid[2:]))
+                    q = params.get("search", "").lower().strip()
+                    if q:
+                        words = q.replace("+", " ").split()
+                        entries = [e for e in entries if all(w in e["name"].lower() for w in words)]
+                    skip = int(params.get("skip") or 0)
+                    metas = [self._umeta(e, user_config) for e in entries[skip:skip + 100]]
+                    return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
+                return self._send(200, json.dumps({"metas": []}).encode(), "application/json", True)
             user_config, clean_path = self._extract_addon_config(path)
             if clean_path.startswith("/meta/tv/"):
                 seg = urllib.parse.unquote(clean_path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
-                if source == "vavoo":
-                    url = _unb64u(cid)
-                    c = next((x for x in vavoo_channels() if x["id"] == url), {"id": url, "name": "Vavoo"})
-                elif source == "vegetatv":
-                    key = _unb64u(cid)
-                    c = next((x for x in vegetatv_channels() if x["id"] == key), {"id": key, "name": "Vegeta TV"})
-                else:
-                    c = next((x for x in channels() if x["id"] == cid), {"id": cid, "name": f"dlstreams {cid}"})
-                return self._send(200, json.dumps({"meta": self._meta(c, source, user_config)}).encode(),
-                    "application/json", True)
+                if source == "u":
+                    e = _unified_registry().get(_unb64u(cid))
+                    if not e:
+                        return self._send(200, json.dumps({"meta": {}}).encode(), "application/json")
+                    return self._send(200, json.dumps({"meta": self._umeta(e, user_config)}).encode(),
+                        "application/json", True)
+                if source == "custom":
+                    st = _settings.get("stremio", {})
+                    cc = st.get("custom_channels", {}).get(cid, {})
+                    c = {"id": cid, "name": cc.get("name", "Custom"), "logo": cc.get("logo", "")}
+                    return self._send(200, json.dumps({"meta": self._meta(c, "custom", user_config)}).encode(),
+                        "application/json", True)
+                return self._send(200, json.dumps({"meta": {}}).encode(), "application/json")
             if clean_path.startswith("/stream/tv/"):
                 seg = urllib.parse.unquote(clean_path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
-                if source == "vavoo":
-                    if not user_config.get("vavoo", True):
-                        return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
-                    nm = next((x["name"] for x in vavoo_channels() if x["id"] == _unb64u(cid)), "Vavoo")
-                    q, _r = _quality_of(nm)
-                    streams = [_stream_entry("📺", "Vavoo", q, "Direct — lecture immédiate",
-                        f"{b}/vhls?v={cid}", binge=f"vv-{cid}")]
+                if source == "u":                 # chaîne unifiée -> TOUS les flux (toutes sources)
+                    streams = unified_streams(_unb64u(cid), b)
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
-                if source == "vegetatv":
-                    if not (MEDIAFLOW_URL and user_config.get("vegetatv", True)):
-                        return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
-                    key = _unb64u(cid)
-                    url = vegetatv_resolve(key)
-                    if not url:
-                        return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
-                    nm = next((x["name"] for x in vegetatv_channels() if x["id"] == key), "Vegeta TV")
-                    q, _r = _quality_of(nm)
-                    streams = [_stream_entry("🐉", "Vegeta TV", q, "Direct via MediaFlow", url,
-                        binge=f"vg-{cid}")]
-                    return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
-                st = _settings.get("stremio", {})
-                streams = []
-                custom_channels = st.get("custom_channels", {})
-                if cid in custom_channels:
-                    cc = custom_channels[cid]
+                if source == "custom":            # chaîne perso (catalogue ⭐ Mes chaînes)
+                    st = _settings.get("stremio", {})
+                    cc = st.get("custom_channels", {}).get(cid, {})
                     cq, _r = _quality_of(cc.get("name", ""))
-                    for idx, stream_url in enumerate(cc.get("streams", [])):
-                        streams.append(_stream_entry("⭐", cc.get("name", "Ma chaîne"), cq,
-                            f"Source {idx + 1}", f"{b}/hls/custom/{cid}/s{idx}/index.m3u8",
-                            binge=f"cu-{cid}"))
-                    if streams:
-                        return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
-                custom_streams = st.get("channel_streams", {}).get(cid, [])
-                if isinstance(custom_streams, str):
-                    custom_streams = [{"url": custom_streams, "label": ""}]
-                for idx, sitem in enumerate(custom_streams):
-                    label = (sitem.get("label") if isinstance(sitem, dict) else "") or f"Flux perso {idx + 1}"
-                    q, _r = _quality_of(label)
-                    streams.append(_stream_entry("⚙️", "Perso", q, label,
-                        f"{b}/hls/{cid}/custom_{idx}/index.m3u8", binge=f"cs-{cid}"))
-                if user_config.get("dlstreams", True):
-                    ok = working_players(cid)
-                    if ok:
-                        nm = next((x["name"] for x in channels() if x["id"] == cid), "")
-                        q, _r = _quality_of(nm)
-                        streams.append(_stream_entry("🔀", "dlstreams", q, "Auto — 1re source dispo",
-                            f"{b}/hls/{cid}/index.m3u8", binge=f"dl-{cid}"))
-                        for idx, (i, label) in enumerate(ok):
-                            streams.append(_stream_entry("▶️", "dlstreams", q, f"Source {idx + 1}",
-                                f"{b}/hls/{cid}/p{i}/index.m3u8", binge=f"dl-{cid}"))
-                return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
+                    streams = [_stream_entry("⭐", cc.get("name", "Ma chaîne"), cq, f"Source {idx + 1}",
+                        f"{b}/hls/custom/{cid}/s{idx}/index.m3u8", binge=f"cu-{cid}")
+                        for idx, _u in enumerate(cc.get("streams", []))]
+                    return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
+                return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
             if path.startswith("/hls/") and path.endswith("/index.m3u8"):
                 parts = path.split("/")
                 if parts[2] == "custom":
@@ -2618,21 +2739,18 @@ class Handler(BaseHTTPRequestHandler):
             name = f"Chaînes live {lang_name}"
         if not st.get("manifest_desc"):
             desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
+        # Catalogues UNIFIÉS : un par catégorie (Sport, Cinéma…) = rangées séparées dans Stremio
+        # (façon tvmio). Chaque chaîne fusionne les flux dlstreams + Vavoo + VegetaTv.
+        _cat_extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]
         catalogs = []
-        if uc.get("dlstreams", True) and st.get("include_dlstreams", True):
-            catalogs.append({"type": "tv", "id": "dlstreams", "name": "W Addon TV",
-                "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
-        if uc.get("vavoo", True) and st.get("include_vavoo", True):
-            catalogs.append({"type": "tv", "id": "vavoo", "name": "Vavoo",
-                "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
-        # VegetaTv : uniquement si MFP configuré (les lignes contendues sont injouables sans).
-        if MEDIAFLOW_URL and uc.get("vegetatv", True) and st.get("include_vegetatv", True):
-            catalogs.append({"type": "tv", "id": "vegetatv", "name": "🐉 Vegeta TV",
-                "extra": _extra, "extraSupported": ["search", "skip", "genre"]})
+        for cat in unified_categories():
+            catalogs.append({"type": "tv", "id": f"u_{_CAT_SLUG.get(cat, cat)}",
+                "name": f"{_CAT_ICON.get(cat, '📺')} {cat}",
+                "extra": _cat_extra, "extraSupported": ["search", "skip"]})
         custom_channels = st.get("custom_channels", {})
         if custom_channels:
             catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
-                "extra": _extra, "extraSupported": ["search", "skip"]})
+                "extra": _cat_extra, "extraSupported": ["search", "skip"]})
         behavior = {
             "configurable": True,
             "configurationRequired": False,
@@ -2646,10 +2764,25 @@ class Handler(BaseHTTPRequestHandler):
             "description": desc,
             "resources": ["catalog", "meta", "stream"],
             "types": ["tv"],
-            "idPrefixes": ["dlstreams:", "vavoo:", "vegetatv:", "custom:"],
+            "idPrefixes": ["u:", "custom:"],
             "catalogs": catalogs,
             "behaviorHints": behavior
         }
+    def _umeta(self, e: dict, user_config: dict | None = None) -> dict:
+        """Meta d'une chaîne UNIFIÉE : nom propre, logo curé, catégorie, résumé des sources/qualités."""
+        base = self._self_base()
+        cid = _b64u(e["key"])
+        srcs = sorted({r["src"] for r in e["refs"]})
+        src_lbl = {"dlstreams": "dlstreams", "vavoo": "Vavoo", "vegetatv": "Vegeta TV"}
+        quals = list(dict.fromkeys(r["q"] for r in e["refs"] if r["q"]))
+        poster = f"{base}/logo/unified/{urllib.parse.quote(cid, safe='')}.png"
+        desc = (f"{e['name']} — {len(e['refs'])} flux "
+            f"({', '.join(src_lbl.get(s, s) for s in srcs)})"
+            + (f" · {'/'.join(quals)}" if quals else "") + ".")
+        return {"id": f"u:{cid}", "type": "tv", "name": e["name"], "poster": poster, "logo": poster,
+            "posterShape": "landscape", "background": poster, "description": desc,
+            "releaseInfo": "En direct", "genres": [e["cat"]]}
+
     def _meta(self, c: dict, source: str, user_config: dict | None = None) -> dict:
         uc = user_config or {}
         raw_id = c["id"]
