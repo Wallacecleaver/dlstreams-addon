@@ -260,6 +260,14 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
         </div>
         <input type="checkbox" id="src-vavoo" class="toggle" onchange="saveSources()">
       </div>
+      <div class="src-row">
+        <div class="src-icon">🐉</div>
+        <div style="flex:1">
+          <div class="src-name">Vegeta TV</div>
+          <div class="src-hint">Sport FR premium (Canal+, beIN, RMC…) — nécessite MediaFlow</div>
+        </div>
+        <input type="checkbox" id="src-vegetatv" class="toggle" onchange="saveSources()">
+      </div>
     </div>
   </div>
 
@@ -449,9 +457,11 @@ showToast("Erreur chargement: "+e.message,"error");
 function renderSources(src){
 $("#src-dlstreams").checked = src.dlstreams !== false;
 $("#src-vavoo").checked = src.vavoo === true;
+const vg = $("#src-vegetatv"); if(vg) vg.checked = src.vegetatv !== false;
 }
 async function saveSources(){
-const body = {sources: {dlstreams: $("#src-dlstreams").checked, vavoo: $("#src-vavoo").checked}};
+const vg = $("#src-vegetatv");
+const body = {sources: {dlstreams: $("#src-dlstreams").checked, vavoo: $("#src-vavoo").checked, vegetatv: vg ? vg.checked : true}};
 try{
 await api("/api/wiseplay/config", {method:"POST", body});
 showToast("Sources enregistrées","success");
