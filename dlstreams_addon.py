@@ -347,6 +347,23 @@ def _genres_for(name: str) -> list[str]:
 
 def _detect_lang(name: str) -> str:
     n = name.lower()
+    # Marqueurs de région clairement non francophones : ils priment sur les noms de marque
+    # (bein sports, canal+...) qui existent aussi dans des déclinaisons internationales.
+    foreign_markers = ["mena", "malaysia", "malaisie", "poland", "polska", "czechia", "czech",
+        "australia", "australie", "deutschland", "germany", "italia", "espana", "españa", "spain",
+        "brazil", "brasil", "nederland", "netherlands", "romania", "bulgaria", "hungary", "magyar",
+        "sweden", "norway", "denmark", "finland", "greece", "turkey", "türkiye", "india", "pakistan",
+        "english"]
+    if any(m in n for m in foreign_markers):
+        if any(x in n for x in ["english", "uk", "usa", "espn", "fox", "cnn", "nbc", "sky sports"]):
+            return "en"
+        if any(x in n for x in ["españa", "espana", "spain", "movistar"]):
+            return "es"
+        if any(x in n for x in ["deutschland", "germany", " de ", "ard", "zdf"]):
+            return "de"
+        if any(x in n for x in ["italia", "italy", " it ", "rai"]):
+            return "it"
+        return "other"
     if any(x in n for x in ["france", "français", "french", " fr ", "tf1", "france 2", "france 3", "m6", "canal+", "rmc", "l'équipe", "arte", "bein sports"]):
         return "fr"
     if any(x in n for x in ["uk", "english", "usa", "espn", "fox", "cnn", "nbc", "sky sports"]):
@@ -367,7 +384,7 @@ def _genre_for(name: str) -> list[str]:
     n = name.lower().strip()
     if any(k in n for k in ["sport", "foot", "tennis", "racing", "formula", "f1 racing", "golf", "cycl",
         "beinsport", "bein", "eurosport", "rmc sport", "canal+ sport", "ufc", "boxe",
-        "mma", "wwe", "équipe", "equipe", "olymp", "auto moto"]):
+        "mma", "wwe", "équipe", "equipe", "olymp", "auto moto", "ligue 1", "ligue1", "ligue 2", "ligue2"]):
         return ["Sports"]
     if any(k in n for k in ["news", "info", "bfm", "cnews", "france info", "cnn", "bbc", "sky news",
         "al jazeera", "rt ", "euronews", "lcp", "public senat", "parlement"]):
@@ -1130,7 +1147,7 @@ def _draw_text(buf: bytearray, w: int, text: str, x: int, y: int, scale: int, co
         for row in range(7):
             bits = glyph[row]
             for col in range(5):
-                if bits & (1 << (4 - col)):
+                if bits & (1 << col):
                     for dy in range(scale):
                         for dx in range(scale):
                             px, py = x + col * scale + dx, y + row * scale + dy
