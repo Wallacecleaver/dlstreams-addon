@@ -2534,6 +2534,7 @@ class Handler(BaseHTTPRequestHandler):
                 for h, info in _tokens.items():
                     out.append({
                         "hash": h[:12] + "...",
+                        "full_hash": h,
                         "name": info.get("name", ""),
                         "created": info.get("created"),
                         "last_used": info.get("last_used"),
@@ -2545,10 +2546,10 @@ class Handler(BaseHTTPRequestHandler):
                 h = str(data.get("hash", "")).strip()
                 if not h:
                     return self._send(400, json.dumps({"ok": False, "error": "hash requis"}).encode(), "application/json")
-                # On a stocké le hash complet, data peut contenir le hash complet ou partiel
+                # Accepte hash complet ou préfixe (12 premiers chars)
                 full_hash = None
                 for stored_h in _tokens:
-                    if stored_h.startswith(h) or stored_h == h:
+                    if stored_h == h or stored_h.startswith(h.replace("...", "")):
                         full_hash = stored_h
                         break
                 if not full_hash:

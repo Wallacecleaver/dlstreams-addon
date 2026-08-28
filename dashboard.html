@@ -2287,6 +2287,7 @@ async function loadTokens(){
             const status = t.revoked ? '❌ Révoqué' : '✅ Actif';
             const statusClass = t.revoked ? 'error' : 'success';
             const lastUsed = t.last_used ? new Date(t.last_used * 1000).toLocaleString('fr-FR') : 'Jamais';
+            const revokeHash = t.full_hash || t.hash;
             return `
                 <div class="tv-ch-row" style="grid-template-columns:1fr 100px 100px 100px;align-items:center">
                     <div style="min-width:0">
@@ -2295,7 +2296,7 @@ async function loadTokens(){
                     </div>
                     <span class="toast ${statusClass}" style="padding:4px 10px;font-size:11px;margin:0">${status}</span>
                     <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${t.hash}</span>
-                    <button class="btn-outline-sm" onclick="revokeToken('${t.hash}')" style="width:auto;padding:6px 10px" ${t.revoked ? 'disabled' : ''}>${t.revoked ? 'Révoqué' : 'Révoquer'}</button>
+                    <button class="btn-outline-sm" onclick="revokeToken('${revokeHash}')" style="width:auto;padding:6px 10px" ${t.revoked ? 'disabled' : ''}>${t.revoked ? 'Révoqué' : 'Révoquer'}</button>
                 </div>
             `;
         }).join('');
