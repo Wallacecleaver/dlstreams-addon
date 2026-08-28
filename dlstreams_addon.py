@@ -1178,14 +1178,16 @@ def _vegeta_delivers(url: str, secs: float = 4, cap: int = 200000) -> bool:
         return False
 
 def _vegeta_pick(name_key: str):
-    """Load-balancer byte-testé : refs registre ∩ spool `up`, tri rtt, byte-test des 3 meilleurs."""
+    """Load-balancer byte-testé : refs registre ∩ spool `up`, tri rtt, byte-test des meilleurs.
+    On teste jusqu'à 6 serveurs (lignes contendues : si les 3 premiers sont saturés au byte-test,
+    un des suivants peut être libre) -> beaucoup moins de lectures « flux introuvable »."""
     e = _vegeta_load_reg().get(name_key)
     if not e:
         return None
     up = {s["key"]: s for s in _vegeta_spool() if s["up"]}
     cands = [(up[r["key"]], r["sid"]) for r in e.get("refs", []) if r["key"] in up]
     cands.sort(key=lambda c: c[0]["rtt"])
-    for server, sid in cands[:3]:
+    for server, sid in cands[:6]:
         if _vegeta_delivers(_vegeta_ts(server, sid)):
             return server, sid
     return None
@@ -1207,7 +1209,9 @@ def _vegeta_warm():
         try:
             _vegeta_load_reg()
             if not _vegeta_reg["reg"] or time.time() - _vegeta_reg["at"] >= _VEGETA_REG_TTL:
-                _vegeta_ingest()
+                n = _vegeta_ingest()
+                if n:
+                    _unified_invalidate()   # -> les chaînes Vegeta apparaissent SANS clic manuel
         except Exception as e:
             log.error(f"vegetatv warm: {e}")
         time.sleep(_VEGETA_REG_TTL)
@@ -1265,10 +1269,10 @@ def _canon_key(name: str) -> str:
     s = re.sub(r"^[^|]{1,15}\|\s*", "", name or "")   # préfixe fournisseur « FR| » « C+FR| » -> retiré
     s = re.sub(r"\s*\|.*$", "", s)                     # suffixe provider Vavoo « |D » « |E » -> retiré
     s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
-    # tags qualité en unicode fantaisie (vegeta) : « 4ᴋ », « ᴴᴰ », « ᴿᴬᵂ », « ◉ rec »… -> retirés
-    # en BLOC (chiffre ASCII éventuel + lettres small-cap/exposant) pour ne pas laisser de « 4 » seul.
-    s = re.sub(r"[0-9]*[ᴀ-ᵿ⁰-₟]+", "", s)
-    s = s.replace("◉", "")
+    # tags qualité en unicode fantaisie (vegeta : « 4ᴋ », « ᴴᴰ », « ᴿᴬᵂ », « ◉ rec »). NFKD décompose
+    # ᴴᴰᴿᴬᵂ→HD/RAW (→ ensuite retirés par _CANON_NOISE), MAIS PAS ᴋ (small-cap K) -> on le mappe à la
+    # main. SURTOUT ne pas retirer les chiffres attachés (sinon « Ligue 1+ 1ᴿᴬᵂ » perd son « 1 »).
+    s = s.replace("ᴋ", "k").replace("◉", "")
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     s = s.replace("'", "").replace("+", " ")   # « McDonald's » -> « mcdonalds » (sinon le 's traîne)
     parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _CANON_NOISE]
@@ -2781,23 +2785,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, _rewrite_playlist(text, real, henc, self._self_base()).encode(),
                     "application/vnd.apple.mpegurl")
             if path == "/vghls":
-                # VegetaTv : résout (load-balance byte-testé) -> MFP, récupère le manifeste MFP, PUIS
-                # RÉÉCRIT les segments pour qu'ils passent par le proxy de l'addon (/px). Ainsi le
-                # client (Stremio) ne parle QU'À l'addon : MFP peut rester en loopback/interne, et la
-                # lecture marche sans exposer MFP publiquement. (Sinon segments = URLs MFP injoignables.)
+                # VegetaTv : résout (load-balance byte-testé) -> URL MFP, et sert le manifeste MFP
+                # BRUT (ses segments pointent sur MFP, qui DOIT donc être joignable par le client ->
+                # MEDIAFLOW_URL = domaine PUBLIC, pas loopback). Loggé pour diagnostiquer une lecture KO.
                 key = _unb64u(qs["v"][0])
                 url = vegetatv_resolve(key)
                 if not url:
-                    return self._send(502, b"vegetatv: flux introuvable (contendu ?)", "text/plain")
+                    log.warning(f"vghls: resolve VIDE pour {key!r} (toutes les lignes contendues au byte-test)")
+                    return self._send(502, b"vegetatv: flux introuvable (lignes contendues, reessaie)", "text/plain")
                 _track_play("vegetatv", key)
-                hdr = {"User-Agent": _VEGETA_UA}
-                henc = _b64u(json.dumps(hdr))
                 try:
-                    text = _proxy_get(url, hdr).decode("utf-8", "replace")
-                except Exception:
-                    return self._send(502, b"vegetatv: MFP injoignable", "text/plain")
-                return self._send(200, _rewrite_playlist(text, url, henc, self._self_base()).encode(),
-                    "application/vnd.apple.mpegurl")
+                    text = _proxy_get(url, {"User-Agent": _VEGETA_UA}).decode("utf-8", "replace")
+                except Exception as ex:
+                    log.error(f"vghls: MFP injoignable ({type(ex).__name__}) — MEDIAFLOW_URL={MEDIAFLOW_URL!r} depuis le conteneur ?")
+                    return self._send(502, b"vegetatv: MFP injoignable (MEDIAFLOW_URL depuis le conteneur ?)", "text/plain")
+                if "#EXTM3U" not in text:
+                    log.warning(f"vghls: MFP a repondu sans manifeste HLS (api_password faux ? source morte ?) : {text[:120]!r}")
+                return self._send(200, text.encode(), "application/vnd.apple.mpegurl")
             if path == "/px":
                 ub = qs["u"][0]
                 henc = qs.get("h", [""])[0]
