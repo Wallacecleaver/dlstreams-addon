@@ -573,6 +573,7 @@
 
           <div class="nav-section-label">Réglages</div>
           <button class="nav-item" data-page="rg-wiseplay" onclick="navigateTo('rg-wiseplay')">📱 Wiseplay</button>
+          <button class="nav-item" data-page="rg-tokens" onclick="navigateTo('rg-tokens')">🔐 Tokens Addon</button>
         </div>
         <div class="sidebar-bottom">
           <button class="btn-logout" onclick="logout()">↪ Déconnexion</button>
@@ -1156,6 +1157,39 @@
           </div>
         </div>
 
+        <!-- PAGE: TOKENS ADDON -->
+        <div class="page" id="page-rg-tokens">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Tokens Addon</div>
+              <div class="page-sub">Gère les tokens d'accès à l'addon Stremio — un token par personne, révocable à tout moment</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">➕ Créer un nouveau token</div></div>
+            <div class="card-body">
+              <div class="form-row">
+                <label>Nom du token (ex: Tom, Maison, Client A)</label>
+                <input type="text" id="token-name-input" placeholder="Nom identifiable" style="flex:1;min-width:200px">
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+                <button class="add-source-btn" id="btn-create-token" onclick="createToken()">🔐 Générer token</button>
+                <span class="hint" style="color:var(--text2);font-size:12px">Le token brut ne s'affiche qu'une seule fois — copie-le immédiatement</span>
+              </div>
+              <div class="alert success" id="token-created-alert" style="display:none;margin-top:16px"></div>
+              <div class="alert error" id="token-create-error" style="display:none;margin-top:16px"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title">📋 Tokens existants</div></div>
+            <div class="card-body">
+              <div id="tokens-list" style="display:flex;flex-direction:column;gap:8px">chargement…</div>
+            </div>
+          </div>
+        </div>
+
         <!-- PAGE: LOGS -->
         <div class="page" id="page-logs">
           <div class="page-header">
@@ -1391,6 +1425,7 @@ function navigateTo(page) {
     else if (page === 'rg-add') { loadManualChannels(); }
     else if (page === 'rg-general') loadSettings();
     else if (page === 'rg-wiseplay') loadSettings();
+    else if (page === 'rg-tokens') loadTokens();
 }
 window.addEventListener('popstate', () => {
     const p = (location.pathname.split('/dashboard/')[1] || 'dashboard').replace(/\/+$/, '');
@@ -2234,6 +2269,85 @@ function copyWpLink(){
         ()=>toast('✅ Lien copié', 'success'),
         ()=>toast('Erreur de copie', 'error')
     );
+}
+
+// ========== TOKENS ADDON (Dashboard) ==========
+async function loadTokens(){
+    const listEl = $('#tokens-list');
+    if(!listEl) return;
+    try{
+        const r = await apiFetch("/api/tokens", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'list'})});
+        const d = await r.json();
+        if(!d.ok){ listEl.innerHTML = '<div class="alert error">Erreur de chargement</div>'; return; }
+        if(!d.tokens || d.tokens.length === 0){
+            listEl.innerHTML = '<div class="fav-empty">Aucun token créé — clique sur "Générer token"</div>';
+            return;
+        }
+        listEl.innerHTML = d.tokens.map(t => {
+            const status = t.revoked ? '❌ Révoqué' : '✅ Actif';
+            const statusClass = t.revoked ? 'error' : 'success';
+            const lastUsed = t.last_used ? new Date(t.last_used * 1000).toLocaleString('fr-FR') : 'Jamais';
+            return `
+                <div class="tv-ch-row" style="grid-template-columns:1fr 100px 100px 100px;align-items:center">
+                    <div style="min-width:0">
+                        <div style="font-weight:600;color:var(--text)">${escapeHtml(t.name)}</div>
+                        <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">Hash: ${t.hash} · Créé: ${new Date(t.created * 1000).toLocaleString('fr-FR')} · Dernier: ${lastUsed}</div>
+                    </div>
+                    <span class="toast ${statusClass}" style="padding:4px 10px;font-size:11px;margin:0">${status}</span>
+                    <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${t.hash}</span>
+                    <button class="btn-outline-sm" onclick="revokeToken('${t.hash}')" style="width:auto;padding:6px 10px" ${t.revoked ? 'disabled' : ''}>${t.revoked ? 'Révoqué' : 'Révoquer'}</button>
+                </div>
+            `;
+        }).join('');
+    }catch(err){
+        if(err.message !== 'unauthenticated') listEl.innerHTML = '<div class="alert error">Erreur réseau</div>';
+    }
+}
+
+async function createToken(){
+    const name = $('#token-name-input').value.trim();
+    const alertEl = $('#token-created-alert');
+    const errorEl = $('#token-create-error');
+    const btn = $('#btn-create-token');
+    alertEl.style.display = 'none';
+    errorEl.style.display = 'none';
+    if(!name){ errorEl.textContent = 'Nom requis'; errorEl.style.display = 'block'; return; }
+    btn.disabled = true; btn.textContent = 'Génération…';
+    try{
+        const r = await apiFetch("/api/tokens", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'create', name})});
+        const d = await r.json();
+        if(d.ok){
+            alertEl.innerHTML = `
+                ✅ Token créé pour <b>${escapeHtml(d.name)}</b><br>
+                <code style="background:var(--input-bg);padding:12px;border-radius:6px;display:block;margin-top:12px;font-family:var(--font-mono);font-size:12px;word-break:break-all;color:var(--text);border:1px solid var(--border)">${escapeHtml(d.token)}</code>
+                <div style="color:var(--text2);font-size:12px;margin-top:8px">⚠️ Copie-le maintenant — il ne sera plus affiché.</div>
+            `;
+            alertEl.style.display = 'block';
+            $('#token-name-input').value = '';
+            loadTokens();
+        }else{
+            errorEl.textContent = d.error || 'Erreur';
+            errorEl.style.display = 'block';
+        }
+    }catch(err){
+        if(err.message !== 'unauthenticated'){ errorEl.textContent = 'Erreur réseau'; errorEl.style.display = 'block'; }
+    }finally{
+        btn.disabled = false; btn.textContent = '🔐 Générer token';
+    }
+}
+
+async function revokeToken(hash){
+    if(!confirm('Révoquer ce token ? La personne ne pourra plus installer l\'addon.')) return;
+    try{
+        const r = await apiFetch("/api/tokens", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'revoke', hash})});
+        const d = await r.json();
+        if(d.ok){
+            toast('🗑️ Token révoqué', 'success');
+            loadTokens();
+        }else toast(d.error || 'Erreur', 'error');
+    }catch(err){
+        if(err.message !== 'unauthenticated') toast('Erreur réseau', 'error');
+    }
 }
 
 function tvStreamRowHtml(url, label){
