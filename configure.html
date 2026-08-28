@@ -442,17 +442,15 @@
         data.tokens.forEach(t => {
           const row = document.createElement('div');
           row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;';
-          const status = t.revoked ? '❌ Révoqué' : '✅ Actif';
-          const statusColor = t.revoked ? '#fc8181' : '#68d391';
           const lastUsed = t.last_used ? new Date(t.last_used * 1000).toLocaleString('fr-FR') : 'Jamais';
           const revokeHash = t.full_hash || t.hash;
           row.innerHTML = `
             <div style="flex:1;min-width:0;">
               <div style="font-weight:600;color:var(--text);">${escapeHtml(t.name)}</div>
               <div style="font-size:11px;color:var(--muted);">Créé: ${new Date(t.created * 1000).toLocaleString('fr-FR')} · Dernier: ${lastUsed}</div>
-              <div style="font-size:11px;color:${statusColor};margin-top:2px;">${status} · Hash: ${t.hash}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">Hash: ${t.hash}</div>
             </div>
-            <button class="btn btn-ghost" onclick="revokeToken('${revokeHash}')" style="padding:6px 12px;font-size:12px;" ${t.revoked ? 'disabled' : ''}>${t.revoked ? 'Révoqué' : 'Révoquer'}</button>
+            <button class="btn btn-ghost" onclick="revokeToken('${revokeHash}')" style="padding:6px 12px;font-size:12px;">🗑️ Supprimer</button>
           `;
           listEl.appendChild(row);
         });

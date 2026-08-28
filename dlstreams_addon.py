@@ -2555,9 +2555,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not full_hash:
                     return self._send(404, json.dumps({"ok": False, "error": "token introuvable"}).encode(), "application/json")
                 name = _tokens[full_hash].get("name", "")
-                _tokens[full_hash]["revoked"] = True
+                del _tokens[full_hash]
                 _tokens_save()
-                _log_activity("Token révoqué", f"name={name}")
+                _log_activity("Token supprimé", f"name={name}")
                 return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
             return self._send(400, json.dumps({"ok": False, "error": "action inconnue"}).encode(), "application/json")
 

@@ -2284,8 +2284,6 @@ async function loadTokens(){
             return;
         }
         listEl.innerHTML = d.tokens.map(t => {
-            const status = t.revoked ? '❌ Révoqué' : '✅ Actif';
-            const statusClass = t.revoked ? 'error' : 'success';
             const lastUsed = t.last_used ? new Date(t.last_used * 1000).toLocaleString('fr-FR') : 'Jamais';
             const revokeHash = t.full_hash || t.hash;
             return `
@@ -2294,9 +2292,9 @@ async function loadTokens(){
                         <div style="font-weight:600;color:var(--text)">${escapeHtml(t.name)}</div>
                         <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">Hash: ${t.hash} · Créé: ${new Date(t.created * 1000).toLocaleString('fr-FR')} · Dernier: ${lastUsed}</div>
                     </div>
-                    <span class="toast ${statusClass}" style="padding:4px 10px;font-size:11px;margin:0">${status}</span>
+                    <span class="toast success" style="padding:4px 10px;font-size:11px;margin:0">✅ Actif</span>
                     <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${t.hash}</span>
-                    <button class="btn-outline-sm" onclick="revokeToken('${revokeHash}')" style="width:auto;padding:6px 10px" ${t.revoked ? 'disabled' : ''}>${t.revoked ? 'Révoqué' : 'Révoquer'}</button>
+                    <button class="btn-outline-sm" onclick="revokeToken('${revokeHash}')" style="width:auto;padding:6px 10px">🗑️ Supprimer</button>
                 </div>
             `;
         }).join('');
