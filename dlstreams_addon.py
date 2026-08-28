@@ -1001,7 +1001,7 @@ _VEGETA_SPOOL = "http://vegetatv.duckdns.org/data/server_status.json"
 _VEGETA_UA = "Lavf/60"
 _VEGETA_SPOOL_TTL = 120
 _VEGETA_REG_TTL = 45 * 60
-_VEGETA_MAX_SERVERS = 8       # serveurs `up` (les + rapides) ingérés — cap RAM/temps
+_VEGETA_MAX_SERVERS = 15      # serveurs `up` (les + rapides) ingérés — cap RAM/temps
 _VEGETA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_vegetatv.json")
 _VEGETA_FR = re.compile(r"\b(FR|FRA|FRANCE|FRENCH|FRANCAIS|FRANÇAIS)\b", re.I)
 # Préfixe pays étranger : le code (CA/UK/BE…) suivi d'un séparateur — QUI VARIE selon la ligne :
@@ -1190,7 +1190,10 @@ def _vegeta_pick(name_key: str):
     for server, sid in cands[:6]:
         if _vegeta_delivers(_vegeta_ts(server, sid)):
             return server, sid
-    return None
+    # Aucun serveur ne passe le byte-test DIRECT (pull .ts brut depuis l'addon) : ça ne veut PAS dire
+    # injouable via MFP (qui maintient la session/reconnexion). On sert quand même le + rapide -> MFP
+    # tente ; le client voit un flux ou un échec propre, plutôt qu'un 502 systématique.
+    return cands[0] if cands else None
 
 def vegetatv_resolve(name_key: str) -> str:
     """LECTURE : URL MFP HLS du 1er serveur qui livre. `""` si pas de MFP / tout KO / absente."""
@@ -1301,10 +1304,15 @@ _CANON_TAGS = re.compile(
     re.I)
 
 def _clean_display_raw(name: str) -> str:
-    """Nom d'affichage propre (retire suffixe provider, (BACKUP), qualité/statut)."""
-    s = (name or "").split("|")[0]
+    """Nom d'affichage PROPRE : retire préfixe « FR| », suffixe « |D », (BACKUP)/[EVENT], tags qualité
+    fantaisie (« 4ᴋ », « ᴴᴰ », « ◉ rec ») et ASCII (HD/FHD/4K…)."""
+    s = re.sub(r"^[^|]{1,15}\|\s*", "", name or "")   # préfixe fournisseur « FR| »
+    s = re.sub(r"\s*\|.*$", "", s)                     # suffixe provider « |D »
     s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
-    s = _CANON_TAGS.sub("", s)
+    s = s.replace("ᴋ", "k").replace("◉", "")
+    s = re.sub(r"[ᴀ-ᵿ⁰-₟]", "", s)                    # tags small-cap/exposant (ᴴᴰ, ᴿᴬᵂ…)
+    s = _CANON_TAGS.sub("", s)                         # HD/FHD/4K/RAW/… ASCII
+    s = re.sub(r"\brec\b", "", s, flags=re.I)
     s = re.sub(r"\s+", " ", s).strip(" -·|▎‖▐┃")
     return s or (name or "").strip()
 
@@ -1338,6 +1346,8 @@ def _unified_registry() -> dict:
 
     def add(src, cid, raw):
         key = _canon_key(raw)
+        if not key:                       # canon vide (nom bizarre) -> NE JAMAIS dropper la chaîne :
+            key = _tvlogos_slug(raw)      # clé de repli depuis le nom brut (sinon perte silencieuse)
         if not key:
             return
         q, qr = _quality_of(raw)
@@ -1520,6 +1530,12 @@ def _stats() -> dict:
             "count": len(_vavoo_cache.get("list") or []),
             "age_seconds": int(time.time() - _vavoo_cache.get("at", 0)) if _vavoo_cache.get("at") else None,
         },
+        "vegetatv": {
+            "count": len(_vegeta_reg.get("reg") or {}) if MEDIAFLOW_URL else 0,
+            "age_seconds": int(time.time() - _vegeta_reg.get("at", 0)) if _vegeta_reg.get("at") else None,
+            "enabled": bool(MEDIAFLOW_URL),
+        },
+        "unified": len(_unified_registry()),
         "lang_counts": lang_counts,
         "history": [list(pair) for pair in _hist],
         "hist_err": [list(pair) for pair in _hist_err],
@@ -1816,10 +1832,13 @@ def _health_refresh(force: bool = False):
     logos_total = len(_CH_LOGO)
     logos_loaded = len(_logo_cache)
     logos_ok = logos_total > 0 and logos_loaded >= max(1, logos_total // 2)
+    # VegetaTv : sain = MFP configuré ET registre peuplé ET au moins un serveur up.
+    vg_n = len(_vegeta_reg.get("reg") or {})
+    vg = {"ok": bool(MEDIAFLOW_URL) and vg_n > 0, "channels": vg_n, "enabled": bool(MEDIAFLOW_URL)}
     with _health_lock:
         _health_snapshot.update(
             at=time.time(),
-            dlstreams=dl, vavoo=vv,
+            dlstreams=dl, vavoo=vv, vegetatv=vg,
             epg={"ok": epg_ok, "channels": epg_channels, "age": epg_age},
             logos={"ok": logos_ok, "loaded": logos_loaded, "total": logos_total},
         )
@@ -1843,6 +1862,38 @@ def _now_playing() -> list[dict]:
             "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
         })
     return out
+
+_TVLOGOS_BASE = "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/france/"
+_remote_logo_cache: dict = {}   # slug -> bytes | None (négatif caché)
+
+def _tvlogos_slug(name: str) -> str:
+    s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().lower()
+    s = s.replace("+", " plus ")
+    s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd|fr|vip|raw|backup|event|only)\b", " ", s)
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+
+def _remote_logo(name: str):
+    """Fallback logo distant via tv-logo/tv-logos (France). 2 variantes de nom, résultat caché."""
+    slug = _tvlogos_slug(name)
+    if not slug:
+        return None
+    if slug in _remote_logo_cache:
+        return _remote_logo_cache[slug]
+    png = None
+    for suffix in ("-fr.png", "-french-fr.png"):
+        try:
+            req = urllib.request.Request(_TVLOGOS_BASE + slug + suffix, headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                b = r.read()
+            if b[:3] in (b"\xff\xd8\xff", b"\x89PN"):
+                png = b
+                break
+        except Exception:
+            continue
+    if len(_remote_logo_cache) > 3000:
+        _remote_logo_cache.clear()
+    _remote_logo_cache[slug] = png
+    return png
 
 def _logo_bytes(src: str, c: dict) -> bytes:
     if not _settings.get("logos", True):
@@ -2334,6 +2385,38 @@ class Handler(BaseHTTPRequestHandler):
                 _playlists_save()
                 return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
             return self._send(400, json.dumps({"success": False, "error": "action inconnue"}).encode(), "application/json")
+        if path == "/api/wiseplay/channel-edit":
+            # Édition d'une chaîne unifiée depuis Wiseplay (auth par code d'accès). Merge partiel.
+            code = qs.get("code", [""])[0]
+            stored_code = _settings.get("wiseplay", {}).get("access_code", "")
+            if not stored_code or code != stored_code:
+                return self._send(401, json.dumps({"ok": False, "error": "Code invalide"}).encode(), "application/json")
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            key = str(data.get("key") or "")
+            if not key:
+                return self._send(400, json.dumps({"ok": False, "error": "clé manquante"}).encode(), "application/json")
+            st = _settings.setdefault("stremio", {})
+            for field, val in (("channel_names", data.get("name")), ("channel_logos", data.get("logo"))):
+                d = st.setdefault(field, {})
+                if val:
+                    d[key] = str(val).strip()
+                else:
+                    d.pop(key, None)
+            streams = data.get("streams")
+            if isinstance(streams, list):
+                clean = [{"label": str(s.get("label", "")).strip(), "url": str(s.get("url", "")).strip()}
+                         for s in streams if isinstance(s, dict) and s.get("url")]
+                cs = st.setdefault("channel_streams", {})
+                if clean:
+                    cs[key] = clean
+                else:
+                    cs.pop(key, None)
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
         if path == "/api/wiseplay/config":
             code = qs.get("code", [""])[0]
             stored_code = _settings.get("wiseplay", {}).get("access_code", "")
@@ -2522,16 +2605,21 @@ class Handler(BaseHTTPRequestHandler):
                 stored_code = _settings.get("wiseplay", {}).get("access_code", "")
                 if not stored_code or code != stored_code:
                     return self._send(401, json.dumps({"success": False, "error": "Code invalide ou non configuré"}).encode(), "application/json")
-                all_ch = [dict(c, src="dlstreams") for c in channels()] + [dict(c, src="vavoo") for c in vavoo_channels()]
-                if MEDIAFLOW_URL:
-                    all_ch += [dict(c, src="vegetatv") for c in vegetatv_channels()]
-                for c in all_ch:                    # genre = catégorie (pour grouper wiseplay comme Stremio)
-                    c["genre"] = _genres_for(c.get("name", ""))[0]
+                # Wiseplay UNIFIÉ : chaînes fusionnées (façon addon), pour une navigation par CATÉGORIE.
+                base = self._self_base()
+                st = _settings.get("stremio", {})
+                ov_n, ov_l, ov_s = st.get("channel_names", {}), st.get("channel_logos", {}), st.get("channel_streams", {})
+                unified = []
+                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
+                    enc = urllib.parse.quote(_b64u(e["key"]), safe="")
+                    unified.append({"key": e["key"], "name": e["name"], "cat": e["cat"],
+                        "logo": f"{base}/logo/unified/{enc}.png",
+                        "sources": sorted({r["src"] for r in e["refs"]}), "flux": len(e["refs"]),
+                        "override_name": ov_n.get(e["key"], ""), "override_logo": ov_l.get(e["key"], ""),
+                        "override_streams": ov_s.get(e["key"], [])})
                 wp = _settings.get("wiseplay", {})
-                return self._send(200, json.dumps({
-                    **wp,
-                    "all_channels": all_ch
-                }).encode(), "application/json")
+                return self._send(200, json.dumps({**wp, "unified": unified,
+                    "categories": unified_categories()}).encode(), "application/json")
             if path == "/api/activity":
                 if not self._require_auth():
                     return

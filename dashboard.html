@@ -392,6 +392,7 @@
   .svc-dot.ok { background:var(--green); box-shadow:0 0 8px rgba(72,187,120,.6); }
   .svc-dot.stale { background:var(--warn); box-shadow:0 0 8px rgba(245,158,11,.5); }
   .svc-dot.ko { background:var(--error); box-shadow:0 0 8px rgba(239,68,68,.6); }
+  .svc-dot.off { background:#6b7280; }
   .svc-name { font-size:13px; font-weight:600; color:var(--text); flex-shrink:0; }
   .svc-desc { font-size:12px; color:var(--muted); margin-left:auto; text-align:right; }
   .svc-foot { border-top:1px solid var(--border); }
@@ -611,6 +612,12 @@
               <div class="stat-label">Chaînes Vavoo</div>
               <div class="stat-value" id="c-vv">—</div>
               <div class="stat-hint" id="c-vv-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🐉</div>
+              <div class="stat-label">Chaînes VegetaTv</div>
+              <div class="stat-value" id="c-vg">—</div>
+              <div class="stat-hint" id="c-vg-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
             </div>
             <div class="stat-card c-green">
               <div class="stat-icon">➕</div>
@@ -1398,6 +1405,12 @@ async function refreshStats(){
         setCacheBadge($("#c-dl-h"), d.dlstreams.age_seconds);
         animateNumber($("#c-vv"), d.vavoo.count);
         setCacheBadge($("#c-vv-h"), d.vavoo.age_seconds);
+        if (d.vegetatv) {
+            animateNumber($("#c-vg"), d.vegetatv.count || 0);
+            const vh = $("#c-vg-h");
+            if (vh) vh.textContent = d.vegetatv.enabled === false ? 'désactivé (pas de MFP)'
+                : (d.vegetatv.count ? 'via MediaFlow' : 'ingestion en cours…');
+        }
         $("#c-up").textContent = fmtDur(d.uptime);
         animateNumber($("#c-manual"), d.manual_channels || 0);
         animateNumber($("#c-req"), d.requests||0);
@@ -1572,19 +1585,21 @@ function renderServices(h){
     if(!el) return;
     if(!h || !h.at){ el.innerHTML = '<div class="fav-empty">vérification…</div>'; return; }
     const fmtMs = s => s && s.ms != null ? ` · ${s.ms} ms` : '';
+    const vg = h.vegetatv;
     const rows = [
-        ['dlstreams.st', h.dlstreams, h.dlstreams ? (h.dlstreams.ok ? 'OK' : 'KO') + fmtMs(h.dlstreams) : '…'],
-        ['API Vavoo', h.vavoo, h.vavoo ? (h.vavoo.ok ? 'OK' : 'KO') + fmtMs(h.vavoo) : '…'],
+        ['dlstreams.st', h.dlstreams, h.dlstreams ? (h.dlstreams.ok ? 'OK' : 'KO') + fmtMs(h.dlstreams) : '…', h.dlstreams&&h.dlstreams.ok?'ok':'ko'],
+        ['API Vavoo', h.vavoo, h.vavoo ? (h.vavoo.ok ? 'OK' : 'KO') + fmtMs(h.vavoo) : '…', h.vavoo&&h.vavoo.ok?'ok':'ko'],
+        ['🐉 VegetaTv', vg, !vg ? '…' : (vg.enabled===false ? 'désactivé (pas de MFP)' : (vg.ok ? `${vg.channels} chaînes` : 'en cours…')),
+            !vg ? 'ko' : (vg.enabled===false ? 'off' : (vg.ok ? 'ok' : 'ko'))],
         ['EPG', h.epg, h.epg ? (h.epg.ok ? `${h.epg.channels} chaînes` : h.epg.channels ? 'périmé' : 'non chargé')
-            + (h.epg.age != null ? ' · ' + fmtAge(h.epg.age) : '') : '…'],
-        ['Logos', h.logos, h.logos ? `${h.logos.loaded}/${h.logos.total} chargés` : '…'],
+            + (h.epg.age != null ? ' · ' + fmtAge(h.epg.age) : '') : '…', h.epg&&h.epg.ok?'ok':'ko'],
+        ['Logos', h.logos, h.logos ? `${h.logos.loaded}/${h.logos.total} chargés` : '…', h.logos&&h.logos.ok?'ok':'ko'],
     ];
-    el.innerHTML = rows.map(r => {
-        const st = r[1] && r[1].ok ? 'ok' : 'ko';
-        return `<div class="svc-row"><span class="svc-dot ${st}"></span><span class="svc-name">${r[0]}</span><span class="svc-desc">${r[2]}</span></div>`;
-    }).join('');
-    const okN = rows.filter(r => r[1] && r[1].ok).length;
-    $("#svc-total").textContent = `${okN}/${rows.length} opérationnels`;
+    el.innerHTML = rows.map(r =>
+        `<div class="svc-row"><span class="svc-dot ${r[3]}"></span><span class="svc-name">${r[0]}</span><span class="svc-desc">${r[2]}</span></div>`
+    ).join('');
+    const okN = rows.filter(r => r[3]==='ok').length, cnt = rows.filter(r => r[3]!=='off').length;
+    $("#svc-total").textContent = `${okN}/${cnt} opérationnels`;
 }
 async function checkServices(){
     const btn = $("#svc-check-btn");

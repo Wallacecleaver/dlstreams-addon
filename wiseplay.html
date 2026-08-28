@@ -132,6 +132,20 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
 .ch-src-pill.vavoo{background:rgba(96,165,250,.14);color:#60a5fa}
 .ch-src-pill.vegetatv{background:rgba(139,92,246,.16);color:#a78bfa}
 
+/* ---- Navigation par catégorie ---- */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.cat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 14px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s}
+.cat-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.cat-card .ico{font-size:32px;line-height:1}
+.cat-card .nm{font-size:14px;font-weight:800;margin-top:10px;color:var(--text)}
+.cat-card .ct{font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--font-mono)}
+.chan-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.chan-title{font-family:var(--font-display);font-size:22px;letter-spacing:.3px;color:var(--text)}
+.ch-edit-btn{background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer;flex-shrink:0;transition:.15s}
+.ch-edit-btn:hover{border-color:var(--accent);color:var(--accent)}
+.wp-srow{display:flex;gap:6px;margin-bottom:6px}
+.wp-srow input{flex:1;min-width:0}
+
 /* ---- Playlists ---- */
 .pl-create{display:flex;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)}
 .pl-create input{flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;
@@ -275,31 +289,22 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
   </div>
 
   <div class="section">
-    <div class="section-title">📺 Chaînes</div>
-    <div class="card">
-      <div class="card-header">
-        <span class="card-count" id="ch-count">0/0 actives</span>
-        <div class="header-actions">
-          <button class="btn btn-ghost btn-xs" onclick="toggleAllChannels(true)">Tout activer</button>
-          <button class="btn btn-ghost btn-xs" onclick="toggleAllChannels(false)">Tout désactiver</button>
-        </div>
-      </div>
-      <div class="ch-search">
-        <span class="ico">🔍</span>
-        <input type="search" id="ch-filter" placeholder="Filtrer les chaînes…" oninput="renderChannels()">
-      </div>
-      <div class="ch-list" id="channels-container"><div class="empty">Chargement…</div></div>
+    <div class="section-title" id="cat-section-title">📂 Catégories</div>
+    <!-- Vue 1 : cartes de catégories -->
+    <div id="cat-view">
+      <div class="cat-grid" id="cat-grid"><div class="empty">Chargement…</div></div>
     </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">🎵 Playlists</div>
-    <div class="card">
-      <div class="pl-create">
-        <input type="text" id="new-playlist-name" placeholder="Nom de la playlist…">
-        <button class="btn btn-ghost" id="create-playlist-btn">➕ Créer</button>
+    <!-- Vue 2 : chaînes d'une catégorie (éditables) -->
+    <div id="chan-view" style="display:none">
+      <div class="chan-head">
+        <button class="btn btn-ghost btn-xs" onclick="showCategories()">← Catégories</button>
+        <span class="chan-title" id="chan-title"></span>
       </div>
-      <div id="playlists-container"><div class="empty">Chargement…</div></div>
+      <div class="card">
+        <div class="ch-search"><span class="ico">🔍</span>
+          <input type="search" id="chan-filter" placeholder="Filtrer…" oninput="renderCatChannels()"></div>
+        <div class="ch-list" id="chan-list" style="max-height:520px"></div>
+      </div>
     </div>
   </div>
 
@@ -344,6 +349,22 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
         <button class="btn btn-danger" onclick="deletePlaylist()">🗑️ Supprimer</button>
         <button class="btn-primary" style="width:auto;padding:10px 24px" onclick="savePlaylistEdits()">💾 Enregistrer</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal édition chaîne (Wiseplay) -->
+<div class="modal" id="wp-modal">
+  <div class="modal-content">
+    <div class="modal-header"><h3 id="wp-modal-title">Éditer la chaîne</h3><button class="modal-close" onclick="closeWpEdit()">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label>Nom affiché</label><input type="text" id="wp-m-name" placeholder="(auto)"></div>
+      <div class="form-row"><label>Logo (URL)</label><input type="url" id="wp-m-logo" oninput="wpLogoPrev()" placeholder="URL logo (vide = auto/curé)">
+        <img id="wp-m-logo-prev" src="" alt="" style="width:60px;height:34px;object-fit:contain;border-radius:5px;border:1px solid var(--border);margin-top:8px;display:none"></div>
+      <div class="form-row"><label>Flux perso (ajoutés en tête, en plus des flux auto)</label>
+        <div id="wp-m-streams"></div>
+        <button class="btn btn-ghost btn-xs" onclick="addWpStreamRow()" style="margin-top:6px">+ Ajouter un flux</button></div>
+      <button class="btn-primary" onclick="saveWpChannel()" style="margin-top:8px">💾 Enregistrer</button>
     </div>
   </div>
 </div>
@@ -442,18 +463,81 @@ doConnect();
 })();
 
 // Load config
+let _WP_UNI = [], _WP_CATS = [], _wpCurrentCat = null;
 async function loadConfig(){
 try{
 const wp = await api("/api/wiseplay/config");
 renderSources(wp.sources||{});
-_lastChMap = wp.channels || {};
-_lastAllChannels = wp.all_channels || [];
-renderChannels();
-renderPlaylists(wp.playlists||{});
+_WP_UNI = wp.unified || [];
+_WP_CATS = wp.categories || [];
+renderCategories();
 updateM3UDisplay();
 }catch(e){
 showToast("Erreur chargement: "+e.message,"error");
 }
+}
+
+// ---- Navigation par catégorie ----
+const WP_CAT_ICON={Sports:'⚽',Actualités:'📰','Films & Séries':'🎬','Cinéma':'🎥',Divertissement:'🎉',Musique:'🎵',Documentaire:'🌍',Jeunesse:'🧸','Télévision':'📺'};
+const WP_SRC={dlstreams:'🔀',vavoo:'📺',vegetatv:'🐉'};
+function renderCategories(){
+_wpCurrentCat=null;
+$("#chan-view").style.display='none'; $("#cat-view").style.display='block';
+$("#cat-section-title").textContent='📂 Catégories';
+const counts={}; _WP_UNI.forEach(c=>counts[c.cat]=(counts[c.cat]||0)+1);
+const cats=_WP_CATS.length?_WP_CATS:Object.keys(counts);
+const g=$("#cat-grid");
+if(!cats.length){g.innerHTML='<div class="empty">Aucune chaîne</div>';return;}
+g.innerHTML=cats.map(cat=>`<div class="cat-card" onclick="openCategory('${cat.replace(/'/g,"\\'")}')">
+<div class="ico">${WP_CAT_ICON[cat]||'📺'}</div><div class="nm">${escapeHtml(cat)}</div>
+<div class="ct">${counts[cat]||0} chaînes</div></div>`).join("");
+}
+function openCategory(cat){
+_wpCurrentCat=cat;
+$("#cat-view").style.display='none'; $("#chan-view").style.display='block';
+$("#cat-section-title").textContent=`${WP_CAT_ICON[cat]||'📺'} ${cat}`;
+$("#chan-title").textContent=cat;
+$("#chan-filter").value='';
+renderCatChannels();
+}
+function showCategories(){ renderCategories(); }
+function renderCatChannels(){
+const q=($("#chan-filter").value||"").toLowerCase().trim();
+let list=_WP_UNI.filter(c=>c.cat===_wpCurrentCat);
+if(q) list=list.filter(c=>c.name.toLowerCase().includes(q));
+const el=$("#chan-list");
+if(!list.length){el.innerHTML='<div class="empty">Aucune chaîne</div>';return;}
+el.innerHTML=list.map((c,i)=>`<div class="ch-row">
+<img class="ch-logo" src="${escapeHtml(c.logo)}" alt="" onerror="this.style.visibility='hidden'">
+<div class="ch-info"><div class="ch-name">${escapeHtml(c.override_name||c.name)}</div>
+<div class="ch-meta">${(c.sources||[]).map(s=>`<span class="ch-src-pill ${s}">${WP_SRC[s]||'TV'}</span>`).join("")}
+<span style="font-size:10px;color:var(--muted)">${c.flux} flux</span></div></div>
+<button class="ch-edit-btn" onclick="openWpEdit('${escapeHtml(c.key)}')">✏️</button></div>`).join("");
+}
+// ---- Édition d'une chaîne ----
+function openWpEdit(key){
+const c=_WP_UNI.find(x=>x.key===key); if(!c) return;
+window._wpEditing=key;
+$("#wp-modal-title").textContent='Éditer : '+(c.override_name||c.name);
+$("#wp-m-name").value=c.override_name||''; $("#wp-m-name").placeholder=c.name+' (auto)';
+$("#wp-m-logo").value=c.override_logo||''; wpLogoPrev();
+$("#wp-m-streams").innerHTML=(c.override_streams||[]).map(s=>wpStreamRow(s.label,s.url)).join("");
+$("#wp-modal").classList.add("active");
+}
+function closeWpEdit(){ $("#wp-modal").classList.remove("active"); window._wpEditing=null; }
+function wpLogoPrev(){const u=$("#wp-m-logo").value.trim();const img=$("#wp-m-logo-prev");img.src=u;img.style.display=u?'block':'none';}
+function wpStreamRow(label,url){return `<div class="wp-srow"><input type="text" placeholder="Label" value="${escapeHtml(label||'')}"><input type="url" placeholder="https://.../flux.m3u8" value="${escapeHtml(url||'')}" style="flex:2"><button class="btn btn-ghost btn-xs" onclick="this.parentElement.remove()">✕</button></div>`;}
+function addWpStreamRow(){ $("#wp-m-streams").insertAdjacentHTML('beforeend',wpStreamRow('','')); }
+async function saveWpChannel(){
+const key=window._wpEditing; if(!key) return;
+const streams=[...document.querySelectorAll('#wp-m-streams .wp-srow')].map(r=>{const[l,u]=r.querySelectorAll('input');return{label:l.value.trim(),url:u.value.trim()};}).filter(s=>s.url);
+try{
+await api("/api/wiseplay/channel-edit",{method:"POST",body:{key,name:$("#wp-m-name").value.trim(),logo:$("#wp-m-logo").value.trim(),streams}});
+showToast("Chaîne enregistrée","success");
+closeWpEdit();
+await loadConfig();
+if(_wpCurrentCat) openCategory(_wpCurrentCat);
+}catch(e){showToast("Erreur: "+e.message,"error");}
 }
 
 // Sources
@@ -591,8 +675,8 @@ showToast("Playlist créée","success");
 openPlModal(name);
 }catch(e){showToast(e.message,"error");}
 }
-$("#create-playlist-btn").addEventListener("click", addPlaylist);
-$("#new-playlist-name").addEventListener("keydown", e=>{ if(e.key==="Enter") addPlaylist(); });
+$("#create-playlist-btn")?.addEventListener("click", addPlaylist);
+$("#new-playlist-name")?.addEventListener("keydown", e=>{ if(e.key==="Enter") addPlaylist(); });
 
 function openPlModal(name){
 _editingPlaylist = name;
