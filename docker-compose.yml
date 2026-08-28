@@ -13,6 +13,8 @@ services:
       - ./dlstreams_sessions.json:/app/dlstreams_sessions.json
       - ./dlstreams_hist.json:/app/dlstreams_hist.json
       - ./dlstreams_epg.json:/app/dlstreams_epg.json
+      - ./dlstreams_tokens.json:/app/dlstreams_tokens.json
+      - ./dlstreams_playlists.json:/app/dlstreams_playlists.json
 
   waddontv-dev:
     build: .
