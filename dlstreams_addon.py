@@ -1249,8 +1249,8 @@ def _stream_entry(emoji: str, provider: str, quality: str, detail: str, url: str
 # ============================================================
 _CANON_NOISE = {"hd", "fhd", "uhd", "4k", "8k", "sd", "720", "1080", "2160", "720p", "1080p",
     "2160p", "hevc", "h264", "h265", "vip", "raw", "local", "backup", "event", "events", "only",
-    "during", "live", "direct", "access", "mcdonald", "mcdonalds", "tv", "s1", "s2", "s3", "ld"}
-_CANON_COUNTRY = {"france", "french", "italy", "italia", "poland", "polska", "spain", "espana",
+    "during", "live", "direct", "access", "mcdonald", "mcdonalds", "tv", "s1", "s2", "s3", "ld", "rec"}
+_CANON_COUNTRY = {"fr", "france", "french", "italy", "italia", "poland", "polska", "spain", "espana",
     "greece", "portugal", "germany", "deutschland", "uk", "usa", "international", "gr", "be",
     "ca", "us", "ar"}
 
@@ -1262,8 +1262,13 @@ for _i in range(1, 20):
 def _canon_key(name: str) -> str:
     """Clé canonique de FUSION cross-source (agressive : retire qualité/provider/pays/statut/«+»,
     garde marque + numéro). Le même « beIN Sports 1 » de 3 sources -> même clé."""
-    s = (name or "").split("|")[0]
+    s = re.sub(r"^[^|]{1,15}\|\s*", "", name or "")   # préfixe fournisseur « FR| » « C+FR| » -> retiré
+    s = re.sub(r"\s*\|.*$", "", s)                     # suffixe provider Vavoo « |D » « |E » -> retiré
     s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
+    # tags qualité en unicode fantaisie (vegeta) : « 4ᴋ », « ᴴᴰ », « ᴿᴬᵂ », « ◉ rec »… -> retirés
+    # en BLOC (chiffre ASCII éventuel + lettres small-cap/exposant) pour ne pas laisser de « 4 » seul.
+    s = re.sub(r"[0-9]*[ᴀ-ᵿ⁰-₟]+", "", s)
+    s = s.replace("◉", "")
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     s = s.replace("'", "").replace("+", " ")   # « McDonald's » -> « mcdonalds » (sinon le 's traîne)
     parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _CANON_NOISE]
@@ -2669,8 +2674,13 @@ class Handler(BaseHTTPRequestHandler):
                     skip = int(params.get("skip") or 0)
                     metas = metas[skip:skip + 100]
                     return self._send(200, json.dumps({"metas": metas}).encode(), "application/json", True)
-                if catid.startswith("u_"):        # catalogue unifié d'une catégorie
-                    entries = _unified_by_cat(_SLUG_CAT.get(catid[2:], catid[2:]))
+                if catid == "waddontv" or catid.startswith("u_"):
+                    g = params.get("genre") or (_SLUG_CAT.get(catid[2:], catid[2:]) if catid.startswith("u_") else "")
+                    if g:                          # une catégorie précise
+                        entries = _unified_by_cat(g)
+                    else:                          # tout le catalogue, rangé par catégorie
+                        entries = sorted(_unified_registry().values(),
+                            key=lambda e: (_GENRE_CHOICES.index(e["cat"]) if e["cat"] in _GENRE_CHOICES else 99, e["name"].lower()))
                     q = params.get("search", "").lower().strip()
                     if q:
                         words = q.replace("+", " ").split()
@@ -2771,18 +2781,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, _rewrite_playlist(text, real, henc, self._self_base()).encode(),
                     "application/vnd.apple.mpegurl")
             if path == "/vghls":
-                # VegetaTv pour lecteurs M3U (Wiseplay/VLC) : résout (load-balance byte-testé) -> MFP,
-                # et renvoie le manifeste MFP (segments déjà en URLs MFP absolues).
+                # VegetaTv : résout (load-balance byte-testé) -> MFP, récupère le manifeste MFP, PUIS
+                # RÉÉCRIT les segments pour qu'ils passent par le proxy de l'addon (/px). Ainsi le
+                # client (Stremio) ne parle QU'À l'addon : MFP peut rester en loopback/interne, et la
+                # lecture marche sans exposer MFP publiquement. (Sinon segments = URLs MFP injoignables.)
                 key = _unb64u(qs["v"][0])
                 url = vegetatv_resolve(key)
                 if not url:
                     return self._send(502, b"vegetatv: flux introuvable (contendu ?)", "text/plain")
                 _track_play("vegetatv", key)
+                hdr = {"User-Agent": _VEGETA_UA}
+                henc = _b64u(json.dumps(hdr))
                 try:
-                    text = _proxy_get(url, {"User-Agent": _VEGETA_UA}).decode("utf-8", "replace")
+                    text = _proxy_get(url, hdr).decode("utf-8", "replace")
                 except Exception:
                     return self._send(502, b"vegetatv: MFP injoignable", "text/plain")
-                return self._send(200, text.encode(), "application/vnd.apple.mpegurl")
+                return self._send(200, _rewrite_playlist(text, url, henc, self._self_base()).encode(),
+                    "application/vnd.apple.mpegurl")
             if path == "/px":
                 ub = qs["u"][0]
                 henc = qs.get("h", [""])[0]
@@ -2832,18 +2847,19 @@ class Handler(BaseHTTPRequestHandler):
         # Branding « W Addon TV » par défaut, avec les catégories en catalogues à l'intérieur.
         if not st.get("manifest_desc"):
             desc = "W Addon TV — chaînes FR unifiées (dlstreams + Vavoo + VegetaTv) rangées par catégorie, lues dans Stremio."
-        # Catalogues UNIFIÉS : un par catégorie (Sport, Cinéma…) = rangées séparées dans Stremio
-        # (façon tvmio). Chaque chaîne fusionne les flux dlstreams + Vavoo + VegetaTv.
-        _cat_extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]
-        catalogs = []
-        for cat in unified_categories():
-            catalogs.append({"type": "tv", "id": f"u_{_CAT_SLUG.get(cat, cat)}",
-                "name": f"{_CAT_ICON.get(cat, '📺')} {cat}",
-                "extra": _cat_extra, "extraSupported": ["search", "skip"]})
+        # UN SEUL catalogue au nom de l'addon (« W Addon TV »), catégories en menu déroulant (genre)
+        # — façon tvmio : l'utilisateur voit son addon + un sélecteur Sport/Cinéma/Info… à l'intérieur.
+        cats = unified_categories()
+        catalogs = [{"type": "tv", "id": "waddontv", "name": name,
+            "extra": [{"name": "genre", "isRequired": False, "options": cats},
+                      {"name": "search", "isRequired": False},
+                      {"name": "skip", "isRequired": False}],
+            "extraSupported": ["genre", "search", "skip"]}]
         custom_channels = st.get("custom_channels", {})
         if custom_channels:
             catalogs.append({"type": "tv", "id": "custom", "name": "⭐ Mes chaînes",
-                "extra": _cat_extra, "extraSupported": ["search", "skip"]})
+                "extra": [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}],
+                "extraSupported": ["search", "skip"]})
         behavior = {
             "configurable": True,
             "configurationRequired": False,
