@@ -313,13 +313,15 @@
 
     function install(method) {
       if (!validateReady()) return;
-      const url = getManifestUrl();
+      // Lecture FORCÉE de localStorage au clic (garantit l'URL avec token)
+      const url = localStorage.getItem('waddontv_token_manifest') || getManifestUrl();
       if (method === 'app') window.open(`stremio://${url.replace(/https?:\/\//, '')}`, '_blank');
       else window.open(`https://web.stremio.com/#/addons?addon=${encodeURIComponent(url)}`, '_blank');
     }
     function copyLink() {
       if (!validateReady()) return;
-      navigator.clipboard.writeText(getManifestUrl()).then(() => toast('✅ Lien copié !'));
+      const url = localStorage.getItem('waddontv_token_manifest') || getManifestUrl();
+      navigator.clipboard.writeText(url).then(() => toast('✅ Lien copié !'));
     }
     function toast(msg) {
       const t = document.getElementById('toast');
