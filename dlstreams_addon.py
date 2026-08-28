@@ -84,6 +84,52 @@ _LOGIN_WINDOW = 300
 
 _PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_playlists.json")
 _playlists: list[dict] = []
+
+# ============================================================
+# TOKENS D'ACCÈS ADDON — multi-tokens nommés, hash SHA256 stocké
+# ============================================================
+_TOKENS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_tokens.json")
+_tokens: dict[str, dict] = {}   # token_hash -> {"name": "...", "created": ts, "last_used": ts|null, "revoked": bool}
+_TOKEN_TTL_DAYS = 365 * 10  # 10 ans (pas d'expiration auto, seulement révocation manuelle)
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def _token_gen() -> str:
+    return secrets.token_urlsafe(32)
+
+def _tokens_load():
+    global _tokens
+    try:
+        if os.path.exists(_TOKENS_FILE):
+            with open(_TOKENS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                _tokens = data
+    except Exception:
+        pass
+
+def _tokens_save():
+    try:
+        with open(_TOKENS_FILE, "w", encoding="utf-8") as f:
+            json.dump(_tokens, f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
+
+def _token_verify(token: str) -> tuple[bool, str | None]:
+    """Retourne (valide, token_hash). Valide = existe, pas révoqué."""
+    if not token:
+        return False, None
+    h = _token_hash(token)
+    info = _tokens.get(h)
+    if not info or info.get("revoked"):
+        return False, None
+    return True, h
+
+def _token_touch(h: str):
+    if h in _tokens:
+        _tokens[h]["last_used"] = time.time()
+        _tokens_save()
 _login_attempts: dict[str, list[float]] = {}
 _LOGIN_MAX_ATTEMPTS = 6
 _LOGIN_WINDOW = 300
@@ -2457,6 +2503,80 @@ class Handler(BaseHTTPRequestHandler):
             if changed:
                 _settings_save()
             return self._send(200, json.dumps(wp).encode(), "application/json")
+
+        # ========== TOKENS ADDON ==========
+        if path == "/api/tokens":
+            # Admin: gestion tokens (créer, lister, révoquer) — protégé par dashboard password
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            action = data.get("action")
+            if action == "create":
+                name = str(data.get("name", "")).strip()
+                if not name:
+                    return self._send(400, json.dumps({"ok": False, "error": "nom requis"}).encode(), "application/json")
+                token = _token_gen()
+                h = _token_hash(token)
+                _tokens[h] = {
+                    "name": name,
+                    "created": time.time(),
+                    "last_used": None,
+                    "revoked": False
+                }
+                _tokens_save()
+                _log_activity("Token créé", f"name={name}")
+                return self._send(200, json.dumps({"ok": True, "token": token, "name": name}).encode(), "application/json")
+            if action == "list":
+                out = []
+                for h, info in _tokens.items():
+                    out.append({
+                        "hash": h[:12] + "...",
+                        "name": info.get("name", ""),
+                        "created": info.get("created"),
+                        "last_used": info.get("last_used"),
+                        "revoked": info.get("revoked", False)
+                    })
+                out.sort(key=lambda x: x.get("created") or 0, reverse=True)
+                return self._send(200, json.dumps({"ok": True, "tokens": out}).encode(), "application/json")
+            if action == "revoke":
+                h = str(data.get("hash", "")).strip()
+                if not h:
+                    return self._send(400, json.dumps({"ok": False, "error": "hash requis"}).encode(), "application/json")
+                # On a stocké le hash complet, data peut contenir le hash complet ou partiel
+                full_hash = None
+                for stored_h in _tokens:
+                    if stored_h.startswith(h) or stored_h == h:
+                        full_hash = stored_h
+                        break
+                if not full_hash:
+                    return self._send(404, json.dumps({"ok": False, "error": "token introuvable"}).encode(), "application/json")
+                name = _tokens[full_hash].get("name", "")
+                _tokens[full_hash]["revoked"] = True
+                _tokens_save()
+                _log_activity("Token révoqué", f"name={name}")
+                return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
+            return self._send(400, json.dumps({"ok": False, "error": "action inconnue"}).encode(), "application/json")
+
+        if path == "/api/validate-token":
+            # User (page Configure): validation token + renvoi lien manifest
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            token = str(data.get("token", "")).strip()
+            if not token:
+                return self._send(400, json.dumps({"ok": False, "error": "token requis"}).encode(), "application/json")
+            valid, h = _token_verify(token)
+            if not valid:
+                return self._send(401, json.dumps({"ok": False, "error": "token invalide ou révoqué"}).encode(), "application/json")
+            _token_touch(h)
+            base = self._self_base()
+            manifest_url = f"{base}/manifest.json?token={token}"
+            return self._send(200, json.dumps({"ok": True, "manifest_url": manifest_url, "name": _tokens[h].get("name", "")}).encode(), "application/json")
+
         return self._send(404, b"not found", "text/plain")
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
@@ -2723,7 +2843,20 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(_system_info()).encode(), "application/json")
+
+            def _check_manifest_token(qs: dict) -> tuple[bool, str | None]:
+                """Vérifie le token dans query string. Retourne (valide, token_hash_or_None)."""
+                token = qs.get("token", [""])[0]
+                if not token:
+                    return False, None
+                return _token_verify(token)
+
             if path.startswith("/") and path.endswith("/manifest.json"):
+                # Vérifier token AVANT de décoder config_b64
+                valid, token_hash = _check_manifest_token(qs)
+                if not valid:
+                    self._send(401, json.dumps({"error": "token requis ou invalide", "code": "TOKEN_REQUIRED"}).encode(), "application/json")
+                    return
                 config_b64 = path[1:-len("/manifest.json")]
                 user_config = _decode_config(config_b64) if config_b64 else {}
                 lang_filter = user_config.get("lang", "fr")
@@ -2736,10 +2869,18 @@ class Handler(BaseHTTPRequestHandler):
                 if user_config:
                     cookie_val = _b64u(json.dumps(user_config))
                     self.send_header("Set-Cookie", f"waddontv_cfg={cookie_val}; HttpOnly; Path=/; Max-Age=31536000; SameSite=Lax")
+                # Toucher le token pour last_used
+                if token_hash:
+                    _token_touch(token_hash)
                 self.end_headers()
                 self.wfile.write(body)
                 return
             if path in ("/", "/manifest.json"):
+                valid, token_hash = _check_manifest_token(qs)
+                if not valid:
+                    return self._send(401, json.dumps({"error": "token requis ou invalide", "code": "TOKEN_REQUIRED"}).encode(), "application/json")
+                if token_hash:
+                    _token_touch(token_hash)
                 return self._send(200, json.dumps(self._manifest(lang_filter="fr")).encode(), "application/json", True)
             user_config, clean_path = self._extract_addon_config(path)
             if clean_path.startswith("/catalog/tv/"):
@@ -3061,6 +3202,7 @@ def main():
     _settings_load()
     _epg_load()
     _playlists_load()
+    _tokens_load()
     log.info(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     log.info(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
     log.info(f"  Configure: http://127.0.0.1:{PORT}/configure")
