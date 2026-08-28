@@ -1098,14 +1098,27 @@ def _vegeta_api_channels(server: dict) -> list:
         out.append({"name": name, "logo": s.get("stream_icon") or "", "sid": str(sid)})
     return out
 
+_vegeta_diag: dict = {"at": 0.0, "spool": 0, "up": 0, "tried": 0, "fr_servers": 0, "channels": 0, "err": ""}
+
 def _vegeta_ingest() -> int:
     """Reconstruit le registre chaîne->serveurs depuis les serveurs `up` les + rapides. -> nb chaînes.
-    Jamais écrasé par du vide (échec réseau -> ancien registre conservé)."""
-    servers = [s for s in _vegeta_spool(force=True) if s["up"]]
-    servers.sort(key=lambda s: s["rtt"])
+    Jamais écrasé par du vide (échec réseau -> ancien registre conservé). Verbeux (docker logs)."""
+    spool = _vegeta_spool(force=True)
+    up = sorted([s for s in spool if s["up"]], key=lambda s: s["rtt"])
+    log.info(f"vegetatv: ingestion — spool {len(spool)} serveurs, {len(up)} up")
+    if not spool:
+        _vegeta_diag.update(at=time.time(), spool=0, up=0, tried=0, fr_servers=0, channels=0,
+            err="spool injoignable depuis le conteneur (DNS/réseau vers vegetatv.duckdns.org ?)")
+        log.error("vegetatv: spool injoignable — vérifie la sortie réseau du conteneur")
+        return len(_vegeta_load_reg())
     reg: dict = {}
-    for s in servers[:_VEGETA_MAX_SERVERS]:
-        for c in _vegeta_api_channels(s):
+    tried = fr_servers = 0
+    for s in up[:_VEGETA_MAX_SERVERS]:
+        tried += 1
+        chans = _vegeta_api_channels(s)
+        if chans:
+            fr_servers += 1
+        for c in chans:
             k = _vegeta_chkey(c["name"])
             if not k:
                 continue
@@ -1118,6 +1131,10 @@ def _vegeta_ingest() -> int:
                 json.dump({"at": time.time(), "reg": reg}, f, ensure_ascii=False)
         except Exception:
             pass
+    _vegeta_diag.update(at=time.time(), spool=len(spool), up=len(up), tried=tried,
+        fr_servers=fr_servers, channels=len(reg),
+        err="" if reg else "0 chaîne FR sur les serveurs testés (aucun serveur FR dans le top rtt ?)")
+    log.info(f"vegetatv: registre {len(reg)} chaines ({fr_servers}/{tried} serveurs ont livré du FR)")
     return len(reg)
 
 def _vegeta_load_reg() -> dict:
@@ -1185,12 +1202,12 @@ def vegetatv_resolve(name_key: str) -> str:
 
 def _vegeta_warm():
     """Thread de fond : ingestion initiale (registre vide/stale) puis rafraîchi chaque TTL."""
+    log.info("vegetatv: thread de fond démarré (MFP configuré)")
     while True:
         try:
             _vegeta_load_reg()
             if not _vegeta_reg["reg"] or time.time() - _vegeta_reg["at"] >= _VEGETA_REG_TTL:
-                n = _vegeta_ingest()
-                log.info(f"vegetatv: registre {n} chaines")
+                _vegeta_ingest()
         except Exception as e:
             log.error(f"vegetatv warm: {e}")
         time.sleep(_VEGETA_REG_TTL)
@@ -1247,7 +1264,8 @@ def _canon_key(name: str) -> str:
     garde marque + numéro). Le même « beIN Sports 1 » de 3 sources -> même clé."""
     s = (name or "").split("|")[0]
     s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
-    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().replace("+", " ")
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
+    s = s.replace("'", "").replace("+", " ")   # « McDonald's » -> « mcdonalds » (sinon le 's traîne)
     parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _CANON_NOISE]
     parts = [w for i, w in enumerate(parts) if not (i > 0 and w in _CANON_COUNTRY)]
     if parts and parts[0] == "fr":         # préfixe « FR … » en tête -> retiré (garde « France 2 »)
@@ -1280,6 +1298,16 @@ def _clean_display_raw(name: str) -> str:
     s = _CANON_TAGS.sub("", s)
     s = re.sub(r"\s+", " ", s).strip(" -·|▎‖▐┃")
     return s or (name or "").strip()
+
+_FOREIGN_RE = re.compile(
+    r"^\s*(?:AFR|AF|USA?|GBR?|UK|ENG|AUS|NZL?|IRL?|CA|AR|BE|CH|DE|ES|IT|PT|NL|MA|DZ|TN|TR|QC|CD|SN|CI|"
+    r"PL|POL|RO|RU|BR|SA|EG|LB|IQ|GR|HR|SRB?|SI|SK|CZ|HU|BG|UA)\b[\s\-]*(?:FR)?\s*[|:]"
+    r"|\b(?:AUSTRALIA|AUSTRALIE|SERBIA|SERBIE|CROATIA|CROATIE|POLAND|POLSKA|ROMANIA|GREECE|GRECE|"
+    r"QUEBEC|QUÉBEC|CANADA|CANADIAN|ARABIC|ARABE|AFRICA|AFRIQUE|BELGIUM|GERMANY|ITALIA|ITALY|SPAIN|"
+    r"ESPANA|PORTUGAL|TURKEY|BRAZIL|RUSSIA)\b", re.I)
+
+def _is_foreign(name: str) -> bool:
+    return bool(_FOREIGN_RE.search(name or ""))
 
 _SRC_RANK = {"dlstreams": 3, "vavoo": 2, "vegetatv": 1}   # priorité du nom d'affichage
 _CAT_ICON = {"Sports": "⚽", "Actualités": "📰", "Films & Séries": "🎬", "Cinéma": "🎥",
@@ -1317,15 +1345,21 @@ def _unified_registry() -> dict:
             e["_nr"] = rank
 
     for c in channels():
-        if c.get("lang") != "fr":     # dlstreams porte tout l'international -> on garde le FR
+        if c.get("lang") != "fr" or _is_foreign(c["name"]):   # dlstreams porte tout l'international
             continue
         add("dlstreams", c["id"], c["name"])
-    for c in vavoo_channels():        # déjà filtré FR
-        add("vavoo", c["id"], c["name"])
+    for c in vavoo_channels():        # déjà filtré FR, + garde-fou anti-étranger
+        if not _is_foreign(c["name"]):
+            add("vavoo", c["id"], c["name"])
     if MEDIAFLOW_URL:
-        for c in vegetatv_channels():  # déjà filtré FR
-            add("vegetatv", c["id"], c["name"])
+        for c in vegetatv_channels():
+            if not _is_foreign(c["name"]):
+                add("vegetatv", c["id"], c["name"])
+    st = _settings.get("stremio", {})
+    ov_names = st.get("channel_names", {})
     for e in reg.values():
+        if ov_names.get(e["key"]):            # override de nom (édition dashboard)
+            e["name"] = ov_names[e["key"]]
         e["cat"] = _genre_for(e["name"])[0]
         seen = set()
         refs = []
@@ -1359,6 +1393,14 @@ def unified_streams(key: str, base: str) -> list:
     if not e:
         return []
     scored = []
+    # Flux PERSO ajoutés depuis le dashboard (channel_streams[key]) -> en tête (rang max).
+    for st in _settings.get("stremio", {}).get("channel_streams", {}).get(key, []):
+        surl = st.get("url") if isinstance(st, dict) else str(st)
+        if not surl:
+            continue
+        label = (st.get("label") if isinstance(st, dict) else "") or "Flux perso"
+        q, qr = _quality_of(label)
+        scored.append((100 + qr, _stream_entry("⭐", "Perso", q, label, surl, binge=f"u-{key}")))
     for r in e["refs"]:
         src, q = r["src"], r["q"]
         if src == "dlstreams":
@@ -2050,6 +2092,36 @@ class Handler(BaseHTTPRequestHandler):
             resp = json.dumps({"success": True}).encode()
             self._send(200, resp, "application/json")
             return
+        if path == "/api/unified/edit":
+            # Édition d'UNE chaîne unifiée : nom / logo / flux perso (merge partiel par canon_key).
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            key = str(data.get("key") or "")
+            if not key:
+                return self._send(400, json.dumps({"ok": False, "error": "clé manquante"}).encode(), "application/json")
+            st = _settings.setdefault("stremio", {})
+            for field, val in (("channel_names", data.get("name")), ("channel_logos", data.get("logo"))):
+                d = st.setdefault(field, {})
+                if val:
+                    d[key] = str(val).strip()
+                else:
+                    d.pop(key, None)          # vide -> retire l'override (retour à l'auto)
+            streams = data.get("streams")
+            if isinstance(streams, list):
+                clean = [{"label": str(s.get("label", "")).strip(), "url": str(s.get("url", "")).strip()}
+                         for s in streams if isinstance(s, dict) and s.get("url")]
+                cs = st.setdefault("channel_streams", {})
+                if clean:
+                    cs[key] = clean
+                else:
+                    cs.pop(key, None)
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
         if path == "/api/remove-channel":
             if not self._require_auth():
                 return
@@ -2399,6 +2471,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 base = self._self_base()
+                st = _settings.get("stremio", {})
+                ov_n, ov_l, ov_s = st.get("channel_names", {}), st.get("channel_logos", {}), st.get("channel_streams", {})
                 out = []
                 for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
                     enc = urllib.parse.quote(_b64u(e["key"]), safe="")
@@ -2409,8 +2483,26 @@ class Handler(BaseHTTPRequestHandler):
                         "flux": len(e["refs"]),
                         "quals": list(dict.fromkeys(r["q"] for r in e["refs"] if r["q"])),
                         "curated": _local_logo_for(e["name"]) is not None,
+                        "override_name": ov_n.get(e["key"], ""),
+                        "override_logo": ov_l.get(e["key"], ""),
+                        "override_streams": ov_s.get(e["key"], []),
                     })
                 return self._send(200, json.dumps({"channels": out, "total": len(out)}).encode(),
+                    "application/json")
+            if path == "/api/vegeta/refresh":
+                # Force une ingestion VegetaTv SYNCHRONE + renvoie le diagnostic (débogage MFP/réseau).
+                if not self._require_auth():
+                    return
+                if not MEDIAFLOW_URL:
+                    return self._send(200, json.dumps({"ok": False,
+                        "error": "MEDIAFLOW_URL non configuré (VegetaTv désactivé)"}).encode(), "application/json")
+                try:
+                    _unified_invalidate()
+                    n = _vegeta_ingest()
+                except Exception as e:
+                    return self._send(200, json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}).encode(),
+                        "application/json")
+                return self._send(200, json.dumps({"ok": n > 0, "channels": n, "diag": _vegeta_diag}).encode(),
                     "application/json")
             if path == "/api/playlists":
                 if not self._require_auth():
@@ -2424,6 +2516,8 @@ class Handler(BaseHTTPRequestHandler):
                 all_ch = [dict(c, src="dlstreams") for c in channels()] + [dict(c, src="vavoo") for c in vavoo_channels()]
                 if MEDIAFLOW_URL:
                     all_ch += [dict(c, src="vegetatv") for c in vegetatv_channels()]
+                for c in all_ch:                    # genre = catégorie (pour grouper wiseplay comme Stremio)
+                    c["genre"] = _genres_for(c.get("name", ""))[0]
                 wp = _settings.get("wiseplay", {})
                 return self._send(200, json.dumps({
                     **wp,
@@ -2735,10 +2829,9 @@ class Handler(BaseHTTPRequestHandler):
             "lues directement dans Stremio grâce au proxy intégré. Dashboard inclus.")
         lang_names = {"fr": "Français", "en": "English", "es": "Español", "de": "Deutsch", "it": "Italiano", "ar": "Arabe", "pt": "Português"}
         lang_name = lang_names.get(lang_filter, lang_filter)
-        if not st.get("manifest_name"):
-            name = f"Chaînes live {lang_name}"
+        # Branding « W Addon TV » par défaut, avec les catégories en catalogues à l'intérieur.
         if not st.get("manifest_desc"):
-            desc = f"Chaînes TV en direct en {lang_name} (dlstreams + Vavoo), lues directement dans Stremio via le proxy intégré."
+            desc = "W Addon TV — chaînes FR unifiées (dlstreams + Vavoo + VegetaTv) rangées par catégorie, lues dans Stremio."
         # Catalogues UNIFIÉS : un par catégorie (Sport, Cinéma…) = rangées séparées dans Stremio
         # (façon tvmio). Chaque chaîne fusionne les flux dlstreams + Vavoo + VegetaTv.
         _cat_extra = [{"name": "search", "isRequired": False}, {"name": "skip", "isRequired": False}]

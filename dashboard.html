@@ -407,7 +407,12 @@
 
   .now-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
   .uni-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
-  .uni-tile { background:var(--card2,rgba(255,255,255,.03)); border:1px solid var(--border,rgba(255,255,255,.08)); border-radius:12px; padding:10px; text-align:center; }
+  .uni-tile { position:relative; background:var(--card2,rgba(255,255,255,.03)); border:1px solid var(--border,rgba(255,255,255,.08)); border-radius:12px; padding:10px; text-align:center; }
+  .uni-tile.edited { border-color:#6c8cff; }
+  .uni-edit { position:absolute; top:6px; right:6px; background:rgba(0,0,0,.45); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; padding:2px 6px; opacity:0; transition:opacity .15s; }
+  .uni-tile:hover .uni-edit { opacity:1; }
+  .uni-srow { display:flex; gap:6px; margin-bottom:6px; }
+  .uni-srow input { padding:6px 8px; }
   .uni-tile.nologo { border-color:#b8860b; border-style:dashed; }
   .uni-logo { width:100%; height:70px; object-fit:contain; background:rgba(0,0,0,.15); border-radius:8px; }
   .uni-name { font-size:13px; font-weight:600; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -844,7 +849,10 @@
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer">
                 <input type="checkbox" id="uni-nologo" onchange="renderUnified()"> logo manquant seulement</label>
               <span class="list-count" id="uni-count"></span>
+              <span style="flex:1"></span>
+              <button class="btn-outline-sm" onclick="refreshVegeta()">🐉 Diagnostiquer VegetaTv</button>
             </div>
+            <div id="vegeta-diag" style="display:none;font-size:13px;padding:10px 14px;border-radius:8px;margin:0 14px 8px"></div>
             <div class="card-body"><div id="uni-grid" class="uni-grid">chargement…</div></div>
           </div>
         </div>
@@ -1208,6 +1216,36 @@
       <div class="player-body">
         <video class="player-frame" id="player-frame" controls autoplay></video>
         <div class="player-status" id="player-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : édition chaîne unifiée -->
+  <div class="modal" id="uni-modal">
+    <div class="modal-content tv-modal">
+      <div class="modal-header">
+        <h3 id="uni-modal-title">Éditer la chaîne</h3>
+        <button class="modal-close" onclick="closeUniModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nom affiché</label>
+          <input type="text" id="uni-m-name" placeholder="(auto)">
+        </div>
+        <div class="form-group">
+          <label>Logo (URL)</label>
+          <input type="url" id="uni-m-logo" oninput="uniLogoPreview()" placeholder="URL logo (vide = auto/curé)">
+          <img id="uni-m-logo-prev" src="" alt="" style="width:64px;height:36px;object-fit:contain;border-radius:4px;border:1px solid var(--border);margin-top:6px;display:none">
+        </div>
+        <div class="form-group">
+          <label>Flux perso (ajoutés en tête, en plus des flux auto)</label>
+          <div id="uni-m-streams"></div>
+          <button class="btn-outline-sm" onclick="addUniStreamRow()" style="margin-top:6px">+ Ajouter un flux</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline-sm" onclick="closeUniModal()">Annuler</button>
+        <button class="btn-primary" onclick="saveUniChannel()">💾 Enregistrer</button>
       </div>
     </div>
   </div>
@@ -1681,14 +1719,83 @@ function renderUnified(){
     $("#uni-count").textContent = list.length + ' chaîne' + (list.length>1?'s':'');
     if (!list.length){ grid.innerHTML = '<div style="color:var(--muted);padding:20px">Aucune chaîne</div>'; return; }
     const SRC = {dlstreams:'🔀', vavoo:'📺', vegetatv:'🐉'};
-    grid.innerHTML = list.map(c => `
-        <div class="uni-tile${c.curated ? '' : ' nologo'}">
+    grid.innerHTML = list.map((c, i) => `
+        <div class="uni-tile${c.curated ? '' : ' nologo'}${(c.override_name||c.override_logo||(c.override_streams&&c.override_streams.length))?' edited':''}">
+            <button class="uni-edit" title="Éditer" onclick="openUniModal(${i})">✏️</button>
             <img class="uni-logo" src="${escapeHtml(c.logo)}" alt="" loading="lazy" onerror="this.style.opacity=.25">
             <div class="uni-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</div>
             <div class="uni-meta">${escapeHtml(c.cat)} · ${c.flux} flux${c.quals.length?' · '+escapeHtml(c.quals.join('/')):''}</div>
             <div class="uni-badges">${c.sources.map(s => `<span class="uni-badge">${SRC[s]||''} ${s}</span>`).join('')}</div>
             ${c.curated ? '' : '<div class="uni-warn">⚠ logo générique</div>'}
         </div>`).join('');
+    _UNI_VIEW = list;
+}
+let _UNI_VIEW = [];
+function openUniModal(i){
+    const c = _UNI_VIEW[i]; if(!c) return;
+    window._editingUni = c.key;
+    $("#uni-modal-title").textContent = 'Éditer : ' + c.name;
+    $("#uni-m-name").value = c.override_name || '';
+    $("#uni-m-name").placeholder = c.name + ' (auto)';
+    $("#uni-m-logo").value = c.override_logo || '';
+    $("#uni-m-logo").placeholder = 'URL logo (vide = auto/curé)';
+    uniLogoPreview();
+    renderUniStreamRows(c.override_streams || []);
+    $("#uni-modal").classList.add('active');
+}
+function closeUniModal(){ $("#uni-modal").classList.remove('active'); window._editingUni=null; }
+function uniLogoPreview(){
+    const u = $("#uni-m-logo").value.trim(); const img = $("#uni-m-logo-prev");
+    img.src = u; img.style.display = u ? 'block' : 'none';
+}
+function uniStreamRow(label, url){
+    return `<div class="uni-srow"><input type="text" placeholder="Label (ex: Mon flux HD)" value="${escapeHtml(label||'')}" style="flex:1">
+        <input type="url" placeholder="https://.../flux.m3u8" value="${escapeHtml(url||'')}" style="flex:2">
+        <button class="btn-outline-sm" onclick="this.parentElement.remove()">✕</button></div>`;
+}
+function renderUniStreamRows(streams){
+    $("#uni-m-streams").innerHTML = (streams||[]).map(s => uniStreamRow(s.label, s.url)).join('');
+}
+function addUniStreamRow(){ $("#uni-m-streams").insertAdjacentHTML('beforeend', uniStreamRow('', '')); }
+async function saveUniChannel(){
+    const key = window._editingUni; if(!key) return;
+    const streams = [...document.querySelectorAll('#uni-m-streams .uni-srow')].map(r => {
+        const [lab, url] = r.querySelectorAll('input');
+        return {label: lab.value.trim(), url: url.value.trim()};
+    }).filter(s => s.url);
+    try {
+        const r = await apiFetch('/api/unified/edit', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({key, name: $("#uni-m-name").value.trim(), logo: $("#uni-m-logo").value.trim(), streams})});
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'échec');
+        toast('Chaîne enregistrée', 'success');
+        closeUniModal();
+        _UNI = []; loadUnified();
+    } catch(e){ if(e.message!=='unauthenticated') toast('Erreur : '+e.message, 'error'); }
+}
+async function refreshVegeta(){
+    const box = $("#vegeta-diag"); if(!box) return;
+    box.style.display = 'block';
+    box.style.background = 'rgba(255,255,255,.05)';
+    box.textContent = '🐉 Ingestion VegetaTv en cours (peut prendre 1-2 min)…';
+    try {
+        const r = await apiFetch('/api/vegeta/refresh');
+        const d = await r.json();
+        if (d.error){
+            box.style.background = 'rgba(212,160,23,.12)';
+            box.innerHTML = '⚠ ' + escapeHtml(d.error);
+            return;
+        }
+        const g = d.diag || {}, ok = d.ok;
+        box.style.background = ok ? 'rgba(60,160,90,.12)' : 'rgba(212,160,23,.12)';
+        box.innerHTML = (ok ? '✅ ' : '⚠ ') + `${d.channels} chaînes VegetaTv — spool ${g.spool} serveurs (${g.up} up), ${g.fr_servers}/${g.tried} ont livré du FR.`
+            + (g.err ? '<br>⚠ ' + escapeHtml(g.err) : '')
+            + (ok ? '<br>→ les chaînes Vegeta apparaissent maintenant dans le catalogue unifié.' : '');
+        if (ok) { _UNI = []; loadUnified(); }
+    } catch(e){
+        box.style.background = 'rgba(212,160,23,.12)';
+        box.innerHTML = '⚠ ' + escapeHtml(e.message);
+    }
 }
 async function loadActivity(targetId) {
     try {

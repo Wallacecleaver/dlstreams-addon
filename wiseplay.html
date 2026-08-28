@@ -128,6 +128,7 @@ main{flex:1;padding:18px 16px 40px;max-width:720px;margin:0 auto;width:100%}
 .ch-src-pill{font-size:9px;font-weight:800;padding:1px 6px;border-radius:5px;letter-spacing:.3px}
 .ch-src-pill.dlstreams{background:rgba(229,62,62,.14);color:var(--accent)}
 .ch-src-pill.vavoo{background:rgba(96,165,250,.14);color:#60a5fa}
+.ch-src-pill.vegetatv{background:rgba(139,92,246,.16);color:#a78bfa}
 
 /* ---- Playlists ---- */
 .pl-create{display:flex;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)}
@@ -489,16 +490,19 @@ if(!list.length){
 container.innerHTML = '<div class="empty"><div class="ico">🔍</div>Aucun résultat</div>';
 return;
 }
+const CAT_ICON={Sports:'⚽',Actualités:'📰','Films & Séries':'🎬','Cinéma':'🎥',Divertissement:'🎉',Musique:'🎵',Documentaire:'🌍',Jeunesse:'🧸','Télévision':'📺'};
+const CAT_ORDER=['Sports','Cinéma','Télévision','Actualités','Jeunesse','Documentaire','Musique','Films & Séries','Divertissement'];
+const SRC_PILL={dlstreams:'TV',vavoo:'VV',vegetatv:'🐉'};
 const groups = {};
-list.forEach(c => { const l = c.lang || "other"; (groups[l] = groups[l] || []).push(c); });
-const order = Object.keys(groups).sort((a,b) => (a==="fr"?-1:b==="fr"?1:0) || a.localeCompare(b));
-container.innerHTML = order.map(lang => {
-const items = groups[lang].sort((a,b)=>(a.name||"").localeCompare(b.name||"",'fr'));
+list.forEach(c => { const g = c.genre || "Télévision"; (groups[g] = groups[g] || []).push(c); });
+const order = Object.keys(groups).sort((a,b) => (CAT_ORDER.indexOf(a)+1||99) - (CAT_ORDER.indexOf(b)+1||99) || a.localeCompare(b));
+container.innerHTML = order.map(cat => {
+const items = groups[cat].sort((a,b)=>(a.name||"").localeCompare(b.name||"",'fr'));
 const rows = items.map(c=>{
 const id = c.id;
 const active = _lastChMap[id] !== false;
 const logo = c.logo || "";
-const srcPill = c.src ? `<span class="ch-src-pill ${c.src}">${c.src==='vavoo'?'VV':'TV'}</span>` : '';
+const srcPill = c.src ? `<span class="ch-src-pill ${c.src}">${SRC_PILL[c.src]||'TV'}</span>` : '';
 return `<div class="ch-row" data-id="${escapeHtml(id)}">
 <img class="ch-logo" src="${escapeHtml(logo)}" alt="" onerror="this.style.visibility='hidden'">
 <div class="ch-info">
@@ -508,7 +512,7 @@ return `<div class="ch-row" data-id="${escapeHtml(id)}">
 <input type="checkbox" class="toggle" ${active?"checked":""} onchange="toggleChannel('${escapeHtml(id)}',this.checked)">
 </div>`;
 }).join("");
-return `<div class="ch-group-header">${langLabel(lang)} · ${items.length}</div>${rows}`;
+return `<div class="ch-group-header">${CAT_ICON[cat]||'📺'} ${escapeHtml(cat)} · ${items.length}</div>${rows}`;
 }).join("");
 }
 function toggleChannel(id, checked){
