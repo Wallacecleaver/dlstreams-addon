@@ -204,28 +204,6 @@
         <div class="hint" style="margin-top:8px;">Ce lien contient ton token. Ne le partage pas — il donne accès à ton addon personnel.</div>
       </div>
     </div>
-
-    <!-- Section ADMIN : gestion des tokens (cachée si pas authentifié dashboard) -->
-    <div class="config-card" id="token-admin-section" style="display:none;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-        <span style="font-size:13px;font-weight:600;color:var(--text);">Administration des tokens</span>
-      </div>
-      <div class="config-field">
-        <label>Créer un nouveau token</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input type="text" id="admin-token-name" placeholder="Nom (ex: Tom, Maison, Client A)" style="flex:1;min-width:200px;">
-          <button class="btn btn-red" id="btn-create-token">Créer</button>
-        </div>
-        <div class="hint">Le token brut ne s'affiche qu'une seule fois. Copie-le immédiatement pour le donner à la personne concernée.</div>
-      </div>
-      <div class="config-status ok" id="admin-token-created" style="display:none;"></div>
-      <div class="config-status" id="admin-token-error" style="display:none; background:rgba(229,62,62,0.08); border-color:rgba(229,62,62,0.25); color:#fc8181;"></div>
-
-      <div class="config-field" style="margin-top:20px;">
-        <label>Tokens existants</label>
-        <div id="tokens-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-      </div>
-    </div>
   </main>
 
   <div class="install-bar">
@@ -409,118 +387,9 @@
     function installTokenManifest() {
       const url = document.getElementById('token-manifest-url').value;
       window.open(`stremio://${url.replace(/https?:\/\//, '')}`, '_blank');
-    }
+}
 
-    // Admin: gestion tokens (visible seulement si connecté dashboard)
-    async function checkDashboardAuth() {
-      try {
-        const res = await fetch('/api/stats', { credentials: 'include' });
-        if (res.ok) {
-          document.getElementById('token-admin-section').style.display = 'block';
-          loadTokensList();
-        }
-      } catch (e) { /* pas authentifié -> section admin cachée */ }
-    }
-
-    async function loadTokensList() {
-      try {
-        const res = await fetch('/api/tokens', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'list' }),
-          credentials: 'include'
-        });
-        const data = await res.json();
-        if (!data.ok) return;
-        const listEl = document.getElementById('tokens-list');
-        listEl.innerHTML = '';
-        if (!data.tokens || data.tokens.length === 0) {
-          listEl.innerHTML = '<div class="hint" style="margin:0;">Aucun token créé</div>';
-          return;
-        }
-        data.tokens.forEach(t => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;';
-          const lastUsed = t.last_used ? new Date(t.last_used * 1000).toLocaleString('fr-FR') : 'Jamais';
-          const revokeHash = t.full_hash || t.hash;
-          row.innerHTML = `
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:600;color:var(--text);">${escapeHtml(t.name)}</div>
-              <div style="font-size:11px;color:var(--muted);">Créé: ${new Date(t.created * 1000).toLocaleString('fr-FR')} · Dernier: ${lastUsed}</div>
-              <div style="font-size:11px;color:var(--muted);margin-top:2px;">Hash: ${t.hash}</div>
-            </div>
-            <button class="btn btn-ghost" onclick="revokeToken('${revokeHash}')" style="padding:6px 12px;font-size:12px;">🗑️ Supprimer</button>
-          `;
-          listEl.appendChild(row);
-        });
-      } catch (e) { /* silencieux */ }
-    }
-
-    function escapeHtml(str) {
-      return str.replace(/[&<>"']/g, c => {
-        if (c === '&') return '&';
-        if (c === '<') return '<';
-        if (c === '>') return '>';
-        if (c === '"') return '"';
-        return "'";
-      });
-    }
-
-    document.getElementById('btn-create-token').addEventListener('click', async () => {
-      const name = document.getElementById('admin-token-name').value.trim();
-      const createdEl = document.getElementById('admin-token-created');
-      const errorEl = document.getElementById('admin-token-error');
-      createdEl.style.display = 'none';
-      errorEl.style.display = 'none';
-      if (!name) { errorEl.textContent = 'Nom requis'; errorEl.style.display = 'block'; return; }
-      try {
-        const res = await fetch('/api/tokens', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'create', name }),
-          credentials: 'include'
-        });
-        const data = await res.json();
-        if (data.ok) {
-          createdEl.innerHTML = `✅ Token créé pour <b>${escapeHtml(data.name)}</b><br>
-            <code style="background:var(--bg);padding:8px;border-radius:6px;display:block;margin-top:8px;font-family:monospace;font-size:12px;word-break:break-all;">${data.token}</code>
-            <div class="hint" style="margin-top:8px;">⚠️ Copie-le maintenant — il ne sera plus affiché.`;
-          createdEl.style.display = 'block';
-          document.getElementById('admin-token-name').value = '';
-          loadTokensList();
-        } else {
-          errorEl.textContent = data.error || 'Erreur';
-          errorEl.style.display = 'block';
-        }
-      } catch (e) {
-        errorEl.textContent = 'Erreur réseau';
-        errorEl.style.display = 'block';
-      }
-    });
-
-    async function revokeToken(hash) {
-      if (!confirm('Révoquer ce token ? La personne ne pourra plus installer l\'addon.')) return;
-      try {
-        const res = await fetch('/api/tokens', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'revoke', hash }),
-          credentials: 'include'
-        });
-        const data = await res.json();
-        if (data.ok) {
-          toast('🗑️ Token révoqué');
-          loadTokensList();
-        } else {
-          toast(data.error || 'Erreur');
-        }
-      } catch (e) {
-        toast('Erreur réseau');
-      }
-    }
-
-    // Vérifier l'auth dashboard au chargement
-    checkDashboardAuth();
+    // Vérifier l'auth dashboard au chargement (plus nécessaire, section admin supprimée)
   </script>
 </body>
 </html>
