@@ -195,13 +195,9 @@
       <div class="config-status ok" id="token-success" style="display:none;"></div>
       <div class="config-status" id="token-error" style="display:none; background:rgba(229,62,62,0.08); border-color:rgba(229,62,62,0.25); color:#fc8181;"></div>
       <div id="token-result" style="display:none;margin-top:16px;">
-        <label style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;display:block;">Ton lien d'installation Stremio :</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input type="text" id="token-manifest-url" readonly style="flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-family:'Rajdhani',monospace;font-size:13px;">
-          <button class="btn btn-outline" onclick="copyTokenManifest()">Copier</button>
-          <button class="btn btn-red" onclick="installTokenManifest()">Installer</button>
-        </div>
-        <div class="hint" style="margin-top:8px;">Ce lien contient ton token. Ne le partage pas — il donne accès à ton addon personnel.</div>
+        <label style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;display:block;">Ton lien d'installation Stremio (avec ton token) :</label>
+        <input type="text" id="token-manifest-url" readonly style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-family:'Rajdhani',monospace;font-size:13px;">
+        <div class="hint" style="margin-top:8px;">Ce lien contient ton token. Utilise les boutons <b>Installer / Copier</b> en bas de page — ils utiliseront automatiquement ce lien.</div>
       </div>
     </div>
   </main>
@@ -241,7 +237,11 @@
       return Object.keys(cfg).length ? b64urlEncode(JSON.stringify(cfg)) : '';
     }
 
+    // Token manifest URL (set when user validates their token)
+    let tokenManifestUrl = null;
+
     function getManifestUrl() {
+      if (tokenManifestUrl) return tokenManifestUrl;
       const config = buildConfig();
       const base = window.location.origin;
       return config ? `${base}/${config}/manifest.json` : `${base}/manifest.json`;
@@ -368,6 +368,7 @@
         if (data.ok) {
           successEl.textContent = `✅ Token valide — ${data.name || 'accès autorisé'}`;
           successEl.style.display = 'block';
+          tokenManifestUrl = data.manifest_url;
           urlEl.value = data.manifest_url;
           resultEl.style.display = 'block';
         } else {
@@ -380,16 +381,7 @@
       }
     });
 
-    function copyTokenManifest() {
-      const url = document.getElementById('token-manifest-url').value;
-      navigator.clipboard.writeText(url).then(() => toast('✅ Lien copié !'));
-    }
-    function installTokenManifest() {
-      const url = document.getElementById('token-manifest-url').value;
-      window.open(`stremio://${url.replace(/https?:\/\//, '')}`, '_blank');
-}
-
-    // Vérifier l'auth dashboard au chargement (plus nécessaire, section admin supprimée)
+// Vérifier l'auth dashboard au chargement (plus nécessaire, section admin supprimée)
   </script>
 </body>
 </html>
