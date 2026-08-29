@@ -1503,7 +1503,7 @@ def _extract_config_from_path(path: str) -> tuple[dict, str]:
         first, rest = path[1:].split("/", 1)
         # Only treat as config if it decodes to valid JSON with expected keys
         config = _decode_config(first)
-        if config and isinstance(config, dict) and any(k in config for k in ("pseudo", "device", "epg", "vavoo", "dlstreams", "logos", "quality", "lang", "adult")):
+        if config and isinstance(config, dict) and any(k in config for k in ("pseudo", "device", "epg", "vavoo", "dlstreams", "logos", "quality", "lang", "adult", "token")):
             return config, "/" + rest
     return {}, path
 
@@ -2582,7 +2582,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(401, json.dumps({"ok": False, "error": "token invalide ou révoqué"}).encode(), "application/json")
             _token_touch(h, self._client_ip())
             base = self._self_base()
-            manifest_url = f"{base}/manifest.json?token={token}"
+            cfg_b64 = _b64u(json.dumps({"token": token}))
+            manifest_url = f"{base}/{cfg_b64}/manifest.json"
             return self._send(200, json.dumps({"ok": True, "manifest_url": manifest_url, "name": _tokens[h].get("name", "")}).encode(), "application/json")
 
         return self._send(404, b"not found", "text/plain")
@@ -2852,21 +2853,24 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 return self._send(200, json.dumps(_system_info()).encode(), "application/json")
 
-            def _check_manifest_token(qs: dict) -> tuple[bool, str | None]:
-                """Vérifie le token dans query string. Retourne (valide, token_hash_or_None)."""
+            def _check_manifest_token(qs: dict, user_config: dict | None = None) -> tuple[bool, str | None]:
+                """Vérifie le token, dans la query string (compat) ou dans la config
+                embarquée au chemin (fiable : Stremio ne transmet pas toujours les
+                query strings via le lien stremio://, tout doit passer par le path)."""
                 token = qs.get("token", [""])[0]
+                if not token and user_config:
+                    token = str(user_config.get("token") or "")
                 if not token:
                     return False, None
                 return _token_verify(token)
 
             if path.startswith("/") and path.endswith("/manifest.json"):
-                # Vérifier token AVANT de décoder config_b64
-                valid, token_hash = _check_manifest_token(qs)
+                config_b64 = path[1:-len("/manifest.json")]
+                user_config = _decode_config(config_b64) if config_b64 else {}
+                valid, token_hash = _check_manifest_token(qs, user_config)
                 if not valid:
                     self._send(401, json.dumps({"error": "token requis ou invalide", "code": "TOKEN_REQUIRED"}).encode(), "application/json")
                     return
-                config_b64 = path[1:-len("/manifest.json")]
-                user_config = _decode_config(config_b64) if config_b64 else {}
                 lang_filter = user_config.get("lang", "fr")
                 body = json.dumps(self._manifest(lang_filter=lang_filter, user_config=user_config)).encode()
                 self.send_response(200)
