@@ -219,9 +219,9 @@ _FOLDER2GENRE = {
 # mots de qualité / statut à ignorer dans le rapprochement
 _LOGO_NOISE = {"hd", "fhd", "uhd", "4k", "hevc", "h264", "h265", "vip", "mcdonald",
     "mcdonalds", "backup", "event", "events", "only", "during", "live", "direct",
-    "tv", "access"}
+    "tv", "access", "sd"}
 # tags PAYS : retirés seulement s'ils ne sont pas en 1re position (garder "France 2/3/4/5")
-_LOGO_COUNTRY = {"france", "italy", "italia", "poland", "polska", "spain", "espana",
+_LOGO_COUNTRY = {"fr", "france", "french", "italy", "italia", "poland", "polska", "spain", "espana",
     "greece", "portugal", "germany", "deutschland", "uk", "usa", "international", "gr"}
 _LOGO_ALIAS = {"canalfrance": "canal", "canalplus": "canal"}
 
@@ -229,7 +229,8 @@ def _logo_key(name: str) -> str:
     """Clé tolérante de rapprochement nom de chaîne <-> nom de fichier logo.
 
     Gère les particularités Vavoo (suffixe provider ` |D`/`|E`/`|H`, tags
-    `(BACKUP)`/`[EVENT ONLY]`, qualité HD/FHD, tag pays en fin de nom)."""
+    `(BACKUP)`/`[EVENT ONLY]`, qualité HD/FHD/SD (même collée à un numéro : « SD1 »),
+    tag pays en fin de nom, mots répétés type « ... FR SPORTS »)."""
     import unicodedata, re
     s = name.rsplit(".", 1)[0]
     s = re.sub(r"[\s_-]*logo[\s_-]*$", "", s, flags=re.I)
@@ -237,9 +238,13 @@ def _logo_key(name: str) -> str:
     s = re.sub(r"\(.*?\)|\[.*?\]", "", s)               # (BACKUP) [EVENT ONLY]
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     s = s.replace("+", " ")
+    # Tag qualité collé à un numéro ("SD1", "HD2", "FHD3") -> retire le tag, garde le numéro
+    # (sinon "SD1" ne matche jamais le fichier logo "... 1 logo.png").
+    s = re.sub(r"\b(?:hd|fhd|uhd|sd|4k|8k)(\d+)\b", r" \1", s)
     parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _LOGO_NOISE]
     parts = [w for i, w in enumerate(parts) if not (i > 0 and w in _LOGO_COUNTRY)]
     parts = ["sport" if w == "sports" else w for w in parts]
+    parts = list(dict.fromkeys(parts))   # dédoublonne (ex: suffixe "... FR SPORTS" répète "sport")
     k = "".join(parts)
     return _LOGO_ALIAS.get(k, k)
 
@@ -1339,11 +1344,15 @@ def _canon_key(name: str) -> str:
     s = s.replace("ᴋ", "k").replace("◉", "")
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     s = s.replace("'", "").replace("+", " ")   # « McDonald's » -> « mcdonalds » (sinon le 's traîne)
+    # Tag qualité collé à un numéro ("SD1", "HD2", "FHD3") -> retire le tag, garde le numéro (sinon
+    # « Bein Sport French SD1 » ne matche jamais « beIN Sports 1 » et se duplique au lieu de fusionner).
+    s = re.sub(r"\b(?:hd|fhd|uhd|sd|4k|8k)(\d+)\b", r" \1", s)
     parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _CANON_NOISE]
     parts = [w for i, w in enumerate(parts) if not (i > 0 and w in _CANON_COUNTRY)]
     if parts and parts[0] == "fr":         # préfixe « FR … » en tête -> retiré (garde « France 2 »)
         parts = parts[1:]
     parts = ["sport" if w == "sports" else w for w in parts]
+    parts = list(dict.fromkeys(parts))     # dédoublonne (ex: suffixe "... FR SPORTS" répète "sport")
     k = "".join(parts)
     return _CANON_MERGE.get(k, k)
 
@@ -1366,13 +1375,17 @@ _CANON_TAGS = re.compile(
 
 def _clean_display_raw(name: str) -> str:
     """Nom d'affichage PROPRE : retire préfixe « FR| », suffixe « |D », (BACKUP)/[EVENT], tags qualité
-    fantaisie (« 4ᴋ », « ᴴᴰ », « ◉ rec ») et ASCII (HD/FHD/4K…)."""
+    fantaisie (« 4ᴋ », « ᴴᴰ », « ◉ rec »), ASCII (HD/FHD/4K…) et suffixe catégorie redondant
+    (« ... FR SPORTS » -> « ... », déjà porté par le rangement en catégorie)."""
     s = re.sub(r"^[^|]{1,15}\|\s*", "", name or "")   # préfixe fournisseur « FR| »
     s = re.sub(r"\s*\|.*$", "", s)                     # suffixe provider « |D »
     s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
     s = s.replace("ᴋ", "k").replace("◉", "")
     s = re.sub(r"[ᴀ-ᵿ⁰-₟]", "", s)                    # tags small-cap/exposant (ᴴᴰ, ᴿᴬᵂ…)
+    s = re.sub(r"\b(HD|FHD|UHD|SD|4K|8K)(\d+)\b", r" \2", s, flags=re.I)  # "SD1" -> "1" (garde le numéro)
     s = _CANON_TAGS.sub("", s)                         # HD/FHD/4K/RAW/… ASCII
+    s = re.sub(r"\s+FR\s+(SPORTS?|CINEMA|INFOS?|NEWS|MUSIQUE|DOCS?|DOCUMENTAIRE|KIDS|JEUNESSE|"
+        r"DIVERTISSEMENT|SERIES?|FILMS?)\b\s*$", "", s, flags=re.I)   # « ... FR SPORTS » redondant
     s = re.sub(r"\brec\b", "", s, flags=re.I)
     s = re.sub(r"\s+", " ", s).strip(" -·|▎‖▐┃")
     return s or (name or "").strip()
@@ -1455,6 +1468,9 @@ def _unified_registry() -> dict:
 
 def _unified_invalidate():
     _unified_cache.update(at=0.0, reg=None)
+
+def _hidden_keys() -> set:
+    return {k for k, v in _settings.get("stremio", {}).get("hidden_channels", {}).items() if v}
 
 def _unified_by_cat(cat: str) -> list:
     out = [e for e in _unified_registry().values() if e["cat"] == cat]
@@ -1934,6 +1950,7 @@ _remote_logo_cache: dict = {}   # slug -> bytes | None (négatif caché)
 def _tvlogos_slug(name: str) -> str:
     s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().lower()
     s = s.replace("+", " plus ")
+    s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd)(\d+)\b", r" \2", s)   # "sd1" -> "1" (garde le numéro)
     s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd|fr|vip|raw|backup|event|only)\b", " ", s)
     return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
 
@@ -2004,6 +2021,10 @@ def _logo_bytes(src: str, c: dict) -> bytes:
                 _logo_cache[url] = png
         if png:
             return png
+    # Dernier filet avant l'affiche générique : base communautaire tv-logo/tv-logos (chaînes FR).
+    remote = _remote_logo(name)
+    if remote:
+        return remote
     return _poster_get(name or "TV")
 
 def _warm_logos():
@@ -2251,6 +2272,12 @@ class Handler(BaseHTTPRequestHandler):
                     cs[key] = clean
                 else:
                     cs.pop(key, None)
+            if "hidden" in data:
+                hd = st.setdefault("hidden_channels", {})
+                if data.get("hidden"):
+                    hd[key] = True
+                else:
+                    hd.pop(key, None)
             _settings_save()
             _unified_invalidate()
             return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
@@ -2746,6 +2773,7 @@ class Handler(BaseHTTPRequestHandler):
                 st = _settings.get("stremio", {})
                 ov_n, ov_l, ov_s = st.get("channel_names", {}), st.get("channel_logos", {}), st.get("channel_streams", {})
                 out = []
+                hidden = _hidden_keys()
                 for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
                     enc = urllib.parse.quote(_b64u(e["key"]), safe="")
                     out.append({
@@ -2758,9 +2786,27 @@ class Handler(BaseHTTPRequestHandler):
                         "override_name": ov_n.get(e["key"], ""),
                         "override_logo": ov_l.get(e["key"], ""),
                         "override_streams": ov_s.get(e["key"], []),
+                        "hidden": e["key"] in hidden,
                     })
                 return self._send(200, json.dumps({"channels": out, "total": len(out)}).encode(),
                     "application/json")
+            if path == "/api/unified/toggle-hidden":
+                # Bascule rapide visible/masqué depuis une tuile (sans ouvrir le modal d'édition).
+                if not self._require_auth():
+                    return
+                key = str(qs.get("key", [""])[0])
+                if not key:
+                    return self._send(400, json.dumps({"ok": False, "error": "clé manquante"}).encode(), "application/json")
+                st = _settings.setdefault("stremio", {})
+                hd = st.setdefault("hidden_channels", {})
+                now_hidden = key not in hd
+                if now_hidden:
+                    hd[key] = True
+                else:
+                    hd.pop(key, None)
+                _settings_save()
+                _unified_invalidate()
+                return self._send(200, json.dumps({"ok": True, "hidden": now_hidden}).encode(), "application/json")
             if path == "/api/vegeta/refresh":
                 # Force une ingestion VegetaTv SYNCHRONE + renvoie le diagnostic (débogage MFP/réseau).
                 if not self._require_auth():
@@ -2979,6 +3025,9 @@ class Handler(BaseHTTPRequestHandler):
                     else:                          # tout le catalogue, rangé par catégorie
                         entries = sorted(_unified_registry().values(),
                             key=lambda e: (_GENRE_CHOICES.index(e["cat"]) if e["cat"] in _GENRE_CHOICES else 99, e["name"].lower()))
+                    hidden = _hidden_keys()
+                    if hidden:
+                        entries = [e for e in entries if e["key"] not in hidden]
                     q = params.get("search", "").lower().strip()
                     if q:
                         words = q.replace("+", " ").split()
@@ -2993,7 +3042,7 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 if source == "u":
                     e = _unified_registry().get(_unb64u(cid))
-                    if not e:
+                    if not e or e["key"] in _hidden_keys():
                         return self._send(200, json.dumps({"meta": {}}).encode(), "application/json")
                     return self._send(200, json.dumps({"meta": self._umeta(e, user_config)}).encode(),
                         "application/json", True)
@@ -3010,7 +3059,10 @@ class Handler(BaseHTTPRequestHandler):
                 b = self._self_base()
                 cfg_b64 = _b64u(json.dumps(user_config)) if user_config else ""
                 if source == "u":                 # chaîne unifiée -> TOUS les flux (toutes sources)
-                    streams = unified_streams(_unb64u(cid), b, cfg_b64)
+                    ukey = _unb64u(cid)
+                    if ukey in _hidden_keys():
+                        return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
+                    streams = unified_streams(ukey, b, cfg_b64)
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 if source == "custom":            # chaîne perso (catalogue ⭐ Mes chaînes)
                     st = _settings.get("stremio", {})
