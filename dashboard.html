@@ -2285,12 +2285,14 @@ async function loadTokens(){
         }
         listEl.innerHTML = d.tokens.map(t => {
             const lastUsed = t.last_used ? new Date(t.last_used * 1000).toLocaleString('fr-FR') : 'Jamais';
+            const uses = t.uses || 0;
+            const lastIp = t.last_ip ? escapeHtml(t.last_ip) : '—';
             const revokeHash = t.full_hash || t.hash;
             return `
                 <div class="tv-ch-row" style="grid-template-columns:1fr 100px 100px 100px;align-items:center">
                     <div style="min-width:0">
                         <div style="font-weight:600;color:var(--text)">${escapeHtml(t.name)}</div>
-                        <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">Hash: ${t.hash} · Créé: ${new Date(t.created * 1000).toLocaleString('fr-FR')} · Dernier: ${lastUsed}</div>
+                        <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">Hash: ${t.hash} · Créé: ${new Date(t.created * 1000).toLocaleString('fr-FR')} · Dernier: ${lastUsed} · Utilisations: ${uses} · Dernière IP: ${lastIp}</div>
                     </div>
                     <span class="toast success" style="padding:4px 10px;font-size:11px;margin:0">✅ Actif</span>
                     <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${t.hash}</span>

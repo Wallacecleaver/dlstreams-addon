@@ -237,29 +237,35 @@
       return Object.keys(cfg).length ? b64urlEncode(JSON.stringify(cfg)) : '';
     }
 
-    // Token manifest URL (set when user validates their token)
-    let tokenManifestUrl = null;
+    // Token brut stocké (survit au reload). Le lien final est toujours reconstruit
+    // à la volée avec la config courante (pseudo/device/epg/logos), pour que ces
+    // réglages ne soient jamais perdus ni figés au moment de la validation du token.
+    function getStoredToken() {
+      return localStorage.getItem('waddontv_token_raw');
+    }
+
+    function setStoredToken(token) {
+      localStorage.setItem('waddontv_token_raw', token);
+    }
+
+    function clearStoredToken() {
+      localStorage.removeItem('waddontv_token_raw');
+    }
 
     function getManifestUrl() {
-      // Priorité 1: token validé dans cette session
-      if (tokenManifestUrl) return tokenManifestUrl;
-      // Priorité 2: token stocké en localStorage (survit au reload)
-      const stored = localStorage.getItem('waddontv_token_manifest');
-      if (stored) return stored;
-      // Priorité 3: config classique (pseudo/device/epg/logos)
-      const config = buildConfig();
       const base = window.location.origin;
-      return config ? `${base}/${config}/manifest.json` : `${base}/manifest.json`;
+      const config = buildConfig();
+      const path = config ? `/${config}/manifest.json` : `/manifest.json`;
+      const token = getStoredToken();
+      return token ? `${base}${path}?token=${encodeURIComponent(token)}` : `${base}${path}`;
     }
 
-    function setTokenManifestUrl(url) {
-      tokenManifestUrl = url;
-      localStorage.setItem('waddontv_token_manifest', url);
-    }
-
-    function clearTokenManifestUrl() {
-      tokenManifestUrl = null;
-      localStorage.removeItem('waddontv_token_manifest');
+    // Met à jour l'affichage du lien token (si un token est actif) à chaque
+    // changement de pseudo / appareil / EPG / logos, pour qu'il reste toujours juste.
+    function refreshTokenUrlDisplay() {
+      if (!getStoredToken()) return;
+      const urlEl = document.getElementById('token-manifest-url');
+      if (urlEl) urlEl.value = getManifestUrl();
     }
 
     // ---- Mémorisation locale (pseudo / appareil / préférences) ----
@@ -294,12 +300,14 @@
 
     ['cfg-pseudo', 'cfg-device', 'cfg-epg', 'cfg-logos'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.addEventListener('change', saveValuesLocally);
+      if (el) el.addEventListener('change', () => { saveValuesLocally(); refreshTokenUrlDisplay(); });
     });
 
     loadSavedValues();
 
     function validateReady() {
+      // Flux token : le pseudo n'est pas requis, le token suffit à identifier l'accès
+      if (getStoredToken()) return true;
       const pseudoInput = document.getElementById('cfg-pseudo');
       const pseudo = pseudoInput.value.trim();
       pseudoInput.style.borderColor = '';
@@ -313,14 +321,13 @@
 
     function install(method) {
       if (!validateReady()) return;
-      // Lecture FORCÉE de localStorage au clic (garantit l'URL avec token)
-      const url = localStorage.getItem('waddontv_token_manifest') || getManifestUrl();
+      const url = getManifestUrl();
       if (method === 'app') window.open(`stremio://${url.replace(/https?:\/\//, '')}`, '_blank');
       else window.open(`https://web.stremio.com/#/addons?addon=${encodeURIComponent(url)}`, '_blank');
     }
     function copyLink() {
       if (!validateReady()) return;
-      const url = localStorage.getItem('waddontv_token_manifest') || getManifestUrl();
+      const url = getManifestUrl();
       navigator.clipboard.writeText(url).then(() => toast('✅ Lien copié !'));
     }
     function toast(msg) {
@@ -385,8 +392,8 @@
         if (data.ok) {
           successEl.textContent = `✅ Token valide — ${data.name || 'accès autorisé'}`;
           successEl.style.display = 'block';
-          setTokenManifestUrl(data.manifest_url);
-          urlEl.value = data.manifest_url;
+          setStoredToken(token);
+          urlEl.value = getManifestUrl();
           resultEl.style.display = 'block';
         } else {
           errorEl.textContent = data.error || 'Token invalide';

@@ -126,9 +126,12 @@ def _token_verify(token: str) -> tuple[bool, str | None]:
         return False, None
     return True, h
 
-def _token_touch(h: str):
+def _token_touch(h: str, ip: str | None = None):
     if h in _tokens:
         _tokens[h]["last_used"] = time.time()
+        _tokens[h]["uses"] = _tokens[h].get("uses", 0) + 1
+        if ip:
+            _tokens[h]["last_ip"] = ip
         _tokens_save()
 _login_attempts: dict[str, list[float]] = {}
 _LOGIN_MAX_ATTEMPTS = 6
@@ -2524,7 +2527,9 @@ class Handler(BaseHTTPRequestHandler):
                     "name": name,
                     "created": time.time(),
                     "last_used": None,
-                    "revoked": False
+                    "revoked": False,
+                    "uses": 0,
+                    "last_ip": None
                 }
                 _tokens_save()
                 _log_activity("Token créé", f"name={name}")
@@ -2538,7 +2543,9 @@ class Handler(BaseHTTPRequestHandler):
                         "name": info.get("name", ""),
                         "created": info.get("created"),
                         "last_used": info.get("last_used"),
-                        "revoked": info.get("revoked", False)
+                        "revoked": info.get("revoked", False),
+                        "uses": info.get("uses", 0),
+                        "last_ip": info.get("last_ip")
                     })
                 out.sort(key=lambda x: x.get("created") or 0, reverse=True)
                 return self._send(200, json.dumps({"ok": True, "tokens": out}).encode(), "application/json")
@@ -2573,7 +2580,7 @@ class Handler(BaseHTTPRequestHandler):
             valid, h = _token_verify(token)
             if not valid:
                 return self._send(401, json.dumps({"ok": False, "error": "token invalide ou révoqué"}).encode(), "application/json")
-            _token_touch(h)
+            _token_touch(h, self._client_ip())
             base = self._self_base()
             manifest_url = f"{base}/manifest.json?token={token}"
             return self._send(200, json.dumps({"ok": True, "manifest_url": manifest_url, "name": _tokens[h].get("name", "")}).encode(), "application/json")
@@ -2870,9 +2877,9 @@ class Handler(BaseHTTPRequestHandler):
                 if user_config:
                     cookie_val = _b64u(json.dumps(user_config))
                     self.send_header("Set-Cookie", f"waddontv_cfg={cookie_val}; HttpOnly; Path=/; Max-Age=31536000; SameSite=Lax")
-                # Toucher le token pour last_used
+                # Toucher le token pour last_used / uses / last_ip
                 if token_hash:
-                    _token_touch(token_hash)
+                    _token_touch(token_hash, self._client_ip())
                 self.end_headers()
                 self.wfile.write(body)
                 return
@@ -2881,7 +2888,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not valid:
                     return self._send(401, json.dumps({"error": "token requis ou invalide", "code": "TOKEN_REQUIRED"}).encode(), "application/json")
                 if token_hash:
-                    _token_touch(token_hash)
+                    _token_touch(token_hash, self._client_ip())
                 return self._send(200, json.dumps(self._manifest(lang_filter="fr")).encode(), "application/json", True)
             user_config, clean_path = self._extract_addon_config(path)
             if clean_path.startswith("/catalog/tv/"):
