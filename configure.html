@@ -194,11 +194,6 @@
       </button>
       <div class="config-status ok" id="token-success" style="display:none;"></div>
       <div class="config-status" id="token-error" style="display:none; background:rgba(229,62,62,0.08); border-color:rgba(229,62,62,0.25); color:#fc8181;"></div>
-      <div id="token-result" style="display:none;margin-top:16px;">
-        <label style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;display:block;">Ton lien d'installation Stremio (avec ton token) :</label>
-        <input type="text" id="token-manifest-url" readonly style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-family:'Rajdhani',monospace;font-size:13px;">
-        <div class="hint" style="margin-top:8px;">Ce lien contient ton token. Utilise les boutons <b>Installer / Copier</b> en bas de page — ils utiliseront automatiquement ce lien.</div>
-      </div>
     </div>
   </main>
 
@@ -229,11 +224,13 @@
       const device = document.getElementById('cfg-device').value.trim();
       const epg = document.getElementById('cfg-epg').checked;
       const logos = document.getElementById('cfg-logos').checked;
+      const token = getStoredToken();
       const cfg = {};
       if (pseudo) cfg.pseudo = pseudo.slice(0, 32);
       if (device) cfg.device = device.slice(0, 32);
       if (!epg) cfg.epg = false;
       if (!logos) cfg.logos = false;
+      if (token) cfg.token = token;
       return Object.keys(cfg).length ? b64urlEncode(JSON.stringify(cfg)) : '';
     }
 
@@ -255,17 +252,7 @@
     function getManifestUrl() {
       const base = window.location.origin;
       const config = buildConfig();
-      const path = config ? `/${config}/manifest.json` : `/manifest.json`;
-      const token = getStoredToken();
-      return token ? `${base}${path}?token=${encodeURIComponent(token)}` : `${base}${path}`;
-    }
-
-    // Met à jour l'affichage du lien token (si un token est actif) à chaque
-    // changement de pseudo / appareil / EPG / logos, pour qu'il reste toujours juste.
-    function refreshTokenUrlDisplay() {
-      if (!getStoredToken()) return;
-      const urlEl = document.getElementById('token-manifest-url');
-      if (urlEl) urlEl.value = getManifestUrl();
+      return config ? `${base}/${config}/manifest.json` : `${base}/manifest.json`;
     }
 
     // ---- Mémorisation locale (pseudo / appareil / préférences) ----
@@ -300,7 +287,7 @@
 
     ['cfg-pseudo', 'cfg-device', 'cfg-epg', 'cfg-logos'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.addEventListener('change', () => { saveValuesLocally(); refreshTokenUrlDisplay(); });
+      if (el) el.addEventListener('change', saveValuesLocally);
     });
 
     loadSavedValues();
@@ -376,11 +363,8 @@
       const token = document.getElementById('token-input').value.trim();
       const successEl = document.getElementById('token-success');
       const errorEl = document.getElementById('token-error');
-      const resultEl = document.getElementById('token-result');
-      const urlEl = document.getElementById('token-manifest-url');
       successEl.style.display = 'none';
       errorEl.style.display = 'none';
-      resultEl.style.display = 'none';
       if (!token) { errorEl.textContent = 'Entre un token'; errorEl.style.display = 'block'; return; }
       try {
         const res = await fetch('/api/validate-token', {
@@ -390,11 +374,9 @@
         });
         const data = await res.json();
         if (data.ok) {
-          successEl.textContent = `✅ Token valide — ${data.name || 'accès autorisé'}`;
+          successEl.textContent = `✅ Token valide — ${data.name || 'accès autorisé'}. Utilise les boutons Installer / Copier en bas de page.`;
           successEl.style.display = 'block';
           setStoredToken(token);
-          urlEl.value = getManifestUrl();
-          resultEl.style.display = 'block';
         } else {
           errorEl.textContent = data.error || 'Token invalide';
           errorEl.style.display = 'block';
