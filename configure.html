@@ -178,6 +178,29 @@
       </div>
     </div>
 
+    <!-- ========== MEDIAFLOW PROXY (OBLIGATOIRE) ========== -->
+    <div class="section-header"><div class="section-line"></div><div class="section-label">MediaFlow Proxy (obligatoire)</div><div class="section-line"></div></div>
+    <div class="config-card" id="mfp-section">
+      <div class="config-field">
+        <label>URL de ton MediaFlow Proxy</label>
+        <input type="text" id="cfg-mfp-url" placeholder="ex: https://mon-mediaflow.duckdns.org" autocomplete="off">
+      </div>
+      <div class="config-field">
+        <label>Mot de passe MediaFlow (api_password)</label>
+        <input type="password" id="cfg-mfp-pass" placeholder="Ton mot de passe MediaFlow" autocomplete="off">
+        <div class="hint">Obligatoire : l'addon lit les chaînes à travers TON MediaFlow, pas celui de l'admin. Chacun utilise sa propre instance.</div>
+      </div>
+      <div class="hint" style="margin-top:4px;">
+        Pas encore de MediaFlow ? <a href="https://github.com/mhdzumair/MediaFlow-Proxy-Light" target="_blank" rel="noopener" style="color:var(--red);text-decoration:underline;">Déploie MediaFlow Proxy Light</a> (gratuit, léger, s'installe en quelques minutes via Docker).
+      </div>
+      <button class="btn btn-red" id="btn-test-mfp" type="button" style="width:100%;margin-top:8px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
+        Tester la connexion
+      </button>
+      <div class="config-status ok" id="mfp-success" style="display:none;"></div>
+      <div class="config-status" id="mfp-error" style="display:none; background:rgba(229,62,62,0.08); border-color:rgba(229,62,62,0.25); color:#fc8181;"></div>
+    </div>
+
     <!-- ========== ACCÈS ADDON (TOKENS) ========== -->
     <div class="section-header"><div class="section-line"></div><div class="section-label">Accès Addon (Tokens)</div><div class="section-line"></div></div>
 
@@ -225,12 +248,16 @@
       const epg = document.getElementById('cfg-epg').checked;
       const logos = document.getElementById('cfg-logos').checked;
       const token = getStoredToken();
+      const mfpUrl = document.getElementById('cfg-mfp-url').value.trim().replace(/\/+$/, '');
+      const mfpPass = document.getElementById('cfg-mfp-pass').value.trim();
       const cfg = {};
       if (pseudo) cfg.pseudo = pseudo.slice(0, 32);
       if (device) cfg.device = device.slice(0, 32);
       if (!epg) cfg.epg = false;
       if (!logos) cfg.logos = false;
       if (token) cfg.token = token;
+      if (mfpUrl) cfg.mfp_url = mfpUrl;
+      if (mfpPass) cfg.mfp_pass = mfpPass;
       return Object.keys(cfg).length ? b64urlEncode(JSON.stringify(cfg)) : '';
     }
 
@@ -261,6 +288,7 @@
     const STORAGE_KEYS = {
       pseudo: 'waddontv_pseudo', device: 'waddontv_device',
       epg: 'waddontv_epg', logos: 'waddontv_logos',
+      mfpUrl: 'waddontv_mfp_url', mfpPass: 'waddontv_mfp_pass',
     };
 
     function loadSavedValues() {
@@ -269,10 +297,14 @@
         const device = localStorage.getItem(STORAGE_KEYS.device);
         const epg = localStorage.getItem(STORAGE_KEYS.epg);
         const logos = localStorage.getItem(STORAGE_KEYS.logos);
+        const mfpUrl = localStorage.getItem(STORAGE_KEYS.mfpUrl);
+        const mfpPass = localStorage.getItem(STORAGE_KEYS.mfpPass);
         if (pseudo) document.getElementById('cfg-pseudo').value = pseudo;
         if (device) document.getElementById('cfg-device').value = device;
         if (epg !== null) document.getElementById('cfg-epg').checked = epg === '1';
         if (logos !== null) document.getElementById('cfg-logos').checked = logos === '1';
+        if (mfpUrl) document.getElementById('cfg-mfp-url').value = mfpUrl;
+        if (mfpPass) document.getElementById('cfg-mfp-pass').value = mfpPass;
       } catch (e) { /* navigation privée -> silencieux */ }
     }
 
@@ -282,17 +314,81 @@
         localStorage.setItem(STORAGE_KEYS.device, document.getElementById('cfg-device').value.trim());
         localStorage.setItem(STORAGE_KEYS.epg, document.getElementById('cfg-epg').checked ? '1' : '0');
         localStorage.setItem(STORAGE_KEYS.logos, document.getElementById('cfg-logos').checked ? '1' : '0');
+        localStorage.setItem(STORAGE_KEYS.mfpUrl, document.getElementById('cfg-mfp-url').value.trim());
+        localStorage.setItem(STORAGE_KEYS.mfpPass, document.getElementById('cfg-mfp-pass').value.trim());
       } catch (e) { /* silencieux */ }
     }
 
-    ['cfg-pseudo', 'cfg-device', 'cfg-epg', 'cfg-logos'].forEach(id => {
+    ['cfg-pseudo', 'cfg-device', 'cfg-epg', 'cfg-logos', 'cfg-mfp-url', 'cfg-mfp-pass'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', saveValuesLocally);
     });
 
     loadSavedValues();
 
+    // ---- Test MediaFlow (vérifie vraiment l'URL + le mot de passe via /proxy/ip côté serveur) ----
+    function mfpValidatedPairKey() {
+      const url = document.getElementById('cfg-mfp-url').value.trim().replace(/\/+$/, '');
+      const pass = document.getElementById('cfg-mfp-pass').value.trim();
+      return url + '|' + pass;
+    }
+    function mfpReady() {
+      const url = document.getElementById('cfg-mfp-url').value.trim();
+      const pass = document.getElementById('cfg-mfp-pass').value.trim();
+      if (!url || !pass) return false;
+      return localStorage.getItem('waddontv_mfp_validated_pair') === mfpValidatedPairKey();
+    }
+    document.getElementById('btn-test-mfp').addEventListener('click', async () => {
+      const url = document.getElementById('cfg-mfp-url').value.trim();
+      const pass = document.getElementById('cfg-mfp-pass').value.trim();
+      const successEl = document.getElementById('mfp-success');
+      const errorEl = document.getElementById('mfp-error');
+      successEl.style.display = 'none';
+      errorEl.style.display = 'none';
+      if (!url || !pass) {
+        errorEl.textContent = 'Renseigne l\'URL ET le mot de passe MediaFlow';
+        errorEl.style.display = 'block';
+        return;
+      }
+      const btn = document.getElementById('btn-test-mfp');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = 'Test en cours...';
+      try {
+        const res = await fetch('/api/validate-mediaflow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, password: pass })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          localStorage.setItem('waddontv_mfp_validated_pair', mfpValidatedPairKey());
+          saveValuesLocally();
+          successEl.textContent = '✅ MediaFlow joignable, mot de passe correct';
+          successEl.style.display = 'block';
+        } else {
+          errorEl.textContent = '❌ ' + (data.error || 'MediaFlow invalide');
+          errorEl.style.display = 'block';
+        }
+      } catch (e) {
+        errorEl.textContent = 'Erreur réseau pendant le test';
+        errorEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    });
+
     function validateReady() {
+      if (!mfpReady()) {
+        document.getElementById('cfg-mfp-url').style.borderColor = 'var(--red)';
+        document.getElementById('cfg-mfp-pass').style.borderColor = 'var(--red)';
+        toast('Renseigne et teste ton MediaFlow Proxy avant d\'installer 👇');
+        document.getElementById('mfp-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
+      document.getElementById('cfg-mfp-url').style.borderColor = '';
+      document.getElementById('cfg-mfp-pass').style.borderColor = '';
       // Flux token : le pseudo n'est pas requis, le token suffit à identifier l'accès
       if (getStoredToken()) return true;
       const pseudoInput = document.getElementById('cfg-pseudo');
