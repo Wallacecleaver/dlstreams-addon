@@ -411,7 +411,10 @@
   .uni-tile { position:relative; background:var(--card2,rgba(255,255,255,.03)); border:1px solid var(--border,rgba(255,255,255,.08)); border-radius:12px; padding:10px; text-align:center; }
   .uni-tile.edited { border-color:#6c8cff; }
   .uni-edit { position:absolute; top:6px; right:6px; background:rgba(0,0,0,.45); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; padding:2px 6px; opacity:0; transition:opacity .15s; }
-  .uni-tile:hover .uni-edit { opacity:1; }
+  .uni-eye { position:absolute; top:6px; left:6px; background:rgba(0,0,0,.45); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; padding:2px 6px; opacity:0; transition:opacity .15s; z-index:2; }
+  .uni-tile:hover .uni-edit, .uni-tile:hover .uni-eye { opacity:1; }
+  .uni-tile.hidden-ch { opacity:.45; }
+  .uni-tile.hidden-ch .uni-eye { opacity:1; }
   .uni-srow { display:flex; gap:6px; margin-bottom:6px; }
   .uni-srow input { padding:6px 8px; }
   .uni-tile.nologo { border-color:#b8860b; border-style:dashed; }
@@ -856,6 +859,8 @@
               <select id="uni-cat" onchange="renderUnified()"><option value="">🗂️ Toutes catégories</option></select>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer">
                 <input type="checkbox" id="uni-nologo" onchange="renderUnified()"> logo manquant seulement</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer">
+                <input type="checkbox" id="uni-hidden-only" onchange="renderUnified()"> masquées seulement</label>
               <span class="list-count" id="uni-count"></span>
               <span style="flex:1"></span>
               <button class="btn-outline-sm" onclick="refreshVegeta()">🐉 Diagnostiquer VegetaTv</button>
@@ -1282,6 +1287,11 @@
           <label>Flux perso (ajoutés en tête, en plus des flux auto)</label>
           <div id="uni-m-streams"></div>
           <button class="btn-outline-sm" onclick="addUniStreamRow()" style="margin-top:8px">+ Ajouter un flux</button>
+        </div>
+        <div class="form-row">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="uni-m-hidden"> Masquer cette chaîne (retirée du catalogue Stremio, reste visible ici)
+          </label>
         </div>
         <div class="form-actions">
           <button class="btn-outline-sm" onclick="closeUniModal()">Annuler</button>
@@ -1761,24 +1771,38 @@ async function loadUnified(){
 function renderUnified(){
     const grid = $("#uni-grid"); if(!grid) return;
     const q = ($("#uni-q").value||"").toLowerCase().trim();
-    const cat = $("#uni-cat").value, nologo = $("#uni-nologo").checked;
+    const cat = $("#uni-cat").value, nologo = $("#uni-nologo").checked, hiddenOnly = $("#uni-hidden-only").checked;
     let list = _UNI;
     if (cat) list = list.filter(c => c.cat === cat);
     if (q) list = list.filter(c => c.name.toLowerCase().includes(q));
     if (nologo) list = list.filter(c => !c.curated);
+    if (hiddenOnly) list = list.filter(c => c.hidden);
     $("#uni-count").textContent = list.length + ' chaîne' + (list.length>1?'s':'');
     if (!list.length){ grid.innerHTML = '<div style="color:var(--muted);padding:20px">Aucune chaîne</div>'; return; }
     const SRC = {dlstreams:'🔀', vavoo:'📺', vegetatv:'🐉'};
     grid.innerHTML = list.map((c, i) => `
-        <div class="uni-tile${c.curated ? '' : ' nologo'}${(c.override_name||c.override_logo||(c.override_streams&&c.override_streams.length))?' edited':''}">
+        <div class="uni-tile${c.curated ? '' : ' nologo'}${c.hidden ? ' hidden-ch' : ''}${(c.override_name||c.override_logo||(c.override_streams&&c.override_streams.length))?' edited':''}">
+            <button class="uni-eye" title="${c.hidden ? 'Réafficher' : 'Masquer'}" onclick="toggleUniHidden('${c.key}', event)">${c.hidden ? '🙈' : '👁️'}</button>
             <button class="uni-edit" title="Éditer" onclick="openUniModal(${i})">✏️</button>
             <img class="uni-logo" src="${escapeHtml(c.logo)}" alt="" loading="lazy" onerror="this.style.opacity=.25">
             <div class="uni-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</div>
             <div class="uni-meta">${escapeHtml(c.cat)} · ${c.flux} flux${c.quals.length?' · '+escapeHtml(c.quals.join('/')):''}</div>
             <div class="uni-badges">${c.sources.map(s => `<span class="uni-badge">${SRC[s]||''} ${s}</span>`).join('')}</div>
-            ${c.curated ? '' : '<div class="uni-warn">⚠ logo générique</div>'}
+            ${c.hidden ? '<div class="uni-warn" style="background:rgba(160,160,160,.12);color:var(--muted)">🙈 masquée</div>' : (c.curated ? '' : '<div class="uni-warn">⚠ logo générique</div>')}
         </div>`).join('');
     _UNI_VIEW = list;
+}
+async function toggleUniHidden(key, ev){
+    if (ev) ev.stopPropagation();
+    try {
+        const r = await apiFetch('/api/unified/toggle-hidden?key=' + encodeURIComponent(key));
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'échec');
+        const c = _UNI.find(x => x.key === key);
+        if (c) c.hidden = d.hidden;
+        toast(d.hidden ? 'Chaîne masquée' : 'Chaîne réaffichée', 'success');
+        renderUnified();
+    } catch(e){ if(e.message!=='unauthenticated') toast('Erreur : '+e.message, 'error'); }
 }
 let _UNI_VIEW = [];
 function openUniModal(i){
@@ -1789,6 +1813,7 @@ function openUniModal(i){
     $("#uni-m-name").placeholder = c.name + ' (auto)';
     $("#uni-m-logo").value = c.override_logo || '';
     $("#uni-m-logo").placeholder = 'URL logo (vide = auto/curé)';
+    $("#uni-m-hidden").checked = !!c.hidden;
     uniLogoPreview();
     renderUniStreamRows(c.override_streams || []);
     $("#uni-modal").classList.add('active');
@@ -1815,7 +1840,8 @@ async function saveUniChannel(){
     }).filter(s => s.url);
     try {
         const r = await apiFetch('/api/unified/edit', {method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({key, name: $("#uni-m-name").value.trim(), logo: $("#uni-m-logo").value.trim(), streams})});
+            body: JSON.stringify({key, name: $("#uni-m-name").value.trim(), logo: $("#uni-m-logo").value.trim(),
+                streams, hidden: $("#uni-m-hidden").checked})});
         const d = await r.json();
         if (!d.ok) throw new Error(d.error || 'échec');
         toast('Chaîne enregistrée', 'success');
