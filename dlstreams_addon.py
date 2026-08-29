@@ -47,6 +47,19 @@ SITE = "https://dlstreams.st"
 MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "").rstrip("/")
 MEDIAFLOW_PASSWORD = os.environ.get("MEDIAFLOW_PASSWORD", "")
 
+def _mfp_wrap(mfp_url: str, mfp_pass: str, src_url: str, referer: str = "", ua: str = "") -> str:
+    """Emballe une source HLS via le MediaFlow Proxy PERSONNEL de l'utilisateur (mfp_url/mfp_pass
+    viennent de sa propre config, pas de l'admin). `""` si l'un des deux manque."""
+    if not mfp_url or not mfp_pass:
+        return ""
+    params = {"api_password": mfp_pass, "d": src_url}
+    if ua:
+        params["h_user-agent"] = ua
+    if referer:
+        params["h_referer"] = referer
+        params["h_origin"] = referer
+    return f"{mfp_url.rstrip('/')}/proxy/hls/manifest.m3u8?{urllib.parse.urlencode(params)}"
+
 def _mfp_hls(src_url: str, referer: str = "", ua: str = "") -> str:
     """Emballe une source HLS via MFP Light (/proxy/hls) : re-proxifie les segments avec les bons
     headers. `""` si MFP non configuré. Les lignes contendues ferment la connexion ~26s ; en HLS le
@@ -1245,14 +1258,13 @@ def _vegeta_pick(name_key: str):
     return cands[0] if cands else None
 
 def vegetatv_resolve(name_key: str) -> str:
-    """LECTURE : URL MFP HLS du 1er serveur qui livre. `""` si pas de MFP / tout KO / absente."""
-    if not MEDIAFLOW_URL:
-        return ""
+    """LECTURE : URL brute (non emballée) du 1er serveur qui livre. `""` si tout KO / absente.
+    Le wrap MediaFlow (MFP de l'utilisateur, pas celui de l'admin) se fait dans la route /vghls."""
     picked = _vegeta_pick(name_key)
     if not picked:
         return ""
     server, sid = picked
-    return _mfp_hls(_vegeta_m3u8(server, sid), ua=_VEGETA_UA)
+    return _vegeta_m3u8(server, sid)
 
 def _vegeta_warm():
     """Thread de fond : ingestion initiale (registre vide/stale) puis rafraîchi chaque TTL."""
@@ -1454,12 +1466,16 @@ def unified_categories() -> list:
     present = {e["cat"] for e in _unified_registry().values()}
     return [c for c in _GENRE_CHOICES if c in present]
 
-def unified_streams(key: str, base: str) -> list:
+def unified_streams(key: str, base: str, cfg_b64: str = "") -> list:
     """Tous les flux d'une chaîne unifiée (toutes sources), badge source+qualité, meilleur d'abord.
-    URLs paresseuses (résolution au PLAY via /hls,/vhls,/vghls) -> réponse instantanée."""
+    URLs paresseuses (résolution au PLAY via /hls,/vhls,/vghls) -> réponse instantanée.
+    `cfg_b64` (config de l'utilisateur courant, dont son MediaFlow Proxy perso) est repropagée dans
+    les URLs générées, car /hls,/vhls,/vghls ne sont pas appelées par Stremio avec le préfixe
+    manifest -> il faut l'embarquer nous-mêmes."""
     e = _unified_registry().get(key)
     if not e:
         return []
+    p = f"{base}/{cfg_b64}" if cfg_b64 else base
     scored = []
     # Flux PERSO ajoutés depuis le dashboard (channel_streams[key]) -> en tête (rang max).
     for st in _settings.get("stremio", {}).get("channel_streams", {}).get(key, []):
@@ -1472,11 +1488,11 @@ def unified_streams(key: str, base: str) -> list:
     for r in e["refs"]:
         src, q = r["src"], r["q"]
         if src == "dlstreams":
-            emoji, prov, url = "🔀", "dlstreams", f"{base}/hls/{r['id']}/index.m3u8"
+            emoji, prov, url = "🔀", "dlstreams", f"{p}/hls/{r['id']}/index.m3u8"
         elif src == "vavoo":
-            emoji, prov, url = "📺", "Vavoo", f"{base}/vhls?v={_b64u(r['id'])}"
+            emoji, prov, url = "📺", "Vavoo", f"{p}/vhls?v={_b64u(r['id'])}"
         elif src == "vegetatv":
-            emoji, prov, url = "🐉", "Vegeta TV", f"{base}/vghls?v={_b64u(r['id'])}"
+            emoji, prov, url = "🐉", "Vegeta TV", f"{p}/vghls?v={_b64u(r['id'])}"
         else:
             continue
         detail = prov + (f" · {q}" if q else "")
@@ -1503,7 +1519,7 @@ def _extract_config_from_path(path: str) -> tuple[dict, str]:
         first, rest = path[1:].split("/", 1)
         # Only treat as config if it decodes to valid JSON with expected keys
         config = _decode_config(first)
-        if config and isinstance(config, dict) and any(k in config for k in ("pseudo", "device", "epg", "vavoo", "dlstreams", "logos", "quality", "lang", "adult", "token")):
+        if config and isinstance(config, dict) and any(k in config for k in ("pseudo", "device", "epg", "vavoo", "dlstreams", "logos", "quality", "lang", "adult", "token", "mfp_url", "mfp_pass")):
             return config, "/" + rest
     return {}, path
 
@@ -2043,6 +2059,13 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     def log_message(self, *a):
         pass
+    def _redirect(self, location: str):
+        """Redirection 302 (utilisée pour renvoyer le lecteur directement vers le MediaFlow Proxy
+        personnel de l'utilisateur : aucun octet vidéo ne transite par notre VPS)."""
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
     def _send(self, code: int, body: bytes, ctype: str, cache: bool = False):
         global _request_count, _error_count
         now_min = int(time.time() // 60) * 60
@@ -2586,6 +2609,34 @@ class Handler(BaseHTTPRequestHandler):
             manifest_url = f"{base}/{cfg_b64}/manifest.json"
             return self._send(200, json.dumps({"ok": True, "manifest_url": manifest_url, "name": _tokens[h].get("name", "")}).encode(), "application/json")
 
+        if path == "/api/validate-mediaflow":
+            # User (page Configure): teste vraiment l'URL + le mot de passe MediaFlow, via
+            # l'endpoint standard /proxy/ip (retourne l'IP publique du proxy si le mot de passe
+            # est bon, 401/403 sinon). C'est le test le plus fiable sans lancer une vraie lecture.
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            mfp_url = str(data.get("url", "")).strip().rstrip("/")
+            mfp_pass = str(data.get("password", "")).strip()
+            if not mfp_url or not mfp_pass:
+                return self._send(400, json.dumps({"ok": False, "error": "URL et mot de passe requis"}).encode(), "application/json")
+            if not (mfp_url.startswith("http://") or mfp_url.startswith("https://")):
+                return self._send(400, json.dumps({"ok": False, "error": "URL invalide (doit commencer par http:// ou https://)"}).encode(), "application/json")
+            test_url = f"{mfp_url}/proxy/ip?api_password={urllib.parse.quote(mfp_pass)}"
+            try:
+                req = urllib.request.Request(test_url, headers={"User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    if r.status == 200:
+                        return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
+                    return self._send(200, json.dumps({"ok": False, "error": f"réponse inattendue du serveur MediaFlow ({r.status})"}).encode(), "application/json")
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 403):
+                    return self._send(200, json.dumps({"ok": False, "error": "mot de passe MediaFlow incorrect"}).encode(), "application/json")
+                return self._send(200, json.dumps({"ok": False, "error": f"MediaFlow a répondu une erreur ({e.code})"}).encode(), "application/json")
+            except Exception:
+                return self._send(200, json.dumps({"ok": False, "error": "MediaFlow injoignable à cette URL — vérifie l'adresse et que le serveur tourne"}).encode(), "application/json")
+
         return self._send(404, b"not found", "text/plain")
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
@@ -2871,6 +2922,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not valid:
                     self._send(401, json.dumps({"error": "token requis ou invalide", "code": "TOKEN_REQUIRED"}).encode(), "application/json")
                     return
+                if not str(user_config.get("mfp_url") or "").strip() or not str(user_config.get("mfp_pass") or "").strip():
+                    self._send(401, json.dumps({"error": "MediaFlow Proxy requis (URL + mot de passe)", "code": "MEDIAFLOW_REQUIRED"}).encode(), "application/json")
+                    return
                 lang_filter = user_config.get("lang", "fr")
                 body = json.dumps(self._manifest(lang_filter=lang_filter, user_config=user_config)).encode()
                 self.send_response(200)
@@ -2888,12 +2942,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
             if path in ("/", "/manifest.json"):
-                valid, token_hash = _check_manifest_token(qs)
-                if not valid:
-                    return self._send(401, json.dumps({"error": "token requis ou invalide", "code": "TOKEN_REQUIRED"}).encode(), "application/json")
-                if token_hash:
-                    _token_touch(token_hash, self._client_ip())
-                return self._send(200, json.dumps(self._manifest(lang_filter="fr")).encode(), "application/json", True)
+                # Sans config dans le chemin -> impossible d'avoir un MediaFlow perso -> refusé
+                # (le token + le MediaFlow sont désormais obligatoires, embarqués via /configure).
+                return self._send(401, json.dumps({
+                    "error": "token et MediaFlow Proxy requis — installe via /configure",
+                    "code": "TOKEN_REQUIRED"}).encode(), "application/json")
             user_config, clean_path = self._extract_addon_config(path)
             if clean_path.startswith("/catalog/tv/"):
                 extra = clean_path[len("/catalog/tv/"):].removesuffix(".json")
@@ -2955,20 +3008,31 @@ class Handler(BaseHTTPRequestHandler):
                 seg = urllib.parse.unquote(clean_path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
+                cfg_b64 = _b64u(json.dumps(user_config)) if user_config else ""
                 if source == "u":                 # chaîne unifiée -> TOUS les flux (toutes sources)
-                    streams = unified_streams(_unb64u(cid), b)
+                    streams = unified_streams(_unb64u(cid), b, cfg_b64)
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 if source == "custom":            # chaîne perso (catalogue ⭐ Mes chaînes)
                     st = _settings.get("stremio", {})
                     cc = st.get("custom_channels", {}).get(cid, {})
                     cq, _r = _quality_of(cc.get("name", ""))
+                    p = f"{b}/{cfg_b64}" if cfg_b64 else b
                     streams = [_stream_entry("⭐", cc.get("name", "Ma chaîne"), cq, f"Source {idx + 1}",
-                        f"{b}/hls/custom/{cid}/s{idx}/index.m3u8", binge=f"cu-{cid}")
+                        f"{p}/hls/custom/{cid}/s{idx}/index.m3u8", binge=f"cu-{cid}")
                         for idx, _u in enumerate(cc.get("streams", []))]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
-            if path.startswith("/hls/") and path.endswith("/index.m3u8"):
-                parts = path.split("/")
+            if path.endswith("/index.m3u8") and (path.startswith("/hls/") or "/hls/" in path):
+                user_config, clean_path = self._extract_addon_config(path)
+                if not (clean_path.startswith("/hls/") and clean_path.endswith("/index.m3u8")):
+                    return self._send(404, b"not found", "text/plain")
+                mfp_url = str(user_config.get("mfp_url") or "").strip()
+                mfp_pass = str(user_config.get("mfp_pass") or "").strip()
+                if not mfp_url or not mfp_pass:
+                    return self._send(400,
+                        "MediaFlow Proxy requis : reconfigure l'addon sur /configure (URL + mot de passe MediaFlow manquants)".encode(),
+                        "text/plain")
+                parts = clean_path.split("/")
                 if parts[2] == "custom":
                     cid = parts[3]
                     seg4 = parts[4] if len(parts) == 6 else ""
@@ -2983,11 +3047,10 @@ class Handler(BaseHTTPRequestHandler):
                         m3u8 = streams[idx]
                         host = urllib.parse.urlsplit(m3u8).netloc
                         _track_play("custom", cid)
-                        hdr = {"Referer": host + "/", "Origin": host}
-                        henc = _b64u(json.dumps(hdr))
-                        text = _proxy_get(m3u8, hdr).decode("utf-8", "replace")
-                        return self._send(200, _rewrite_playlist(text, m3u8, henc, self._self_base()).encode(),
-                            "application/vnd.apple.mpegurl")
+                        dest = _mfp_wrap(mfp_url, mfp_pass, m3u8, referer=host)
+                        if not dest:
+                            return self._send(502, b"MediaFlow: echec de l'emballage du flux", "text/plain")
+                        return self._redirect(dest)
                     return self._send(404, b"format custom invalide", "text/plain")
                 cid = parts[2]
                 st = _settings.get("stremio", {})
@@ -3009,40 +3072,51 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     m3u8, host = resolve(cid)
                 _track_play("dlstreams", cid)
-                hdr = {"Referer": host + "/", "Origin": host}
-                henc = _b64u(json.dumps(hdr))
-                text = _proxy_get(m3u8, hdr).decode("utf-8", "replace")
-                return self._send(200, _rewrite_playlist(text, m3u8, henc, self._self_base()).encode(),
-                    "application/vnd.apple.mpegurl")
-            if path == "/vhls":
+                dest = _mfp_wrap(mfp_url, mfp_pass, m3u8, referer=host)
+                if not dest:
+                    return self._send(502, b"MediaFlow: echec de l'emballage du flux", "text/plain")
+                return self._redirect(dest)
+            if path == "/vhls" or path.endswith("/vhls"):
+                user_config, clean_path = self._extract_addon_config(path)
+                if clean_path != "/vhls":
+                    return self._send(404, b"not found", "text/plain")
+                mfp_url = str(user_config.get("mfp_url") or "").strip()
+                mfp_pass = str(user_config.get("mfp_pass") or "").strip()
+                if not mfp_url or not mfp_pass:
+                    return self._send(400,
+                        "MediaFlow Proxy requis : reconfigure l'addon sur /configure (URL + mot de passe MediaFlow manquants)".encode(),
+                        "text/plain")
                 vurl = _unb64u(qs["v"][0])
                 real = vavoo_resolve(vurl)
                 if not real:
                     return self._send(502, b"vavoo: flux introuvable (hors-antenne ?)", "text/plain")
                 _track_play("vavoo", vurl)
-                hdr = {"User-Agent": _VAVOO_UA}
-                henc = _b64u(json.dumps(hdr))
-                text = _proxy_get(real, hdr).decode("utf-8", "replace")
-                return self._send(200, _rewrite_playlist(text, real, henc, self._self_base()).encode(),
-                    "application/vnd.apple.mpegurl")
-            if path == "/vghls":
-                # VegetaTv : résout (load-balance byte-testé) -> URL MFP, et sert le manifeste MFP
-                # BRUT (ses segments pointent sur MFP, qui DOIT donc être joignable par le client ->
-                # MEDIAFLOW_URL = domaine PUBLIC, pas loopback). Loggé pour diagnostiquer une lecture KO.
+                dest = _mfp_wrap(mfp_url, mfp_pass, real, ua=_VAVOO_UA)
+                if not dest:
+                    return self._send(502, b"MediaFlow: echec de l'emballage du flux", "text/plain")
+                return self._redirect(dest)
+            if path == "/vghls" or path.endswith("/vghls"):
+                # VegetaTv : résout (load-balance byte-testé) -> URL brute, puis emballée via le
+                # MediaFlow Proxy PERSONNEL de l'utilisateur (pas celui de l'admin) -> redirection.
+                user_config, clean_path = self._extract_addon_config(path)
+                if clean_path != "/vghls":
+                    return self._send(404, b"not found", "text/plain")
+                mfp_url = str(user_config.get("mfp_url") or "").strip()
+                mfp_pass = str(user_config.get("mfp_pass") or "").strip()
+                if not mfp_url or not mfp_pass:
+                    return self._send(400,
+                        "MediaFlow Proxy requis : reconfigure l'addon sur /configure (URL + mot de passe MediaFlow manquants)".encode(),
+                        "text/plain")
                 key = _unb64u(qs["v"][0])
-                url = vegetatv_resolve(key)
-                if not url:
+                raw = vegetatv_resolve(key)
+                if not raw:
                     log.warning(f"vghls: resolve VIDE pour {key!r} (toutes les lignes contendues au byte-test)")
                     return self._send(502, b"vegetatv: flux introuvable (lignes contendues, reessaie)", "text/plain")
                 _track_play("vegetatv", key)
-                try:
-                    text = _proxy_get(url, {"User-Agent": _VEGETA_UA}).decode("utf-8", "replace")
-                except Exception as ex:
-                    log.error(f"vghls: MFP injoignable ({type(ex).__name__}) — MEDIAFLOW_URL={MEDIAFLOW_URL!r} depuis le conteneur ?")
-                    return self._send(502, b"vegetatv: MFP injoignable (MEDIAFLOW_URL depuis le conteneur ?)", "text/plain")
-                if "#EXTM3U" not in text:
-                    log.warning(f"vghls: MFP a repondu sans manifeste HLS (api_password faux ? source morte ?) : {text[:120]!r}")
-                return self._send(200, text.encode(), "application/vnd.apple.mpegurl")
+                dest = _mfp_wrap(mfp_url, mfp_pass, raw, ua=_VEGETA_UA)
+                if not dest:
+                    return self._send(502, b"MediaFlow: echec de l'emballage du flux", "text/plain")
+                return self._redirect(dest)
             if path == "/px":
                 ub = qs["u"][0]
                 henc = qs.get("h", [""])[0]
