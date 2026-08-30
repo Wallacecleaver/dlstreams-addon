@@ -749,14 +749,25 @@
           <div class="page-header">
             <div>
               <div class="page-title">Catégories</div>
-              <div class="page-sub">Classement par genre des chaînes populaires dans Stremio</div>
+              <div class="page-sub">Classement par genre de TOUTES les chaînes du catalogue Stremio (Général / Sports / Documentaires / Films / Informations)</div>
             </div>
           </div>
           <div class="card">
-            <div class="card-head"><div class="card-title">🗂️ Catégories des chaînes populaires</div></div>
+            <div class="card-head"><div class="card-title">🗂️ Catégorie de chaque chaîne</div></div>
             <div class="card-body">
-              <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Attribuez une catégorie aux chaînes populaires. Elles alimentent le filtre « genre » de Stremio.</p>
-              <div id="genre-edit" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">chargement…</div>
+              <p style="color:var(--text2);font-size:13px;margin-bottom:14px">
+                Change la catégorie d'une chaîne ici : c'est directement ce que verra la personne dans le filtre « Genre » de Stremio — pas une liste à part.
+              </p>
+              <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+                <input type="text" id="catp-q" placeholder="🔎 Rechercher une chaîne…" oninput="renderCatPage()" style="flex:1;min-width:200px">
+                <select id="catp-filter" onchange="renderCatPage()">
+                  <option value="">🗂️ Toutes catégories</option>
+                </select>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer">
+                  <input type="checkbox" id="catp-overridden-only" onchange="renderCatPage()"> modifiées seulement</label>
+                <span class="list-count" id="catp-count"></span>
+              </div>
+              <div id="catp-list">chargement…</div>
             </div>
           </div>
         </div>
@@ -861,6 +872,8 @@
                 <input type="checkbox" id="uni-nologo" onchange="renderUnified()"> logo manquant seulement</label>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer">
                 <input type="checkbox" id="uni-hidden-only" onchange="renderUnified()"> masquées seulement</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer">
+                <input type="checkbox" id="uni-junk-only" onchange="renderUnified()"> nom générique seulement</label>
               <span class="list-count" id="uni-count"></span>
               <span style="flex:1"></span>
               <button class="btn-outline-sm" onclick="refreshVegeta()">🐉 Diagnostiquer VegetaTv</button>
@@ -1284,6 +1297,16 @@
           <img id="uni-m-logo-prev" src="" alt="" style="width:64px;height:36px;object-fit:contain;border-radius:4px;border:1px solid var(--border);margin-top:8px;display:none">
         </div>
         <div class="form-row">
+          <label>Catégorie</label>
+          <select id="uni-m-cat">
+            <option value="Général">Général</option>
+            <option value="Sports">Sports</option>
+            <option value="Documentaires">Documentaires</option>
+            <option value="Films">Films</option>
+            <option value="Informations">Informations</option>
+          </select>
+        </div>
+        <div class="form-row">
           <label>Flux perso (ajoutés en tête, en plus des flux auto)</label>
           <div id="uni-m-streams"></div>
           <button class="btn-outline-sm" onclick="addUniStreamRow()" style="margin-top:8px">+ Ajouter un flux</button>
@@ -1429,7 +1452,7 @@ function navigateTo(page) {
     else if (page === 'unified') loadUnified();
     else if (page === 'activite') loadActivity('activity-list-src');
     else if (page === 'st-channels') loadTvChannels();
-    else if (page === 'st-categories') loadSettings();
+    else if (page === 'st-categories') loadCatPage();
     else if (page === 'st-playlists') loadPlaylists();
     else if (page === 'st-programs') loadNow();
     else if (page === 'rg-add') { loadManualChannels(); }
@@ -1772,24 +1795,38 @@ function renderUnified(){
     const grid = $("#uni-grid"); if(!grid) return;
     const q = ($("#uni-q").value||"").toLowerCase().trim();
     const cat = $("#uni-cat").value, nologo = $("#uni-nologo").checked, hiddenOnly = $("#uni-hidden-only").checked;
+    const junkOnly = $("#uni-junk-only")?.checked;
     let list = _UNI;
     if (cat) list = list.filter(c => c.cat === cat);
     if (q) list = list.filter(c => c.name.toLowerCase().includes(q));
     if (nologo) list = list.filter(c => !c.curated);
-    if (hiddenOnly) list = list.filter(c => c.hidden);
+    if (hiddenOnly) list = list.filter(c => c.hidden || c.auto_junk);
+    if (junkOnly) list = list.filter(c => c.auto_junk);
     $("#uni-count").textContent = list.length + ' chaîne' + (list.length>1?'s':'');
     if (!list.length){ grid.innerHTML = '<div style="color:var(--muted);padding:20px">Aucune chaîne</div>'; return; }
     const SRC = {dlstreams:'🔀', vavoo:'📺', vegetatv:'🐉'};
-    grid.innerHTML = list.map((c, i) => `
-        <div class="uni-tile${c.curated ? '' : ' nologo'}${c.hidden ? ' hidden-ch' : ''}${(c.override_name||c.override_logo||(c.override_streams&&c.override_streams.length))?' edited':''}">
-            <button class="uni-eye" title="${c.hidden ? 'Réafficher' : 'Masquer'}" onclick="toggleUniHidden('${c.key}', event)">${c.hidden ? '🙈' : '👁️'}</button>
+    grid.innerHTML = list.map((c, i) => {
+        const effHidden = c.hidden || c.auto_junk;
+        const eyeAction = c.auto_junk && !c.hidden
+            ? `openUniModal(${i})` : `toggleUniHidden('${c.key}', event)`;
+        const eyeTitle = c.auto_junk && !c.hidden ? 'Nom générique — renomme pour la réafficher'
+            : (c.hidden ? 'Réafficher' : 'Masquer');
+        const eyeIcon = c.auto_junk && !c.hidden ? '🏷️' : (c.hidden ? '🙈' : '👁️');
+        let warn = '';
+        if (c.hidden) warn = '<div class="uni-warn" style="background:rgba(160,160,160,.12);color:var(--muted)">🙈 masquée</div>';
+        else if (c.auto_junk) warn = '<div class="uni-warn" style="background:rgba(108,140,255,.12);color:#6c8cff">🏷️ nom générique — renomme-la (✏️) pour l\'afficher</div>';
+        else if (!c.curated) warn = '<div class="uni-warn">⚠ logo générique</div>';
+        return `
+        <div class="uni-tile${c.curated ? '' : ' nologo'}${effHidden ? ' hidden-ch' : ''}${(c.override_name||c.override_logo||(c.override_streams&&c.override_streams.length))?' edited':''}">
+            <button class="uni-eye" title="${eyeTitle}" onclick="${eyeAction}">${eyeIcon}</button>
             <button class="uni-edit" title="Éditer" onclick="openUniModal(${i})">✏️</button>
             <img class="uni-logo" src="${escapeHtml(c.logo)}" alt="" loading="lazy" onerror="this.style.opacity=.25">
             <div class="uni-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</div>
             <div class="uni-meta">${escapeHtml(c.cat)} · ${c.flux} flux${c.quals.length?' · '+escapeHtml(c.quals.join('/')):''}</div>
             <div class="uni-badges">${c.sources.map(s => `<span class="uni-badge">${SRC[s]||''} ${s}</span>`).join('')}</div>
-            ${c.hidden ? '<div class="uni-warn" style="background:rgba(160,160,160,.12);color:var(--muted)">🙈 masquée</div>' : (c.curated ? '' : '<div class="uni-warn">⚠ logo générique</div>')}
-        </div>`).join('');
+            ${warn}
+        </div>`;
+    }).join('');
     _UNI_VIEW = list;
 }
 async function toggleUniHidden(key, ev){
@@ -1814,6 +1851,8 @@ function openUniModal(i){
     $("#uni-m-logo").value = c.override_logo || '';
     $("#uni-m-logo").placeholder = 'URL logo (vide = auto/curé)';
     $("#uni-m-hidden").checked = !!c.hidden;
+    $("#uni-m-cat").value = c.cat;
+    window._editingUniCat = c.cat;
     uniLogoPreview();
     renderUniStreamRows(c.override_streams || []);
     $("#uni-modal").classList.add('active');
@@ -1839,9 +1878,12 @@ async function saveUniChannel(){
         return {label: lab.value.trim(), url: url.value.trim()};
     }).filter(s => s.url);
     try {
+        const payload = {key, name: $("#uni-m-name").value.trim(), logo: $("#uni-m-logo").value.trim(),
+            streams, hidden: $("#uni-m-hidden").checked};
+        const newCat = $("#uni-m-cat").value;
+        if (newCat !== window._editingUniCat) payload.category = newCat;
         const r = await apiFetch('/api/unified/edit', {method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({key, name: $("#uni-m-name").value.trim(), logo: $("#uni-m-logo").value.trim(),
-                streams, hidden: $("#uni-m-hidden").checked})});
+            body: JSON.stringify(payload)});
         const d = await r.json();
         if (!d.ok) throw new Error(d.error || 'échec');
         toast('Chaîne enregistrée', 'success');
@@ -2203,40 +2245,59 @@ async function loadSettings(){
         if(epgStatusEl) epgStatusEl.textContent = e.at
             ? `Dernière MAJ ${new Date(e.at*1000).toLocaleTimeString('fr-FR')} · ${e.covered}/${e.channels} chaînes`
             : 'EPG pas encore chargé';
-        renderGenreEditor(d);
     }catch(err){ if(err.message !== 'unauthenticated') toast('Erreur de chargement des réglages','error'); }
 }
 
-function renderGenreEditor(d){
-    const box = $('#genre-edit');
-    if(!box) return;
-    box.innerHTML = '';
-    const choices = d.genre_choices || [];
-    const overrides = (_settings && _settings.genres) || {};
-    const popular = d.popular || [];
-    if(!popular.length){ box.innerHTML = '<div class="fav-empty">aucune chaîne</div>'; return; }
-    popular.forEach(c => {
-        const key = c.name.toLowerCase();
-        const cur = (overrides[key] && overrides[key][0]) || c.genre || '';
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;gap:10px;justify-content:space-between;font-size:13px;min-width:0';
-        row.innerHTML =
-            `<span style="color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.name)}</span>` +
-            `<select style="max-width:160px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 6px" ` +
-            `onchange="setGenre('${key.replace(/[\\']/g, "\\'")}', this.value)">` +
-            choices.map(g => `<option value="${escapeHtml(g)}" ${g===cur?'selected':''}>${escapeHtml(g)}</option>`).join('') +
-            `</select>`;
-        box.appendChild(row);
-    });
+let _CATP_DATA = null;
+async function loadCatPage(){
+    const box = $('#catp-list'); if(!box) return;
+    box.innerHTML = 'chargement…';
+    try {
+        const r = await apiFetch('/api/unified');
+        const d = await r.json();
+        _CATP_DATA = d.channels || [];
+        const sel = $('#catp-filter');
+        const cats = [...new Set(_CATP_DATA.map(c => c.cat))].sort();
+        sel.innerHTML = '<option value="">🗂️ Toutes catégories</option>' +
+            cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        renderCatPage();
+    } catch(err){ if(err.message!=='unauthenticated') box.innerHTML = '<div class="fav-empty">Erreur de chargement</div>'; }
 }
-
-async function setGenre(key, value){
-    if(!_settings) return;
-    const g = Object.assign({}, _settings.genres || {});
-    g[key] = [value];
-    _settings.genres = g;
-    const r = await apiFetch("/api/settings", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({genres:g})});
-    if(r.ok) toast('Catégorie enregistrée','success'); else toast('Erreur d\'enregistrement','error');
+const CAT_CHOICES = ['Général', 'Sports', 'Documentaires', 'Films', 'Informations'];
+function renderCatPage(){
+    const box = $('#catp-list'); if(!box || !_CATP_DATA) return;
+    const q = ($('#catp-q').value || '').toLowerCase().trim();
+    const filt = $('#catp-filter').value;
+    const overriddenOnly = $('#catp-overridden-only').checked;
+    let list = _CATP_DATA;
+    if (q) list = list.filter(c => c.name.toLowerCase().includes(q));
+    if (filt) list = list.filter(c => c.cat === filt);
+    if (overriddenOnly) list = list.filter(c => c.override_cat);
+    $('#catp-count').textContent = list.length + ' chaîne' + (list.length > 1 ? 's' : '');
+    if (!list.length){ box.innerHTML = '<div class="fav-empty">Aucune chaîne</div>'; return; }
+    box.innerHTML = list.map(c => `
+        <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;font-size:13px;min-width:0;padding:8px 0;border-bottom:1px solid var(--border)">
+            <span style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
+                <img src="${escapeHtml(c.logo)}" style="width:32px;height:24px;object-fit:contain;background:rgba(0,0,0,.15);border-radius:4px;flex-shrink:0" loading="lazy" onerror="this.style.opacity=.2">
+                <span style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.name)}</span>
+                ${c.override_cat ? '<span style="font-size:10px;color:#6c8cff;border:1px solid #6c8cff;border-radius:20px;padding:1px 6px;flex-shrink:0">modifiée</span>' : ''}
+            </span>
+            <select style="max-width:160px;flex-shrink:0" onchange="setChannelCategory('${c.key.replace(/[\\']/g, "\\'")}', this.value)">
+                ${CAT_CHOICES.map(g => `<option value="${escapeHtml(g)}" ${g===c.cat?'selected':''}>${escapeHtml(g)}</option>`).join('')}
+            </select>
+        </div>`).join('');
+}
+async function setChannelCategory(key, value){
+    try {
+        const r = await apiFetch('/api/unified/edit', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({key, category: value})});
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'échec');
+        const c = _CATP_DATA.find(x => x.key === key);
+        if (c){ c.cat = value; c.override_cat = true; }
+        toast('Catégorie enregistrée', 'success');
+        renderCatPage();
+    } catch(e){ if(e.message!=='unauthenticated') toast('Erreur : '+e.message, 'error'); }
 }
 
 async function saveSettings(){
