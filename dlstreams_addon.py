@@ -212,9 +212,9 @@ _init_logo_mapping()
 # ============================================================
 _LOGOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LOGOS")
 _FOLDER2GENRE = {
-    "SPORT": "Sports", "CINEMA": "Cinéma", "DOCU": "Documentaire",
-    "INFOS": "Actualités", "JEUNESSE": "Jeunesse", "MUSIC": "Musique",
-    "GENERAL": "Télévision",
+    "SPORT": "Sports", "CINEMA": "Films", "DOCU": "Documentaires",
+    "INFOS": "Informations", "JEUNESSE": "Général", "MUSIC": "Général",
+    "GENERAL": "Général",
 }
 # mots de qualité / statut à ignorer dans le rapprochement
 _LOGO_NOISE = {"hd", "fhd", "uhd", "4k", "hevc", "h264", "h265", "vip", "mcdonald",
@@ -512,8 +512,7 @@ def _epg_slot(dl_id) -> tuple[dict | None, dict | None]:
                 nxt = p
     return cur, nxt
 
-_GENRE_CHOICES = ["Sports", "Actualités", "Films & Séries", "Cinéma", "Divertissement",
-    "Musique", "Documentaire", "Jeunesse", "Télévision"]
+_GENRE_CHOICES = ["Général", "Sports", "Documentaires", "Films", "Informations"]
 
 def _genres_for(name: str) -> list[str]:
     key = name.lower()
@@ -569,27 +568,15 @@ def _genre_for(name: str) -> list[str]:
         return ["Sports"]
     if any(k in n for k in ["news", "info", "bfm", "cnews", "france info", "cnn", "bbc", "sky news",
         "al jazeera", "rt ", "euronews", "lcp", "public senat", "parlement"]):
-        return ["Actualités"]
-    if any(k in n for k in ["kids", "gulli", "cartoon", "piwi", "tiiji", "disney", "nickelodeon",
-        "boomerang", "canal j", "junior", "télétoon", "télétoon"]):
-        return ["Jeunesse"]
+        return ["Informations"]
     if any(k in n for k in ["cinema", "cinéma", "cine+", "ciné+", "ocs", "paramount", "action",
-        "horror", "polar", "classic", "grand écran", "grand ecran", "premiere"]):
-        return ["Cinéma"]
-    if n in {"tf1", "france 2", "france 3", "france 4", "france 5", "m6", "tmc", "w9", "arte",
-        "c8", "6ter", "canal+ france"}:
-        return ["Télévision"]
-    if any(k in n for k in ["film", "séries", "series", "family", "série club", "téléfilm", "canal+"]):
-        return ["Films & Séries"]
-    if any(k in n for k in ["musique", "music", "mtv", "radio", "clip", "melody", "nrj hits", "fun tv"]):
-        return ["Musique"]
+        "horror", "polar", "classic", "grand écran", "grand ecran", "premiere",
+        "film", "séries", "series", "family", "série club", "téléfilm"]):
+        return ["Films"]
     if any(k in n for k in ["découverte", "decouverte", "documentaire", "voyage", "histoire",
         "geo", "planète", "planete", "animaux", "nature", "science", "investigation"]):
-        return ["Documentaire"]
-    if any(k in n for k in ["divertissement", "télé réalité", "télé-realite", "w9", "tfx",
-        "chérie", "cherie", "cstar", "nrj 12", "seduction"]):
-        return ["Divertissement"]
-    return ["Télévision"]
+        return ["Documentaires"]
+    return ["Général"]
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
     headers = {"User-Agent": UA, "Referer": referer}
@@ -1395,7 +1382,13 @@ _FOREIGN_RE = re.compile(
     r"PL|POL|RO|RU|BR|SA|EG|LB|IQ|GR|HR|SRB?|SI|SK|CZ|HU|BG|UA)\b[\s\-]*(?:FR)?\s*[|:]"
     r"|\b(?:AUSTRALIA|AUSTRALIE|SERBIA|SERBIE|CROATIA|CROATIE|POLAND|POLSKA|ROMANIA|GREECE|GRECE|"
     r"QUEBEC|QUÉBEC|CANADA|CANADIAN|ARABIC|ARABE|AFRICA|AFRIQUE|BELGIUM|GERMANY|ITALIA|ITALY|SPAIN|"
-    r"ESPANA|PORTUGAL|TURKEY|BRAZIL|RUSSIA)\b", re.I)
+    r"ESPANA|PORTUGAL|TURKEY|BRAZIL|RUSSIA|USA|U\.S\.A|UK|ENGLAND|ANGLETERRE|IRELAND|IRLANDE|"
+    r"NETHERLANDS|HOLLAND|HOLLANDE|SWEDEN|SUEDE|NORWAY|NORVEGE|DENMARK|DANEMARK|FINLAND|FINLANDE|"
+    r"SWITZERLAND|SUISSE|AUSTRIA|AUTRICHE|HUNGARY|HONGRIE|BULGARIA|BULGARIE|UKRAINE|MEXICO|MEXIQUE|"
+    r"ARGENTINA|ARGENTINE|CHILE|CHILI|COLOMBIA|COLOMBIE|INDIA|INDE|PAKISTAN|EMIRATES|EMIRATS|ISRAEL|"
+    r"MOROCCO|MAROC|ALGERIA|ALGERIE|TUNISIA|TUNISIE|EGYPT|EGYPTE|NIGERIA|GHANA|KENYA|LATINO|CHINA|"
+    r"CHINE|JAPAN|JAPON|KOREA|COREE|THAILAND|THAILANDE|VIETNAM|INDONESIA|PHILIPPINES|ENGLISH|SPANISH|"
+    r"GERMAN|ITALIAN|PORTUGUESE)\b", re.I)
 
 def _is_foreign(name: str) -> bool:
     return bool(_FOREIGN_RE.search(name or ""))
@@ -1405,12 +1398,31 @@ _CAT_ICON = {"Sports": "⚽", "Actualités": "📰", "Films & Séries": "🎬", 
     "Divertissement": "🎉", "Musique": "🎵", "Documentaire": "🌍", "Jeunesse": "🧸",
     "Télévision": "📺"}
 # slugs ASCII pour les ids de catalogue (évite l'encodage % des accents dans l'URL Stremio)
-_CAT_SLUG = {"Sports": "sports", "Actualités": "actualites", "Films & Séries": "films-series",
-    "Cinéma": "cinema", "Divertissement": "divertissement", "Musique": "musique",
-    "Documentaire": "documentaire", "Jeunesse": "jeunesse", "Télévision": "television"}
+_CAT_SLUG = {"Général": "general", "Sports": "sports", "Documentaires": "documentaires",
+    "Films": "films", "Informations": "informations"}
 _SLUG_CAT = {v: k for k, v in _CAT_SLUG.items()}
 _unified_cache: dict = {"at": 0.0, "reg": None}
 _UNIFIED_TTL = 1800
+
+# Marques FR connues -> une chaîne qui contient un de ces mots n'est JAMAIS considérée générique,
+# même si elle a par ailleurs la forme "mot + numéro" (ex: "Ligue 1+ 4", "beIN Sports 2").
+_KNOWN_BRAND_HINTS = ("bein", "canal", "rmc", "ligue", "tf1", "france", "m6", "arte", "w9", "tmc",
+    "tfx", "t18", "dazn", "eurosport", "equipe", "équipe", "automoto", "after foot", "6ter",
+    "13eme", "13ème", "ab1", "cstar", "nrj", "gulli", "chérie", "cherie", "paramount", "ocs",
+    "cine", "ciné", "discovery", "national geographic", "planete", "planète", "histoire",
+    "trace", "mtv", "mcm", "melody", "bfm", "cnews", "lci", "franceinfo", "public senat",
+    "public sénat", "lcp", "golf", "infosport", "voyage", "action", "syfy", "novelas",
+    "toute l'histoire", "wwe", "ufc", "l'equipe", "l'équipe")
+_GENERIC_JUNK_RE = re.compile(r"^[a-zàâäéèêëïîôöùûüç' \-]{3,24}\s\d{1,3}\s*(direct|live|stream|hd)?\s*$", re.I)
+
+def _looks_generic_junk(name: str) -> bool:
+    """Filler d'IPTV mal nommé (« BLUE SPORT 7 DIRECT », pas une marque reconnue) : juste un mot
+    générique suivi d'un numéro. Auto-masqué du catalogue par défaut (visible dans le dashboard,
+    l'admin peut le réhabiliter en le renommant ou en lui donnant une catégorie)."""
+    n = (name or "").lower().strip()
+    if any(b in n for b in _KNOWN_BRAND_HINTS):
+        return False
+    return bool(_GENERIC_JUNK_RE.match(n))
 
 def _unified_registry() -> dict:
     """Registre canonique {key -> {name, cat, logo, refs:[{src,id,q,qr}]}}, fusionné + caché."""
@@ -1450,10 +1462,16 @@ def _unified_registry() -> dict:
                 add("vegetatv", c["id"], c["name"])
     st = _settings.get("stremio", {})
     ov_names = st.get("channel_names", {})
+    ov_cats = st.get("category_overrides", {})
     for e in reg.values():
         if ov_names.get(e["key"]):            # override de nom (édition dashboard)
             e["name"] = ov_names[e["key"]]
-        e["cat"] = _genre_for(e["name"])[0]
+        e["cat"] = ov_cats.get(e["key"]) or _genre_for(e["name"])[0]
+        if e["cat"] not in _GENRE_CHOICES:      # override obsolète (ancienne taxonomie) -> ignoré
+            e["cat"] = _genre_for(e["name"])[0]
+        # Admin a renommé ou catégorisé à la main -> il a "vouché" pour cette chaîne, jamais auto-masquée.
+        vouched = e["key"] in ov_names or e["key"] in ov_cats
+        e["auto_junk"] = (not vouched) and _looks_generic_junk(e["name"])
         seen = set()
         refs = []
         for r in sorted(e["refs"], key=lambda r: -r["qr"]):   # dédup par (source, qualité)
@@ -1470,7 +1488,9 @@ def _unified_invalidate():
     _unified_cache.update(at=0.0, reg=None)
 
 def _hidden_keys() -> set:
-    return {k for k, v in _settings.get("stremio", {}).get("hidden_channels", {}).items() if v}
+    manual = {k for k, v in _settings.get("stremio", {}).get("hidden_channels", {}).items() if v}
+    auto = {e["key"] for e in _unified_registry().values() if e.get("auto_junk")}
+    return manual | auto
 
 def _unified_by_cat(cat: str) -> list:
     out = [e for e in _unified_registry().values() if e["cat"] == cat]
@@ -2278,6 +2298,13 @@ class Handler(BaseHTTPRequestHandler):
                     hd[key] = True
                 else:
                     hd.pop(key, None)
+            if "category" in data:
+                cat = str(data.get("category") or "").strip()
+                oc = st.setdefault("category_overrides", {})
+                if cat and cat in _GENRE_CHOICES:
+                    oc[key] = cat
+                else:
+                    oc.pop(key, None)
             _settings_save()
             _unified_invalidate()
             return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
@@ -2772,8 +2799,9 @@ class Handler(BaseHTTPRequestHandler):
                 base = self._self_base()
                 st = _settings.get("stremio", {})
                 ov_n, ov_l, ov_s = st.get("channel_names", {}), st.get("channel_logos", {}), st.get("channel_streams", {})
+                ov_c = st.get("category_overrides", {})
+                manual_hidden = {k for k, v in st.get("hidden_channels", {}).items() if v}
                 out = []
-                hidden = _hidden_keys()
                 for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
                     enc = urllib.parse.quote(_b64u(e["key"]), safe="")
                     out.append({
@@ -2786,7 +2814,9 @@ class Handler(BaseHTTPRequestHandler):
                         "override_name": ov_n.get(e["key"], ""),
                         "override_logo": ov_l.get(e["key"], ""),
                         "override_streams": ov_s.get(e["key"], []),
-                        "hidden": e["key"] in hidden,
+                        "override_cat": e["key"] in ov_c,
+                        "hidden": e["key"] in manual_hidden,
+                        "auto_junk": e.get("auto_junk", False),
                     })
                 return self._send(200, json.dumps({"channels": out, "total": len(out)}).encode(),
                     "application/json")
