@@ -1424,10 +1424,10 @@ def _looks_generic_junk(name: str) -> bool:
         return False
     return bool(_GENERIC_JUNK_RE.match(n))
 
-def _unified_registry() -> dict:
-    """Registre canonique {key -> {name, cat, logo, refs:[{src,id,q,qr}]}}, fusionné + caché."""
-    if _unified_cache["reg"] is not None and time.time() - _unified_cache["at"] < _UNIFIED_TTL:
-        return _unified_cache["reg"]
+def _scrape_registry() -> dict:
+    """Le POOL BRUT : scrape toutes les sources, fusionne par clé canonique. C'est la réserve dans
+    laquelle « mon catalogue » pioche ses flux par correspondance de nom — ce n'est PAS ce qui est
+    servi à Stremio (voir _unified_registry)."""
     reg: dict = {}
 
     def add(src, cid, raw):
@@ -1460,18 +1460,7 @@ def _unified_registry() -> dict:
         for c in vegetatv_channels():
             if not _is_foreign(c["name"]):
                 add("vegetatv", c["id"], c["name"])
-    st = _settings.get("stremio", {})
-    ov_names = st.get("channel_names", {})
-    ov_cats = st.get("category_overrides", {})
     for e in reg.values():
-        if ov_names.get(e["key"]):            # override de nom (édition dashboard)
-            e["name"] = ov_names[e["key"]]
-        e["cat"] = ov_cats.get(e["key"]) or _genre_for(e["name"])[0]
-        if e["cat"] not in _GENRE_CHOICES:      # override obsolète (ancienne taxonomie) -> ignoré
-            e["cat"] = _genre_for(e["name"])[0]
-        # Admin a renommé ou catégorisé à la main -> il a "vouché" pour cette chaîne, jamais auto-masquée.
-        vouched = e["key"] in ov_names or e["key"] in ov_cats
-        e["auto_junk"] = (not vouched) and _looks_generic_junk(e["name"])
         seen = set()
         refs = []
         for r in sorted(e["refs"], key=lambda r: -r["qr"]):   # dédup par (source, qualité)
@@ -1481,6 +1470,50 @@ def _unified_registry() -> dict:
             seen.add(sig)
             refs.append(r)
         e["refs"] = refs
+    return reg
+
+def _unified_registry() -> dict:
+    """Registre SERVI À STREMIO {key -> {name, cat, refs:[{src,id,q,qr}]}}.
+
+    Mode « mon catalogue » (st.stremio.catalog non vide) : liste EXPLICITE choisie par l'admin —
+    plus aucune chaîne n'apparaît juste parce qu'une source l'a scrapée. Chaque entrée du catalogue
+    pioche ses flux dans le pool brut (_scrape_registry) par correspondance de CLÉ CANONIQUE (même
+    nom normalisé) : ajoute une chaîne à ton catalogue -> dès qu'une source a un flux au nom
+    correspondant, il s'y attache tout seul, sans rien connecter à la main.
+
+    Catalogue vide/absent (jamais configuré) : ancien mode auto (tout ce qui est scrapé, filtré par
+    masquage manuel + détection de noms génériques) — pour ne rien casser tant que l'admin n'a pas
+    basculé en mode catalogue perso."""
+    if _unified_cache["reg"] is not None and time.time() - _unified_cache["at"] < _UNIFIED_TTL:
+        return _unified_cache["reg"]
+    raw = _scrape_registry()
+    st = _settings.get("stremio", {})
+    ov_names = st.get("channel_names", {})
+    ov_cats = st.get("category_overrides", {})
+    catalog = st.get("catalog") or {}
+
+    if catalog:
+        reg = {}
+        for key, meta in catalog.items():
+            src_e = raw.get(key)
+            reg[key] = {
+                "key": key,
+                "name": meta.get("name") or (src_e["name"] if src_e else key),
+                "refs": src_e["refs"] if src_e else [],
+            }
+    else:
+        reg = raw
+
+    for e in reg.values():
+        if ov_names.get(e["key"]):            # override de nom (édition dashboard)
+            e["name"] = ov_names[e["key"]]
+        e["cat"] = ov_cats.get(e["key"]) or _genre_for(e["name"])[0]
+        if e["cat"] not in _GENRE_CHOICES:      # override obsolète (ancienne taxonomie) -> ignoré
+            e["cat"] = _genre_for(e["name"])[0]
+        # Dans mon catalogue, ou renommée/catégorisée à la main -> l'admin a "vouché", jamais auto-masquée.
+        vouched = e["key"] in catalog or e["key"] in ov_names or e["key"] in ov_cats
+        e["auto_junk"] = (not vouched) and _looks_generic_junk(e["name"])
+        e["in_catalog"] = e["key"] in catalog
     _unified_cache.update(at=time.time(), reg=reg)
     return reg
 
@@ -1489,8 +1522,10 @@ def _unified_invalidate():
 
 def _hidden_keys() -> set:
     manual = {k for k, v in _settings.get("stremio", {}).get("hidden_channels", {}).items() if v}
-    auto = {e["key"] for e in _unified_registry().values() if e.get("auto_junk")}
-    return manual | auto
+    reg = _unified_registry()
+    auto = {e["key"] for e in reg.values() if e.get("auto_junk")}
+    unmatched = {e["key"] for e in reg.values() if not e["refs"]}   # catalogue : rien trouvé encore
+    return manual | auto | unmatched
 
 def _unified_by_cat(cat: str) -> list:
     out = [e for e in _unified_registry().values() if e["cat"] == cat]
@@ -2265,6 +2300,109 @@ class Handler(BaseHTTPRequestHandler):
             resp = json.dumps({"success": True}).encode()
             self._send(200, resp, "application/json")
             return
+        if path == "/api/catalog/seed":
+            # Import initial (une fois) : bascule en mode "mon catalogue" en le préremplissant avec
+            # tout ce qui est actuellement visible (non masqué, non générique) -> point de départ,
+            # l'admin élague ensuite depuis le dashboard. Sans effet si déjà en mode catalogue
+            # (utiliser /api/catalog/add pour ajouter au coup par coup), sauf si force=true.
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            st = _settings.setdefault("stremio", {})
+            if st.get("catalog") and not data.get("force"):
+                return self._send(409, json.dumps({"ok": False,
+                    "error": "catalogue déjà initialisé (force=true pour réimporter par-dessus)"}).encode(),
+                    "application/json")
+            raw = _scrape_registry()
+            manual_hidden = {k for k, v in st.get("hidden_channels", {}).items() if v}
+            cat = st.setdefault("catalog", {})
+            n = 0
+            for key, e in raw.items():
+                if key in manual_hidden or _looks_generic_junk(e["name"]):
+                    continue
+                cat[key] = {"name": st.get("channel_names", {}).get(key) or e["name"]}
+                n += 1
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True, "imported": n, "total": len(cat)}).encode(),
+                "application/json")
+        if path == "/api/catalog/add":
+            # Ajoute UNE chaîne à mon catalogue par son nom -> matchée automatiquement dès qu'une
+            # source a un flux au nom correspondant (aucun lien manuel à faire).
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            name = str(data.get("name") or "").strip()
+            if not name:
+                return self._send(400, json.dumps({"ok": False, "error": "nom requis"}).encode(), "application/json")
+            key = _canon_key(name) or _tvlogos_slug(name)
+            if not key:
+                return self._send(400, json.dumps({"ok": False, "error": "nom invalide"}).encode(), "application/json")
+            st = _settings.setdefault("stremio", {})
+            cat_field = str(data.get("category") or "").strip()
+            entry = {"name": name}
+            if cat_field in _GENRE_CHOICES:
+                st.setdefault("category_overrides", {})[key] = cat_field
+            st.setdefault("catalog", {})[key] = entry
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True, "key": key}).encode(), "application/json")
+        if path == "/api/catalog/bulk-add":
+            # Import en masse : plusieurs chaînes d'un coup (ex: coller une liste toute faite).
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            entries = data.get("entries")
+            if not isinstance(entries, list):
+                return self._send(400, json.dumps({"ok": False, "error": "liste 'entries' requise"}).encode(), "application/json")
+            st = _settings.setdefault("stremio", {})
+            cat_field_st = st.setdefault("catalog", {})
+            ov_cats = st.setdefault("category_overrides", {})
+            added, skipped = 0, 0
+            for it in entries:
+                if not isinstance(it, dict):
+                    continue
+                name = str(it.get("name") or "").strip()
+                if not name:
+                    skipped += 1
+                    continue
+                key = _canon_key(name) or _tvlogos_slug(name)
+                if not key:
+                    skipped += 1
+                    continue
+                cat_field = str(it.get("cat") or "").strip()
+                if cat_field in _GENRE_CHOICES:
+                    ov_cats[key] = cat_field
+                cat_field_st[key] = {"name": name}
+                added += 1
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True, "added": added, "skipped": skipped,
+                "total": len(cat_field_st)}).encode(), "application/json")
+        if path == "/api/catalog/remove":
+            # Retire une chaîne de mon catalogue (elle disparaît de Stremio même si une source la
+            # scrape toujours) — différent de "masquer" qui n'a de sens qu'en mode auto.
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            key = str(data.get("key") or "")
+            st = _settings.setdefault("stremio", {})
+            st.setdefault("catalog", {}).pop(key, None)
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
         if path == "/api/unified/edit":
             # Édition d'UNE chaîne unifiée : nom / logo / flux perso (merge partiel par canon_key).
             if not self._require_auth():
@@ -2793,7 +2931,8 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 return self._send(200, json.dumps(list(_manual_channels.values())).encode(), "application/json")
             if path == "/api/unified":
-                # Registre unifié (toutes sources fusionnées) pour le dashboard + le check des logos.
+                # Registre servi à Stremio (toutes sources fusionnées, ou "mon catalogue" si actif)
+                # pour le dashboard + le check des logos.
                 if not self._require_auth():
                     return
                 base = self._self_base()
@@ -2801,6 +2940,7 @@ class Handler(BaseHTTPRequestHandler):
                 ov_n, ov_l, ov_s = st.get("channel_names", {}), st.get("channel_logos", {}), st.get("channel_streams", {})
                 ov_c = st.get("category_overrides", {})
                 manual_hidden = {k for k, v in st.get("hidden_channels", {}).items() if v}
+                catalog_active = bool(st.get("catalog"))
                 out = []
                 for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
                     enc = urllib.parse.quote(_b64u(e["key"]), safe="")
@@ -2817,9 +2957,11 @@ class Handler(BaseHTTPRequestHandler):
                         "override_cat": e["key"] in ov_c,
                         "hidden": e["key"] in manual_hidden,
                         "auto_junk": e.get("auto_junk", False),
+                        "in_catalog": e.get("in_catalog", False),
+                        "refs": [{"src": r["src"], "id": r["id"], "q": r["q"]} for r in e["refs"]],
                     })
-                return self._send(200, json.dumps({"channels": out, "total": len(out)}).encode(),
-                    "application/json")
+                return self._send(200, json.dumps({"channels": out, "total": len(out),
+                    "catalog_active": catalog_active}).encode(), "application/json")
             if path == "/api/unified/toggle-hidden":
                 # Bascule rapide visible/masqué depuis une tuile (sans ouvrir le modal d'édition).
                 if not self._require_auth():
