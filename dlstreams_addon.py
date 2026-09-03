@@ -1314,6 +1314,119 @@ _CANON_COUNTRY = {"fr", "france", "french", "italy", "italia", "poland", "polska
     "greece", "portugal", "germany", "deutschland", "uk", "usa", "international", "gr", "be",
     "ca", "us", "ar"}
 
+# ============================================================
+# MON CATALOGUE — liste FIXE choisie par l'admin (pas un scrape). C'est la SEULE chose qui
+# apparaît dans Stremio en mode « catalogue perso » : chaque flux réellement disponible chez une
+# source (dlstreams/Vavoo/VegetaTv) ne s'y attache QUE s'il matche l'un de ces noms par clé
+# canonique — rien d'autre n'est jamais ajouté automatiquement.
+# Modifiable depuis le dashboard (Chaînes unifiées -> Catégories/ajout/retrait/import en masse),
+# ou en éditant cette liste directement puis en rappelant /api/catalog/reset.
+# ============================================================
+_DEFAULT_CATALOG: list[tuple[str, str]] = [
+    # ---- Général ----
+    ("TF1", "Général"),
+    ("France 2", "Général"),
+    ("France 3", "Général"),
+    ("France 4", "Général"),
+    ("France 5", "Général"),
+    ("Canal+", "Général"),
+    ("M6", "Général"),
+    ("Arte", "Général"),
+    ("W9", "Général"),
+    ("TMC", "Général"),
+    ("TFX", "Général"),
+    ("T18", "Général"),
+    ("13eme Rue", "Général"),
+    ("6ter", "Général"),
+    ("RMC Life", "Général"),
+    ("RMC Story", "Général"),
+    ("RMC Découverte", "Général"),
+    ("AB1", "Général"),
+    # ---- Sports ----
+    ("beIN Sports 1", "Sports"),
+    ("beIN Sports 2", "Sports"),
+    ("beIN Sports 3", "Sports"),
+    ("beIN Sports Max 4", "Sports"),
+    ("beIN Sports Max 5", "Sports"),
+    ("beIN Sports Max 6", "Sports"),
+    ("Ligue 1+", "Sports"),
+    ("Ligue 1+ 2", "Sports"),
+    ("Ligue 1+ 3", "Sports"),
+    ("RMC Sport 1", "Sports"),
+    ("RMC Sport 2", "Sports"),
+    ("L'Equipe", "Sports"),
+    ("Eurosport 1", "Sports"),
+    ("Eurosport 2", "Sports"),
+    ("Canal+ Foot", "Sports"),
+    ("Canal+ Premier League", "Sports"),
+    ("Canal+ Sport 360", "Sports"),
+    ("Canal+ Sport", "Sports"),
+    # ---- Documentaires ----
+    ("Planete+", "Documentaires"),
+    ("Planete A&E", "Documentaires"),
+    ("Planete+ CI", "Documentaires"),
+    ("National Geographic", "Documentaires"),
+    ("Nat Geo Wild", "Documentaires"),
+    ("BBC Earth", "Documentaires"),
+    ("Animaux", "Documentaires"),
+    ("Canal+ Docs", "Documentaires"),
+    ("Chasse Et Peche", "Documentaires"),
+    ("Discovery Channel", "Documentaires"),
+    ("Crime District", "Documentaires"),
+    ("Discovery ID", "Documentaires"),
+    ("Discovery Science", "Documentaires"),
+    ("Histoire", "Documentaires"),
+    ("Science Et Vie TV", "Documentaires"),
+    ("Toute L'Histoire", "Documentaires"),
+    ("Ushuaïa TV", "Documentaires"),
+    # ---- Films ----
+    ("SyFy", "Films"),
+    ("Action", "Films"),
+    ("Canal+ Cinema", "Films"),
+    ("Canal+ Grand Ecran", "Films"),
+    ("Cine+ Emotion", "Films"),
+    ("Cine+ Premier", "Films"),
+    ("Cine+ Classic", "Films"),
+    ("Cine+ Famiz", "Films"),
+    ("Polar+", "Films"),
+    ("OCS Max", "Films"),
+    ("Serie Club", "Films"),
+    ("TCM Cinema", "Films"),
+    ("TF1 Series Films", "Films"),
+    ("WB TV", "Films"),
+    ("Cine+ Frisson", "Films"),
+    # ---- Informations ----
+    ("BFM Business", "Informations"),
+    ("BFM TV", "Informations"),
+    ("CNews", "Informations"),
+    ("EuroNews", "Informations"),
+    ("France 24", "Informations"),
+    ("France Info", "Informations"),
+    ("InfoSport+", "Informations"),
+    ("LCI", "Informations"),
+    ("20 Minutes TV LD", "Informations"),
+    ("Africanews French", "Informations"),
+    ("Africa 24", "Informations"),
+    ("LCP", "Informations"),
+]
+# Incrémenter cette version RÉAPPLIQUE _DEFAULT_CATALOG au prochain démarrage (utile si la liste
+# ci-dessus est retouchée dans le code) -> jamais au détriment des ajouts/retraits faits depuis le
+# dashboard APRÈS la dernière application (le marqueur n'est bumpé qu'à un vrai changement de liste).
+_CATALOG_VERSION = 2
+
+def _apply_default_catalog():
+    """Écrase 'mon catalogue' avec EXACTEMENT _DEFAULT_CATALOG (mêmes clés que /api/catalog/reset)."""
+    st = _settings.setdefault("stremio", {})
+    st["catalog"] = {}
+    ov_cats = st.setdefault("category_overrides", {})
+    for _name, _cat_name in _DEFAULT_CATALOG:
+        _key = _canon_key(_name) or _tvlogos_slug(_name)
+        if not _key:
+            continue
+        st["catalog"][_key] = {"name": _name}
+        ov_cats[_key] = _cat_name
+    st["catalog_version"] = _CATALOG_VERSION
+
 _CANON_MERGE = {}
 for _i in range(1, 20):
     _CANON_MERGE[f"beinmax{_i}"] = f"beinsportmax{_i}"        # « beIN MAX 5 » = « beIN Sports Max 5 »
@@ -2329,6 +2442,16 @@ class Handler(BaseHTTPRequestHandler):
             _unified_invalidate()
             return self._send(200, json.dumps({"ok": True, "imported": n, "total": len(cat)}).encode(),
                 "application/json")
+        if path == "/api/catalog/reset":
+            # EFFACE le catalogue actuel et le remet EXACTEMENT à _DEFAULT_CATALOG (liste fixe codée
+            # en dur, pas un scrape) -> plus rien d'imprévu, uniquement les chaînes voulues.
+            if not self._require_auth():
+                return
+            _apply_default_catalog()
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True,
+                "total": len(_settings["stremio"]["catalog"])}).encode(), "application/json")
         if path == "/api/catalog/add":
             # Ajoute UNE chaîne à mon catalogue par son nom -> matchée automatiquement dès qu'une
             # source a un flux au nom correspondant (aucun lien manuel à faire).
@@ -3510,6 +3633,10 @@ def main():
     _hist_load()
     _sessions_load()
     _settings_load()
+    if _settings.get("stremio", {}).get("catalog_version") != _CATALOG_VERSION:
+        _apply_default_catalog()
+        _settings_save()
+        log.info(f"Catalogue par défaut appliqué automatiquement ({len(_DEFAULT_CATALOG)} chaînes)")
     _epg_load()
     _playlists_load()
     _tokens_load()
