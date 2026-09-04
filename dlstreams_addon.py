@@ -1342,6 +1342,13 @@ _DEFAULT_CATALOG: list[tuple[str, str]] = [
     ("RMC Story", "Général"),
     ("RMC Découverte", "Général"),
     ("AB1", "Général"),
+    ("AB3", "Général"),
+    ("Comedie+", "Général"),
+    ("Novo 19", "Général"),
+    ("E! Entertainment", "Général"),
+    ("Paris Premiere", "Général"),
+    ("RTL 9", "Général"),
+    ("Teva", "Général"),
     # ---- Sports ----
     ("beIN Sports 1", "Sports"),
     ("beIN Sports 2", "Sports"),
@@ -1361,6 +1368,9 @@ _DEFAULT_CATALOG: list[tuple[str, str]] = [
     ("Canal+ Premier League", "Sports"),
     ("Canal+ Sport 360", "Sports"),
     ("Canal+ Sport", "Sports"),
+    ("Auto Moto", "Sports"),
+    ("Equidia Live", "Sports"),
+    ("Golf+", "Sports"),
     # ---- Documentaires ----
     ("Planete+", "Documentaires"),
     ("Planete A&E", "Documentaires"),
@@ -1412,18 +1422,20 @@ _DEFAULT_CATALOG: list[tuple[str, str]] = [
 # Incrémenter cette version RÉAPPLIQUE _DEFAULT_CATALOG au prochain démarrage (utile si la liste
 # ci-dessus est retouchée dans le code) -> jamais au détriment des ajouts/retraits faits depuis le
 # dashboard APRÈS la dernière application (le marqueur n'est bumpé qu'à un vrai changement de liste).
-_CATALOG_VERSION = 2
+_CATALOG_VERSION = 3
 
 def _apply_default_catalog():
-    """Écrase 'mon catalogue' avec EXACTEMENT _DEFAULT_CATALOG (mêmes clés que /api/catalog/reset)."""
+    """Écrase 'mon catalogue' avec EXACTEMENT _DEFAULT_CATALOG (mêmes clés que /api/catalog/reset).
+    L'ordre de la liste est conservé (champ "order") : Stremio ET le dashboard trient dessus au lieu
+    de l'alphabet, pour rester calés sur l'ordre tvmio d'origine."""
     st = _settings.setdefault("stremio", {})
     st["catalog"] = {}
     ov_cats = st.setdefault("category_overrides", {})
-    for _name, _cat_name in _DEFAULT_CATALOG:
+    for _i, (_name, _cat_name) in enumerate(_DEFAULT_CATALOG):
         _key = _canon_key(_name) or _tvlogos_slug(_name)
         if not _key:
             continue
-        st["catalog"][_key] = {"name": _name}
+        st["catalog"][_key] = {"name": _name, "order": _i}
         ov_cats[_key] = _cat_name
     st["catalog_version"] = _CATALOG_VERSION
 
@@ -1613,11 +1625,13 @@ def _unified_registry() -> dict:
                 "key": key,
                 "name": meta.get("name") or (src_e["name"] if src_e else key),
                 "refs": src_e["refs"] if src_e else [],
+                "order": meta.get("order", 9999),
             }
     else:
         reg = raw
 
     for e in reg.values():
+        e.setdefault("order", 9999)
         if ov_names.get(e["key"]):            # override de nom (édition dashboard)
             e["name"] = ov_names[e["key"]]
         e["cat"] = ov_cats.get(e["key"]) or _genre_for(e["name"])[0]
@@ -1642,7 +1656,7 @@ def _hidden_keys() -> set:
 
 def _unified_by_cat(cat: str) -> list:
     out = [e for e in _unified_registry().values() if e["cat"] == cat]
-    out.sort(key=lambda e: e["name"].lower())
+    out.sort(key=lambda e: (e.get("order", 9999), e["name"].lower()))
     return out
 
 def unified_categories() -> list:
@@ -3065,7 +3079,7 @@ class Handler(BaseHTTPRequestHandler):
                 manual_hidden = {k for k, v in st.get("hidden_channels", {}).items() if v}
                 catalog_active = bool(st.get("catalog"))
                 out = []
-                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
+                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e.get("order", 9999), e["name"].lower())):
                     enc = urllib.parse.quote(_b64u(e["key"]), safe="")
                     out.append({
                         "key": e["key"], "name": e["name"], "cat": e["cat"],
@@ -3131,7 +3145,7 @@ class Handler(BaseHTTPRequestHandler):
                 st = _settings.get("stremio", {})
                 ov_n, ov_l, ov_s = st.get("channel_names", {}), st.get("channel_logos", {}), st.get("channel_streams", {})
                 unified = []
-                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
+                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e.get("order", 9999), e["name"].lower())):
                     enc = urllib.parse.quote(_b64u(e["key"]), safe="")
                     unified.append({"key": e["key"], "name": e["name"], "cat": e["cat"],
                         "logo": f"{base}/logo/unified/{enc}.png",
@@ -3319,7 +3333,7 @@ class Handler(BaseHTTPRequestHandler):
                         entries = _unified_by_cat(g)
                     else:                          # tout le catalogue, rangé par catégorie
                         entries = sorted(_unified_registry().values(),
-                            key=lambda e: (_GENRE_CHOICES.index(e["cat"]) if e["cat"] in _GENRE_CHOICES else 99, e["name"].lower()))
+                            key=lambda e: (_GENRE_CHOICES.index(e["cat"]) if e["cat"] in _GENRE_CHOICES else 99, e.get("order", 9999), e["name"].lower()))
                     hidden = _hidden_keys()
                     if hidden:
                         entries = [e for e in entries if e["key"] not in hidden]
