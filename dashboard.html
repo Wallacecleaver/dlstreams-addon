@@ -1263,6 +1263,7 @@
           <label>Catégorie</label>
           <select id="uni-m-cat">
             <option value="Général">Général</option>
+            <option value="Enfant">Enfant</option>
             <option value="Sports">Sports</option>
             <option value="Documentaires">Documentaires</option>
             <option value="Films">Films</option>
@@ -1819,10 +1820,15 @@ function renderCatalogBanner(){
     const nomatchLabel = $('#uni-nomatch-label');
     if (_CATALOG_ACTIVE) {
         $('#uni-page-title').textContent = 'Mon catalogue';
-        $('#uni-page-sub').textContent = 'Ta propre liste de chaînes — les flux des sources s\'y attachent automatiquement par nom, rien d\'autre n\'apparaît dans Stremio';
+        $('#uni-page-sub').textContent = 'Ta liste FIXE de chaînes (calée sur tvmio) — les flux des sources s\'y attachent automatiquement par nom, rien d\'autre n\'apparaît jamais dans Stremio';
         addForm.style.display = 'block';
         nomatchLabel.style.display = 'flex';
-        box.innerHTML = '';
+        box.innerHTML = `<div class="card" style="padding:12px 16px;margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="font-size:12px;color:var(--text2)">${_UNI.length} chaîne${_UNI.length>1?'s':''} dans ton catalogue — appliqué automatiquement à chaque redémarrage, pas besoin d'y toucher</div>
+                <button class="btn-outline-sm" style="width:auto;padding:6px 12px" onclick="resetCatalogToDefault()">♻️ Effacer et remettre la liste par défaut</button>
+            </div>
+        </div>`;
     } else {
         $('#uni-page-title').textContent = 'Chaînes unifiées';
         $('#uni-page-sub').textContent = 'Toutes sources fusionnées automatiquement (façon tvmio) — vérifie les logos et les catégories';
@@ -1832,20 +1838,20 @@ function renderCatalogBanner(){
             <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
                 <div>
                     <div style="font-weight:600;color:var(--text)">📋 Mode automatique actif</div>
-                    <div style="font-size:13px;color:var(--text2);margin-top:4px">Tout ce que les sources publient apparaît ici. Passe en <b>mon catalogue</b> pour choisir toi-même exactement quelles chaînes existent — les flux s'y attacheront automatiquement par correspondance de nom.</div>
+                    <div style="font-size:13px;color:var(--text2);margin-top:4px">Ça ne devrait plus arriver après un redémarrage (le catalogue fixe s'applique tout seul) — si tu vois ça quand même, clique pour le forcer manuellement.</div>
                 </div>
-                <button class="btn btn-red" style="width:auto;padding:10px 18px;flex-shrink:0" onclick="startCatalogMode()">📋 Passer à mon catalogue</button>
+                <button class="btn btn-red" style="width:auto;padding:10px 18px;flex-shrink:0" onclick="resetCatalogToDefault()">📋 Activer mon catalogue</button>
             </div>
         </div>`;
     }
 }
-async function startCatalogMode(){
-    if (!confirm('Ça importe toutes les chaînes actuellement visibles (non masquées, non génériques) comme point de départ de ton catalogue. Tu pourras ensuite en retirer ou en ajouter librement. Continuer ?')) return;
+async function resetCatalogToDefault(){
+    if (!confirm('Ça EFFACE tout le catalogue actuel et le remplace EXACTEMENT par la liste fixe définie dans le code. Continuer ?')) return;
     try {
-        const r = await apiFetch('/api/catalog/seed', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+        const r = await apiFetch('/api/catalog/reset', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
         const d = await r.json();
         if (!d.ok) throw new Error(d.error || 'échec');
-        toast(d.imported + ' chaînes importées dans ton catalogue', 'success');
+        toast('Catalogue réinitialisé : ' + d.total + ' chaînes', 'success');
         _UNI = []; loadUnified();
     } catch(e){ if(e.message!=='unauthenticated') toast('Erreur : '+e.message, 'error'); }
 }
@@ -2341,7 +2347,7 @@ async function loadCatPage(){
         renderCatPage();
     } catch(err){ if(err.message!=='unauthenticated') box.innerHTML = '<div class="fav-empty">Erreur de chargement</div>'; }
 }
-const CAT_CHOICES = ['Général', 'Sports', 'Documentaires', 'Films', 'Informations'];
+const CAT_CHOICES = ['Général', 'Enfant', 'Sports', 'Documentaires', 'Films', 'Informations'];
 function renderCatPage(){
     const box = $('#catp-list'); if(!box || !_CATP_DATA) return;
     const q = ($('#catp-q').value || '').toLowerCase().trim();
