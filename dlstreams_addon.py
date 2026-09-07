@@ -217,7 +217,7 @@ _FOLDER2GENRE = {
     "GENERAL": "Général",
 }
 # mots de qualité / statut à ignorer dans le rapprochement
-_LOGO_NOISE = {"hd", "fhd", "uhd", "4k", "hevc", "h264", "h265", "vip", "mcdonald",
+_LOGO_NOISE = {"hd", "fhd", "uhd", "4k", "hdr", "hevc", "h264", "h265", "vip", "mcdonald",
     "mcdonalds", "backup", "event", "events", "only", "during", "live", "direct",
     "tv", "access", "sd"}
 # tags PAYS : retirés seulement s'ils ne sont pas en 1re position (garder "France 2/3/4/5")
@@ -251,7 +251,7 @@ def _logo_key(name: str) -> str:
 
 _LOCAL_LOGO: dict[str, tuple[str, str]] = {}   # key -> (genre, chemin absolu .png)
 
-_QUALITY_TAG_RE = re.compile(r"\b(?:4k|8k|fhd|uhd|hd|sd)\b", re.I)
+_QUALITY_TAG_RE = re.compile(r"\b(?:4k|8k|hdr|fhd|uhd|hd|sd)\b", re.I)
 
 def _init_local_logos():
     _LOCAL_LOGO.clear()
@@ -1354,6 +1354,7 @@ def _vegeta_warm():
 # ============================================================
 _QUALITY_RE = [
     (re.compile(r"\b(4k|uhd|2160p?|8k|ultra\s*hd)\b", re.I), ("4K", 4)),
+    (re.compile(r"\bhdr\b", re.I), ("HDR", 4)),
     (re.compile(r"\b(fhd|1080p?|full\s*hd)\b", re.I), ("FHD", 3)),
     (re.compile(r"\b(hd|720p?)\b", re.I), ("HD", 2)),
     (re.compile(r"\b(sd|480p?|360p?|ld)\b", re.I), ("SD", 1)),
@@ -1384,7 +1385,7 @@ def _stream_entry(emoji: str, provider: str, quality: str, detail: str, url: str
 # chaînes canoniques (par nom normalisé). 1 chaîne = tous les flux (toutes sources) au clic,
 # rangées par catégorie. Les variantes de qualité deviennent des flux, pas des chaînes.
 # ============================================================
-_CANON_NOISE = {"hd", "fhd", "uhd", "4k", "8k", "sd", "720", "1080", "2160", "720p", "1080p",
+_CANON_NOISE = {"hd", "fhd", "uhd", "4k", "8k", "hdr", "sd", "720", "1080", "2160", "720p", "1080p",
     "2160p", "hevc", "h264", "h265", "vip", "raw", "local", "backup", "event", "events", "only",
     "during", "live", "direct", "access", "mcdonald", "mcdonalds", "tv", "s1", "s2", "s3", "ld", "rec"}
 _CANON_COUNTRY = {"fr", "france", "french", "italy", "italia", "poland", "polska", "spain", "espana",
@@ -1449,7 +1450,6 @@ _DEFAULT_CATALOG: list[tuple[str, str]] = [
     # ---- Documentaires ----
     ("Planete+", "Documentaires"),
     ("Planete A&E", "Documentaires"),
-    ("Planete+ CI", "Documentaires"),
     ("National Geographic", "Documentaires"),
     ("Nat Geo Wild", "Documentaires"),
     ("BBC Earth", "Documentaires"),
@@ -1509,7 +1509,7 @@ _DEFAULT_CATALOG: list[tuple[str, str]] = [
 # Incrémenter cette version RÉAPPLIQUE _DEFAULT_CATALOG au prochain démarrage (utile si la liste
 # ci-dessus est retouchée dans le code) -> jamais au détriment des ajouts/retraits faits depuis le
 # dashboard APRÈS la dernière application (le marqueur n'est bumpé qu'à un vrai changement de liste).
-_CATALOG_VERSION = 5
+_CATALOG_VERSION = 6
 
 def _apply_default_catalog():
     """Écrase 'mon catalogue' avec EXACTEMENT _DEFAULT_CATALOG (mêmes clés que /api/catalog/reset).
@@ -2231,7 +2231,7 @@ def _tvlogos_slug(name: str) -> str:
     s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().lower()
     s = s.replace("+", " plus ")
     s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd)(\d+)\b", r" \2", s)   # "sd1" -> "1" (garde le numéro)
-    s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd|fr|vip|raw|backup|event|only)\b", " ", s)
+    s = re.sub(r"\b(hd|fhd|uhd|4k|8k|hdr|sd|fr|vip|raw|backup|event|only)\b", " ", s)
     slug = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
     return _TVLOGOS_SLUG_ALIAS.get(slug, slug)
 
