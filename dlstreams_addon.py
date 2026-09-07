@@ -223,7 +223,8 @@ _LOGO_NOISE = {"hd", "fhd", "uhd", "4k", "hevc", "h264", "h265", "vip", "mcdonal
 # tags PAYS : retirés seulement s'ils ne sont pas en 1re position (garder "France 2/3/4/5")
 _LOGO_COUNTRY = {"fr", "france", "french", "italy", "italia", "poland", "polska", "spain", "espana",
     "greece", "portugal", "germany", "deutschland", "uk", "usa", "international", "gr"}
-_LOGO_ALIAS = {"canalfrance": "canal", "canalplus": "canal"}
+_LOGO_ALIAS = {"canalfrance": "canal", "canalplus": "canal", "cinefamiz": "cinefamily",
+    "cinepluspremier": "cinepremier"}
 
 def _logo_key(name: str) -> str:
     """Clé tolérante de rapprochement nom de chaîne <-> nom de fichier logo.
@@ -250,6 +251,8 @@ def _logo_key(name: str) -> str:
 
 _LOCAL_LOGO: dict[str, tuple[str, str]] = {}   # key -> (genre, chemin absolu .png)
 
+_QUALITY_TAG_RE = re.compile(r"\b(?:4k|8k|fhd|uhd|hd|sd)\b", re.I)
+
 def _init_local_logos():
     _LOCAL_LOGO.clear()
     try:
@@ -258,7 +261,10 @@ def _init_local_logos():
             d = os.path.join(_LOGOS_DIR, cat)
             if not genre or not os.path.isdir(d):
                 continue
-            for f in os.listdir(d):
+            # Variante SANS tag qualité (4K/HD/FHD...) en premier -> gagne sur les doublons
+            # (ex: "tf1 logo.png" avant "tf1 4k logo.png" pour la même chaîne "TF1").
+            files = sorted(os.listdir(d), key=lambda f: bool(_QUALITY_TAG_RE.search(f)))
+            for f in files:
                 if f.lower().endswith(".png"):
                     k = _logo_key(f)
                     if k and k not in _LOCAL_LOGO:
@@ -267,6 +273,73 @@ def _init_local_logos():
         pass
 
 _init_local_logos()
+
+# ============================================================
+# POSTERS CURÉS (dossier POSTERS/<CATEGORIE>/*.png, sous-dossier "final poster" prioritaire s'il
+# existe) — image dédiée pour la tuile du catalogue Stremio, DISTINCTE du logo (transparent, pensé
+# pour être petit) : le poster peut être un visuel plus travaillé/coloré. Si rien n'est trouvé ici,
+# on retombe sur le logo existant (_logo_bytes) -> aucune régression si le dossier est absent/vide.
+# ============================================================
+_POSTERS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "POSTERS")
+_POSTER_JUNK_RE = re.compile(r"tpai|clipboard|topaz|upscale", re.I)
+
+def _poster_key(filename: str) -> str:
+    """Comme _logo_key, mais retire un suffixe 'poster'/'final poster'/'... source' au lieu de 'logo'."""
+    s = filename.rsplit(".", 1)[0]
+    s = re.sub(r"[\s_-]*(?:final\s*poster(?:\s*source)?|poster)[\s_-]*$", "", s, flags=re.I)
+    return _logo_key(s + ".png")   # réutilise exactement la même normalisation ensuite
+
+_LOCAL_POSTER: dict[str, tuple[str, str]] = {}   # key -> (genre, chemin absolu .png/.jpg)
+
+def _init_local_posters():
+    _LOCAL_POSTER.clear()
+    try:
+        for cat in os.listdir(_POSTERS_DIR):
+            genre = _FOLDER2GENRE.get(cat.upper())
+            d = os.path.join(_POSTERS_DIR, cat)
+            if not genre or not os.path.isdir(d):
+                continue
+            # Le sous-dossier "final poster" (versions finies) est scanné EN PREMIER -> il gagne
+            # sur les brouillons/doublons du dossier racine (le premier trouvé fait foi ci-dessous).
+            subdirs = [os.path.join(d, s) for s in os.listdir(d)
+                if os.path.isdir(os.path.join(d, s)) and "final" in s.lower() and "poster" in s.lower()]
+            for scan_dir in subdirs + [d]:
+                files = sorted(os.listdir(scan_dir), key=lambda f: bool(_QUALITY_TAG_RE.search(f)))
+                for f in files:
+                    fl = f.lower()
+                    if not (fl.endswith(".png") or fl.endswith(".jpg") or fl.endswith(".jpeg")):
+                        continue
+                    if _POSTER_JUNK_RE.search(f):   # brouillons IA / exports intermédiaires -> ignorés
+                        continue
+                    k = _poster_key(f)
+                    if k and k not in _LOCAL_POSTER:
+                        _LOCAL_POSTER[k] = (genre, os.path.join(scan_dir, f))
+    except Exception:
+        pass
+
+_init_local_posters()
+
+_local_poster_lookup_cache: dict[str, tuple[str, str] | None] = {}
+
+def _local_poster_for(name: str):
+    """(chemin, genre) si un poster curé correspond au nom, sinon None."""
+    if not name:
+        return None
+    if name in _local_poster_lookup_cache:
+        return _local_poster_lookup_cache[name]
+    hit = _LOCAL_POSTER.get(_logo_key(name))
+    res = (hit[1], hit[0]) if hit else None
+    if len(_local_poster_lookup_cache) > 4000:
+        _local_poster_lookup_cache.clear()
+    _local_poster_lookup_cache[name] = res
+    return res
+
+def _curated_poster_bytes(name: str) -> bytes | None:
+    hit = _local_poster_for(name)
+    if not hit:
+        return None
+    b = _read_local_logo(hit[0])   # même lecteur/cache que les logos, marche pour .jpg aussi
+    return b
 
 _local_logo_lookup_cache: dict[str, tuple[str, str] | None] = {}
 
@@ -1418,11 +1491,25 @@ _DEFAULT_CATALOG: list[tuple[str, str]] = [
     ("Africanews French", "Informations"),
     ("Africa 24", "Informations"),
     ("LCP", "Informations"),
+    # ---- Général (jeunesse / musique) ----
+    ("Canal J", "Général"),
+    ("Canal+ Kids", "Général"),
+    ("Disney Channel", "Général"),
+    ("Gulli", "Général"),
+    ("ADN TV+", "Général"),
+    ("Nickelodeon", "Général"),
+    ("Tiji", "Général"),
+    ("CStar", "Général"),
+    ("Trace Urban", "Général"),
+    ("Trace Latina", "Général"),
+    ("Trace Gospel", "Général"),
+    ("Trace Mziki", "Général"),
+    ("Trace Toca", "Général"),
 ]
 # Incrémenter cette version RÉAPPLIQUE _DEFAULT_CATALOG au prochain démarrage (utile si la liste
 # ci-dessus est retouchée dans le code) -> jamais au détriment des ajouts/retraits faits depuis le
 # dashboard APRÈS la dernière application (le marqueur n'est bumpé qu'à un vrai changement de liste).
-_CATALOG_VERSION = 3
+_CATALOG_VERSION = 4
 
 def _apply_default_catalog():
     """Écrase 'mon catalogue' avec EXACTEMENT _DEFAULT_CATALOG (mêmes clés que /api/catalog/reset).
@@ -2129,12 +2216,24 @@ def _now_playing() -> list[dict]:
 _TVLOGOS_BASE = "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/france/"
 _remote_logo_cache: dict = {}   # slug -> bytes | None (négatif caché)
 
+_TVLOGOS_SLUG_ALIAS = {
+    # slug auto-généré -> vrai nom de fichier chez tv-logo/tv-logos (vérifié) : la convention
+    # officielle n'est pas toujours "un mot = un tiret", ces cas sont irréguliers.
+    "cnews": "c-news",                    # c-news-fr.png, pas cnews-fr.png
+    "france-info": "franceinfo",          # franceinfo-fr.png, pas france-info-fr.png
+    "novo-19": "novo19",                  # novo19-fr.png, numéro collé au nom
+    "equidia-live": "equidia",            # equidia-fr.png (pas de variante "live" dans le repo)
+    "l-equipe": "lequipe",                # lequipe-fr.png, pas de tiret après le "l"
+    "cstar": "c-star",                    # c-star-fr.png
+}
+
 def _tvlogos_slug(name: str) -> str:
     s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().lower()
     s = s.replace("+", " plus ")
     s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd)(\d+)\b", r" \2", s)   # "sd1" -> "1" (garde le numéro)
     s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd|fr|vip|raw|backup|event|only)\b", " ", s)
-    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    slug = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return _TVLOGOS_SLUG_ALIAS.get(slug, slug)
 
 def _remote_logo(name: str):
     """Fallback logo distant via tv-logo/tv-logos (France). 2 variantes de nom, résultat caché."""
@@ -2997,6 +3096,15 @@ class Handler(BaseHTTPRequestHandler):
                     c = next((x for x in channels() if str(x.get("id")) == str(cid)),
                         {"id": cid, "name": f"dlstreams {cid}", "logo": ""})
                 return self._send(200, _logo_bytes(src, c), "image/png", True)
+            if path.startswith("/poster/unified/") and path.endswith(".png"):
+                key = _unb64u(urllib.parse.unquote(path[len("/poster/unified/"):-4]))
+                e = _unified_registry().get(key)
+                name = e["name"] if e else "TV"
+                curated = _curated_poster_bytes(name)
+                if curated:
+                    return self._send(200, curated, "image/png", True)
+                return self._send(200, _logo_bytes("unified", {"id": key, "name": name, "logo": ""}),
+                    "image/png", True)
             if path.startswith("/poster/") and path.endswith(".png"):
                 pname = urllib.parse.unquote(path[len("/poster/"):-4])
                 return self._send(200, _poster_get(pname), "image/png", True)
@@ -3564,11 +3672,12 @@ class Handler(BaseHTTPRequestHandler):
         srcs = sorted({r["src"] for r in e["refs"]})
         src_lbl = {"dlstreams": "dlstreams", "vavoo": "Vavoo", "vegetatv": "Vegeta TV"}
         quals = list(dict.fromkeys(r["q"] for r in e["refs"] if r["q"]))
-        poster = f"{base}/logo/unified/{urllib.parse.quote(cid, safe='')}.png"
+        logo = f"{base}/logo/unified/{urllib.parse.quote(cid, safe='')}.png"
+        poster = f"{base}/poster/unified/{urllib.parse.quote(cid, safe='')}.png"
         desc = (f"{e['name']} — {len(e['refs'])} flux "
             f"({', '.join(src_lbl.get(s, s) for s in srcs)})"
             + (f" · {'/'.join(quals)}" if quals else "") + ".")
-        return {"id": f"u:{cid}", "type": "tv", "name": e["name"], "poster": poster, "logo": poster,
+        return {"id": f"u:{cid}", "type": "tv", "name": e["name"], "poster": poster, "logo": logo,
             "posterShape": "landscape", "background": poster, "description": desc,
             "releaseInfo": "En direct", "genres": [e["cat"]]}
 
