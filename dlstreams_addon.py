@@ -47,6 +47,19 @@ SITE = "https://dlstreams.st"
 MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "").rstrip("/")
 MEDIAFLOW_PASSWORD = os.environ.get("MEDIAFLOW_PASSWORD", "")
 
+def _mfp_wrap(mfp_url: str, mfp_pass: str, src_url: str, referer: str = "", ua: str = "") -> str:
+    """Emballe une source HLS via le MediaFlow Proxy PERSONNEL de l'utilisateur (mfp_url/mfp_pass
+    viennent de sa propre config, pas de l'admin). `""` si l'un des deux manque."""
+    if not mfp_url or not mfp_pass:
+        return ""
+    params = {"api_password": mfp_pass, "d": src_url}
+    if ua:
+        params["h_user-agent"] = ua
+    if referer:
+        params["h_referer"] = referer
+        params["h_origin"] = referer
+    return f"{mfp_url.rstrip('/')}/proxy/hls/manifest.m3u8?{urllib.parse.urlencode(params)}"
+
 def _mfp_hls(src_url: str, referer: str = "", ua: str = "") -> str:
     """Emballe une source HLS via MFP Light (/proxy/hls) : re-proxifie les segments avec les bons
     headers. `""` si MFP non configuré. Les lignes contendues ferment la connexion ~26s ; en HLS le
@@ -199,16 +212,16 @@ _init_logo_mapping()
 # ============================================================
 _LOGOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LOGOS")
 _FOLDER2GENRE = {
-    "SPORT": "Sports", "CINEMA": "Cinéma", "DOCU": "Documentaire",
-    "INFOS": "Actualités", "JEUNESSE": "Jeunesse", "MUSIC": "Musique",
-    "GENERAL": "Télévision",
+    "SPORT": "Sports", "CINEMA": "Films", "DOCU": "Documentaires",
+    "INFOS": "Informations", "JEUNESSE": "Général", "MUSIC": "Général",
+    "GENERAL": "Général",
 }
 # mots de qualité / statut à ignorer dans le rapprochement
 _LOGO_NOISE = {"hd", "fhd", "uhd", "4k", "hevc", "h264", "h265", "vip", "mcdonald",
     "mcdonalds", "backup", "event", "events", "only", "during", "live", "direct",
-    "tv", "access"}
+    "tv", "access", "sd"}
 # tags PAYS : retirés seulement s'ils ne sont pas en 1re position (garder "France 2/3/4/5")
-_LOGO_COUNTRY = {"france", "italy", "italia", "poland", "polska", "spain", "espana",
+_LOGO_COUNTRY = {"fr", "france", "french", "italy", "italia", "poland", "polska", "spain", "espana",
     "greece", "portugal", "germany", "deutschland", "uk", "usa", "international", "gr"}
 _LOGO_ALIAS = {"canalfrance": "canal", "canalplus": "canal"}
 
@@ -216,7 +229,8 @@ def _logo_key(name: str) -> str:
     """Clé tolérante de rapprochement nom de chaîne <-> nom de fichier logo.
 
     Gère les particularités Vavoo (suffixe provider ` |D`/`|E`/`|H`, tags
-    `(BACKUP)`/`[EVENT ONLY]`, qualité HD/FHD, tag pays en fin de nom)."""
+    `(BACKUP)`/`[EVENT ONLY]`, qualité HD/FHD/SD (même collée à un numéro : « SD1 »),
+    tag pays en fin de nom, mots répétés type « ... FR SPORTS »)."""
     import unicodedata, re
     s = name.rsplit(".", 1)[0]
     s = re.sub(r"[\s_-]*logo[\s_-]*$", "", s, flags=re.I)
@@ -224,9 +238,13 @@ def _logo_key(name: str) -> str:
     s = re.sub(r"\(.*?\)|\[.*?\]", "", s)               # (BACKUP) [EVENT ONLY]
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     s = s.replace("+", " ")
+    # Tag qualité collé à un numéro ("SD1", "HD2", "FHD3") -> retire le tag, garde le numéro
+    # (sinon "SD1" ne matche jamais le fichier logo "... 1 logo.png").
+    s = re.sub(r"\b(?:hd|fhd|uhd|sd|4k|8k)(\d+)\b", r" \1", s)
     parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _LOGO_NOISE]
     parts = [w for i, w in enumerate(parts) if not (i > 0 and w in _LOGO_COUNTRY)]
     parts = ["sport" if w == "sports" else w for w in parts]
+    parts = list(dict.fromkeys(parts))   # dédoublonne (ex: suffixe "... FR SPORTS" répète "sport")
     k = "".join(parts)
     return _LOGO_ALIAS.get(k, k)
 
@@ -494,8 +512,7 @@ def _epg_slot(dl_id) -> tuple[dict | None, dict | None]:
                 nxt = p
     return cur, nxt
 
-_GENRE_CHOICES = ["Sports", "Actualités", "Films & Séries", "Cinéma", "Divertissement",
-    "Musique", "Documentaire", "Jeunesse", "Télévision"]
+_GENRE_CHOICES = ["Général", "Sports", "Documentaires", "Films", "Informations"]
 
 def _genres_for(name: str) -> list[str]:
     key = name.lower()
@@ -551,27 +568,15 @@ def _genre_for(name: str) -> list[str]:
         return ["Sports"]
     if any(k in n for k in ["news", "info", "bfm", "cnews", "france info", "cnn", "bbc", "sky news",
         "al jazeera", "rt ", "euronews", "lcp", "public senat", "parlement"]):
-        return ["Actualités"]
-    if any(k in n for k in ["kids", "gulli", "cartoon", "piwi", "tiiji", "disney", "nickelodeon",
-        "boomerang", "canal j", "junior", "télétoon", "télétoon"]):
-        return ["Jeunesse"]
+        return ["Informations"]
     if any(k in n for k in ["cinema", "cinéma", "cine+", "ciné+", "ocs", "paramount", "action",
-        "horror", "polar", "classic", "grand écran", "grand ecran", "premiere"]):
-        return ["Cinéma"]
-    if n in {"tf1", "france 2", "france 3", "france 4", "france 5", "m6", "tmc", "w9", "arte",
-        "c8", "6ter", "canal+ france"}:
-        return ["Télévision"]
-    if any(k in n for k in ["film", "séries", "series", "family", "série club", "téléfilm", "canal+"]):
-        return ["Films & Séries"]
-    if any(k in n for k in ["musique", "music", "mtv", "radio", "clip", "melody", "nrj hits", "fun tv"]):
-        return ["Musique"]
+        "horror", "polar", "classic", "grand écran", "grand ecran", "premiere",
+        "film", "séries", "series", "family", "série club", "téléfilm"]):
+        return ["Films"]
     if any(k in n for k in ["découverte", "decouverte", "documentaire", "voyage", "histoire",
         "geo", "planète", "planete", "animaux", "nature", "science", "investigation"]):
-        return ["Documentaire"]
-    if any(k in n for k in ["divertissement", "télé réalité", "télé-realite", "w9", "tfx",
-        "chérie", "cherie", "cstar", "nrj 12", "seduction"]):
-        return ["Divertissement"]
-    return ["Télévision"]
+        return ["Documentaires"]
+    return ["Général"]
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
     headers = {"User-Agent": UA, "Referer": referer}
@@ -1245,14 +1250,13 @@ def _vegeta_pick(name_key: str):
     return cands[0] if cands else None
 
 def vegetatv_resolve(name_key: str) -> str:
-    """LECTURE : URL MFP HLS du 1er serveur qui livre. `""` si pas de MFP / tout KO / absente."""
-    if not MEDIAFLOW_URL:
-        return ""
+    """LECTURE : URL brute (non emballée) du 1er serveur qui livre. `""` si tout KO / absente.
+    Le wrap MediaFlow (MFP de l'utilisateur, pas celui de l'admin) se fait dans la route /vghls."""
     picked = _vegeta_pick(name_key)
     if not picked:
         return ""
     server, sid = picked
-    return _mfp_hls(_vegeta_m3u8(server, sid), ua=_VEGETA_UA)
+    return _vegeta_m3u8(server, sid)
 
 def _vegeta_warm():
     """Thread de fond : ingestion initiale (registre vide/stale) puis rafraîchi chaque TTL."""
@@ -1310,6 +1314,131 @@ _CANON_COUNTRY = {"fr", "france", "french", "italy", "italia", "poland", "polska
     "greece", "portugal", "germany", "deutschland", "uk", "usa", "international", "gr", "be",
     "ca", "us", "ar"}
 
+# ============================================================
+# MON CATALOGUE — liste FIXE choisie par l'admin (pas un scrape). C'est la SEULE chose qui
+# apparaît dans Stremio en mode « catalogue perso » : chaque flux réellement disponible chez une
+# source (dlstreams/Vavoo/VegetaTv) ne s'y attache QUE s'il matche l'un de ces noms par clé
+# canonique — rien d'autre n'est jamais ajouté automatiquement.
+# Modifiable depuis le dashboard (Chaînes unifiées -> Catégories/ajout/retrait/import en masse),
+# ou en éditant cette liste directement puis en rappelant /api/catalog/reset.
+# ============================================================
+_DEFAULT_CATALOG: list[tuple[str, str]] = [
+    # ---- Général ----
+    ("TF1", "Général"),
+    ("France 2", "Général"),
+    ("France 3", "Général"),
+    ("France 4", "Général"),
+    ("France 5", "Général"),
+    ("Canal+", "Général"),
+    ("M6", "Général"),
+    ("Arte", "Général"),
+    ("W9", "Général"),
+    ("TMC", "Général"),
+    ("TFX", "Général"),
+    ("T18", "Général"),
+    ("13eme Rue", "Général"),
+    ("6ter", "Général"),
+    ("RMC Life", "Général"),
+    ("RMC Story", "Général"),
+    ("RMC Découverte", "Général"),
+    ("AB1", "Général"),
+    ("AB3", "Général"),
+    ("Comedie+", "Général"),
+    ("Novo 19", "Général"),
+    ("E! Entertainment", "Général"),
+    ("Paris Premiere", "Général"),
+    ("RTL 9", "Général"),
+    ("Teva", "Général"),
+    # ---- Sports ----
+    ("beIN Sports 1", "Sports"),
+    ("beIN Sports 2", "Sports"),
+    ("beIN Sports 3", "Sports"),
+    ("beIN Sports Max 4", "Sports"),
+    ("beIN Sports Max 5", "Sports"),
+    ("beIN Sports Max 6", "Sports"),
+    ("Ligue 1+", "Sports"),
+    ("Ligue 1+ 2", "Sports"),
+    ("Ligue 1+ 3", "Sports"),
+    ("RMC Sport 1", "Sports"),
+    ("RMC Sport 2", "Sports"),
+    ("L'Equipe", "Sports"),
+    ("Eurosport 1", "Sports"),
+    ("Eurosport 2", "Sports"),
+    ("Canal+ Foot", "Sports"),
+    ("Canal+ Premier League", "Sports"),
+    ("Canal+ Sport 360", "Sports"),
+    ("Canal+ Sport", "Sports"),
+    ("Auto Moto", "Sports"),
+    ("Equidia Live", "Sports"),
+    ("Golf+", "Sports"),
+    # ---- Documentaires ----
+    ("Planete+", "Documentaires"),
+    ("Planete A&E", "Documentaires"),
+    ("Planete+ CI", "Documentaires"),
+    ("National Geographic", "Documentaires"),
+    ("Nat Geo Wild", "Documentaires"),
+    ("BBC Earth", "Documentaires"),
+    ("Animaux", "Documentaires"),
+    ("Canal+ Docs", "Documentaires"),
+    ("Chasse Et Peche", "Documentaires"),
+    ("Discovery Channel", "Documentaires"),
+    ("Crime District", "Documentaires"),
+    ("Discovery ID", "Documentaires"),
+    ("Discovery Science", "Documentaires"),
+    ("Histoire", "Documentaires"),
+    ("Science Et Vie TV", "Documentaires"),
+    ("Toute L'Histoire", "Documentaires"),
+    ("Ushuaïa TV", "Documentaires"),
+    # ---- Films ----
+    ("SyFy", "Films"),
+    ("Action", "Films"),
+    ("Canal+ Cinema", "Films"),
+    ("Canal+ Grand Ecran", "Films"),
+    ("Cine+ Emotion", "Films"),
+    ("Cine+ Premier", "Films"),
+    ("Cine+ Classic", "Films"),
+    ("Cine+ Famiz", "Films"),
+    ("Polar+", "Films"),
+    ("OCS Max", "Films"),
+    ("Serie Club", "Films"),
+    ("TCM Cinema", "Films"),
+    ("TF1 Series Films", "Films"),
+    ("WB TV", "Films"),
+    ("Cine+ Frisson", "Films"),
+    # ---- Informations ----
+    ("BFM Business", "Informations"),
+    ("BFM TV", "Informations"),
+    ("CNews", "Informations"),
+    ("EuroNews", "Informations"),
+    ("France 24", "Informations"),
+    ("France Info", "Informations"),
+    ("InfoSport+", "Informations"),
+    ("LCI", "Informations"),
+    ("20 Minutes TV LD", "Informations"),
+    ("Africanews French", "Informations"),
+    ("Africa 24", "Informations"),
+    ("LCP", "Informations"),
+]
+# Incrémenter cette version RÉAPPLIQUE _DEFAULT_CATALOG au prochain démarrage (utile si la liste
+# ci-dessus est retouchée dans le code) -> jamais au détriment des ajouts/retraits faits depuis le
+# dashboard APRÈS la dernière application (le marqueur n'est bumpé qu'à un vrai changement de liste).
+_CATALOG_VERSION = 3
+
+def _apply_default_catalog():
+    """Écrase 'mon catalogue' avec EXACTEMENT _DEFAULT_CATALOG (mêmes clés que /api/catalog/reset).
+    L'ordre de la liste est conservé (champ "order") : Stremio ET le dashboard trient dessus au lieu
+    de l'alphabet, pour rester calés sur l'ordre tvmio d'origine."""
+    st = _settings.setdefault("stremio", {})
+    st["catalog"] = {}
+    ov_cats = st.setdefault("category_overrides", {})
+    for _i, (_name, _cat_name) in enumerate(_DEFAULT_CATALOG):
+        _key = _canon_key(_name) or _tvlogos_slug(_name)
+        if not _key:
+            continue
+        st["catalog"][_key] = {"name": _name, "order": _i}
+        ov_cats[_key] = _cat_name
+    st["catalog_version"] = _CATALOG_VERSION
+
 _CANON_MERGE = {}
 for _i in range(1, 20):
     _CANON_MERGE[f"beinmax{_i}"] = f"beinsportmax{_i}"        # « beIN MAX 5 » = « beIN Sports Max 5 »
@@ -1327,11 +1456,15 @@ def _canon_key(name: str) -> str:
     s = s.replace("ᴋ", "k").replace("◉", "")
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     s = s.replace("'", "").replace("+", " ")   # « McDonald's » -> « mcdonalds » (sinon le 's traîne)
+    # Tag qualité collé à un numéro ("SD1", "HD2", "FHD3") -> retire le tag, garde le numéro (sinon
+    # « Bein Sport French SD1 » ne matche jamais « beIN Sports 1 » et se duplique au lieu de fusionner).
+    s = re.sub(r"\b(?:hd|fhd|uhd|sd|4k|8k)(\d+)\b", r" \1", s)
     parts = [w for w in re.split(r"[^a-z0-9]+", s) if w and w not in _CANON_NOISE]
     parts = [w for i, w in enumerate(parts) if not (i > 0 and w in _CANON_COUNTRY)]
     if parts and parts[0] == "fr":         # préfixe « FR … » en tête -> retiré (garde « France 2 »)
         parts = parts[1:]
     parts = ["sport" if w == "sports" else w for w in parts]
+    parts = list(dict.fromkeys(parts))     # dédoublonne (ex: suffixe "... FR SPORTS" répète "sport")
     k = "".join(parts)
     return _CANON_MERGE.get(k, k)
 
@@ -1354,13 +1487,17 @@ _CANON_TAGS = re.compile(
 
 def _clean_display_raw(name: str) -> str:
     """Nom d'affichage PROPRE : retire préfixe « FR| », suffixe « |D », (BACKUP)/[EVENT], tags qualité
-    fantaisie (« 4ᴋ », « ᴴᴰ », « ◉ rec ») et ASCII (HD/FHD/4K…)."""
+    fantaisie (« 4ᴋ », « ᴴᴰ », « ◉ rec »), ASCII (HD/FHD/4K…) et suffixe catégorie redondant
+    (« ... FR SPORTS » -> « ... », déjà porté par le rangement en catégorie)."""
     s = re.sub(r"^[^|]{1,15}\|\s*", "", name or "")   # préfixe fournisseur « FR| »
     s = re.sub(r"\s*\|.*$", "", s)                     # suffixe provider « |D »
     s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
     s = s.replace("ᴋ", "k").replace("◉", "")
     s = re.sub(r"[ᴀ-ᵿ⁰-₟]", "", s)                    # tags small-cap/exposant (ᴴᴰ, ᴿᴬᵂ…)
+    s = re.sub(r"\b(HD|FHD|UHD|SD|4K|8K)(\d+)\b", r" \2", s, flags=re.I)  # "SD1" -> "1" (garde le numéro)
     s = _CANON_TAGS.sub("", s)                         # HD/FHD/4K/RAW/… ASCII
+    s = re.sub(r"\s+FR\s+(SPORTS?|CINEMA|INFOS?|NEWS|MUSIQUE|DOCS?|DOCUMENTAIRE|KIDS|JEUNESSE|"
+        r"DIVERTISSEMENT|SERIES?|FILMS?)\b\s*$", "", s, flags=re.I)   # « ... FR SPORTS » redondant
     s = re.sub(r"\brec\b", "", s, flags=re.I)
     s = re.sub(r"\s+", " ", s).strip(" -·|▎‖▐┃")
     return s or (name or "").strip()
@@ -1370,7 +1507,13 @@ _FOREIGN_RE = re.compile(
     r"PL|POL|RO|RU|BR|SA|EG|LB|IQ|GR|HR|SRB?|SI|SK|CZ|HU|BG|UA)\b[\s\-]*(?:FR)?\s*[|:]"
     r"|\b(?:AUSTRALIA|AUSTRALIE|SERBIA|SERBIE|CROATIA|CROATIE|POLAND|POLSKA|ROMANIA|GREECE|GRECE|"
     r"QUEBEC|QUÉBEC|CANADA|CANADIAN|ARABIC|ARABE|AFRICA|AFRIQUE|BELGIUM|GERMANY|ITALIA|ITALY|SPAIN|"
-    r"ESPANA|PORTUGAL|TURKEY|BRAZIL|RUSSIA)\b", re.I)
+    r"ESPANA|PORTUGAL|TURKEY|BRAZIL|RUSSIA|USA|U\.S\.A|UK|ENGLAND|ANGLETERRE|IRELAND|IRLANDE|"
+    r"NETHERLANDS|HOLLAND|HOLLANDE|SWEDEN|SUEDE|NORWAY|NORVEGE|DENMARK|DANEMARK|FINLAND|FINLANDE|"
+    r"SWITZERLAND|SUISSE|AUSTRIA|AUTRICHE|HUNGARY|HONGRIE|BULGARIA|BULGARIE|UKRAINE|MEXICO|MEXIQUE|"
+    r"ARGENTINA|ARGENTINE|CHILE|CHILI|COLOMBIA|COLOMBIE|INDIA|INDE|PAKISTAN|EMIRATES|EMIRATS|ISRAEL|"
+    r"MOROCCO|MAROC|ALGERIA|ALGERIE|TUNISIA|TUNISIE|EGYPT|EGYPTE|NIGERIA|GHANA|KENYA|LATINO|CHINA|"
+    r"CHINE|JAPAN|JAPON|KOREA|COREE|THAILAND|THAILANDE|VIETNAM|INDONESIA|PHILIPPINES|ENGLISH|SPANISH|"
+    r"GERMAN|ITALIAN|PORTUGUESE)\b", re.I)
 
 def _is_foreign(name: str) -> bool:
     return bool(_FOREIGN_RE.search(name or ""))
@@ -1380,17 +1523,36 @@ _CAT_ICON = {"Sports": "⚽", "Actualités": "📰", "Films & Séries": "🎬", 
     "Divertissement": "🎉", "Musique": "🎵", "Documentaire": "🌍", "Jeunesse": "🧸",
     "Télévision": "📺"}
 # slugs ASCII pour les ids de catalogue (évite l'encodage % des accents dans l'URL Stremio)
-_CAT_SLUG = {"Sports": "sports", "Actualités": "actualites", "Films & Séries": "films-series",
-    "Cinéma": "cinema", "Divertissement": "divertissement", "Musique": "musique",
-    "Documentaire": "documentaire", "Jeunesse": "jeunesse", "Télévision": "television"}
+_CAT_SLUG = {"Général": "general", "Sports": "sports", "Documentaires": "documentaires",
+    "Films": "films", "Informations": "informations"}
 _SLUG_CAT = {v: k for k, v in _CAT_SLUG.items()}
 _unified_cache: dict = {"at": 0.0, "reg": None}
 _UNIFIED_TTL = 1800
 
-def _unified_registry() -> dict:
-    """Registre canonique {key -> {name, cat, logo, refs:[{src,id,q,qr}]}}, fusionné + caché."""
-    if _unified_cache["reg"] is not None and time.time() - _unified_cache["at"] < _UNIFIED_TTL:
-        return _unified_cache["reg"]
+# Marques FR connues -> une chaîne qui contient un de ces mots n'est JAMAIS considérée générique,
+# même si elle a par ailleurs la forme "mot + numéro" (ex: "Ligue 1+ 4", "beIN Sports 2").
+_KNOWN_BRAND_HINTS = ("bein", "canal", "rmc", "ligue", "tf1", "france", "m6", "arte", "w9", "tmc",
+    "tfx", "t18", "dazn", "eurosport", "equipe", "équipe", "automoto", "after foot", "6ter",
+    "13eme", "13ème", "ab1", "cstar", "nrj", "gulli", "chérie", "cherie", "paramount", "ocs",
+    "cine", "ciné", "discovery", "national geographic", "planete", "planète", "histoire",
+    "trace", "mtv", "mcm", "melody", "bfm", "cnews", "lci", "franceinfo", "public senat",
+    "public sénat", "lcp", "golf", "infosport", "voyage", "action", "syfy", "novelas",
+    "toute l'histoire", "wwe", "ufc", "l'equipe", "l'équipe")
+_GENERIC_JUNK_RE = re.compile(r"^[a-zàâäéèêëïîôöùûüç' \-]{3,24}\s\d{1,3}\s*(direct|live|stream|hd)?\s*$", re.I)
+
+def _looks_generic_junk(name: str) -> bool:
+    """Filler d'IPTV mal nommé (« BLUE SPORT 7 DIRECT », pas une marque reconnue) : juste un mot
+    générique suivi d'un numéro. Auto-masqué du catalogue par défaut (visible dans le dashboard,
+    l'admin peut le réhabiliter en le renommant ou en lui donnant une catégorie)."""
+    n = (name or "").lower().strip()
+    if any(b in n for b in _KNOWN_BRAND_HINTS):
+        return False
+    return bool(_GENERIC_JUNK_RE.match(n))
+
+def _scrape_registry() -> dict:
+    """Le POOL BRUT : scrape toutes les sources, fusionne par clé canonique. C'est la réserve dans
+    laquelle « mon catalogue » pioche ses flux par correspondance de nom — ce n'est PAS ce qui est
+    servi à Stremio (voir _unified_registry)."""
     reg: dict = {}
 
     def add(src, cid, raw):
@@ -1423,12 +1585,7 @@ def _unified_registry() -> dict:
         for c in vegetatv_channels():
             if not _is_foreign(c["name"]):
                 add("vegetatv", c["id"], c["name"])
-    st = _settings.get("stremio", {})
-    ov_names = st.get("channel_names", {})
     for e in reg.values():
-        if ov_names.get(e["key"]):            # override de nom (édition dashboard)
-            e["name"] = ov_names[e["key"]]
-        e["cat"] = _genre_for(e["name"])[0]
         seen = set()
         refs = []
         for r in sorted(e["refs"], key=lambda r: -r["qr"]):   # dédup par (source, qualité)
@@ -1438,15 +1595,68 @@ def _unified_registry() -> dict:
             seen.add(sig)
             refs.append(r)
         e["refs"] = refs
+    return reg
+
+def _unified_registry() -> dict:
+    """Registre SERVI À STREMIO {key -> {name, cat, refs:[{src,id,q,qr}]}}.
+
+    Mode « mon catalogue » (st.stremio.catalog non vide) : liste EXPLICITE choisie par l'admin —
+    plus aucune chaîne n'apparaît juste parce qu'une source l'a scrapée. Chaque entrée du catalogue
+    pioche ses flux dans le pool brut (_scrape_registry) par correspondance de CLÉ CANONIQUE (même
+    nom normalisé) : ajoute une chaîne à ton catalogue -> dès qu'une source a un flux au nom
+    correspondant, il s'y attache tout seul, sans rien connecter à la main.
+
+    Catalogue vide/absent (jamais configuré) : ancien mode auto (tout ce qui est scrapé, filtré par
+    masquage manuel + détection de noms génériques) — pour ne rien casser tant que l'admin n'a pas
+    basculé en mode catalogue perso."""
+    if _unified_cache["reg"] is not None and time.time() - _unified_cache["at"] < _UNIFIED_TTL:
+        return _unified_cache["reg"]
+    raw = _scrape_registry()
+    st = _settings.get("stremio", {})
+    ov_names = st.get("channel_names", {})
+    ov_cats = st.get("category_overrides", {})
+    catalog = st.get("catalog") or {}
+
+    if catalog:
+        reg = {}
+        for key, meta in catalog.items():
+            src_e = raw.get(key)
+            reg[key] = {
+                "key": key,
+                "name": meta.get("name") or (src_e["name"] if src_e else key),
+                "refs": src_e["refs"] if src_e else [],
+                "order": meta.get("order", 9999),
+            }
+    else:
+        reg = raw
+
+    for e in reg.values():
+        e.setdefault("order", 9999)
+        if ov_names.get(e["key"]):            # override de nom (édition dashboard)
+            e["name"] = ov_names[e["key"]]
+        e["cat"] = ov_cats.get(e["key"]) or _genre_for(e["name"])[0]
+        if e["cat"] not in _GENRE_CHOICES:      # override obsolète (ancienne taxonomie) -> ignoré
+            e["cat"] = _genre_for(e["name"])[0]
+        # Dans mon catalogue, ou renommée/catégorisée à la main -> l'admin a "vouché", jamais auto-masquée.
+        vouched = e["key"] in catalog or e["key"] in ov_names or e["key"] in ov_cats
+        e["auto_junk"] = (not vouched) and _looks_generic_junk(e["name"])
+        e["in_catalog"] = e["key"] in catalog
     _unified_cache.update(at=time.time(), reg=reg)
     return reg
 
 def _unified_invalidate():
     _unified_cache.update(at=0.0, reg=None)
 
+def _hidden_keys() -> set:
+    manual = {k for k, v in _settings.get("stremio", {}).get("hidden_channels", {}).items() if v}
+    reg = _unified_registry()
+    auto = {e["key"] for e in reg.values() if e.get("auto_junk")}
+    unmatched = {e["key"] for e in reg.values() if not e["refs"]}   # catalogue : rien trouvé encore
+    return manual | auto | unmatched
+
 def _unified_by_cat(cat: str) -> list:
     out = [e for e in _unified_registry().values() if e["cat"] == cat]
-    out.sort(key=lambda e: e["name"].lower())
+    out.sort(key=lambda e: (e.get("order", 9999), e["name"].lower()))
     return out
 
 def unified_categories() -> list:
@@ -1454,12 +1664,16 @@ def unified_categories() -> list:
     present = {e["cat"] for e in _unified_registry().values()}
     return [c for c in _GENRE_CHOICES if c in present]
 
-def unified_streams(key: str, base: str) -> list:
+def unified_streams(key: str, base: str, cfg_b64: str = "") -> list:
     """Tous les flux d'une chaîne unifiée (toutes sources), badge source+qualité, meilleur d'abord.
-    URLs paresseuses (résolution au PLAY via /hls,/vhls,/vghls) -> réponse instantanée."""
+    URLs paresseuses (résolution au PLAY via /hls,/vhls,/vghls) -> réponse instantanée.
+    `cfg_b64` (config de l'utilisateur courant, dont son MediaFlow Proxy perso) est repropagée dans
+    les URLs générées, car /hls,/vhls,/vghls ne sont pas appelées par Stremio avec le préfixe
+    manifest -> il faut l'embarquer nous-mêmes."""
     e = _unified_registry().get(key)
     if not e:
         return []
+    p = f"{base}/{cfg_b64}" if cfg_b64 else base
     scored = []
     # Flux PERSO ajoutés depuis le dashboard (channel_streams[key]) -> en tête (rang max).
     for st in _settings.get("stremio", {}).get("channel_streams", {}).get(key, []):
@@ -1472,11 +1686,11 @@ def unified_streams(key: str, base: str) -> list:
     for r in e["refs"]:
         src, q = r["src"], r["q"]
         if src == "dlstreams":
-            emoji, prov, url = "🔀", "dlstreams", f"{base}/hls/{r['id']}/index.m3u8"
+            emoji, prov, url = "🔀", "dlstreams", f"{p}/hls/{r['id']}/index.m3u8"
         elif src == "vavoo":
-            emoji, prov, url = "📺", "Vavoo", f"{base}/vhls?v={_b64u(r['id'])}"
+            emoji, prov, url = "📺", "Vavoo", f"{p}/vhls?v={_b64u(r['id'])}"
         elif src == "vegetatv":
-            emoji, prov, url = "🐉", "Vegeta TV", f"{base}/vghls?v={_b64u(r['id'])}"
+            emoji, prov, url = "🐉", "Vegeta TV", f"{p}/vghls?v={_b64u(r['id'])}"
         else:
             continue
         detail = prov + (f" · {q}" if q else "")
@@ -1503,7 +1717,7 @@ def _extract_config_from_path(path: str) -> tuple[dict, str]:
         first, rest = path[1:].split("/", 1)
         # Only treat as config if it decodes to valid JSON with expected keys
         config = _decode_config(first)
-        if config and isinstance(config, dict) and any(k in config for k in ("pseudo", "device", "epg", "vavoo", "dlstreams", "logos", "quality", "lang", "adult")):
+        if config and isinstance(config, dict) and any(k in config for k in ("pseudo", "device", "epg", "vavoo", "dlstreams", "logos", "quality", "lang", "adult", "token", "mfp_url", "mfp_pass")):
             return config, "/" + rest
     return {}, path
 
@@ -1918,6 +2132,7 @@ _remote_logo_cache: dict = {}   # slug -> bytes | None (négatif caché)
 def _tvlogos_slug(name: str) -> str:
     s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().lower()
     s = s.replace("+", " plus ")
+    s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd)(\d+)\b", r" \2", s)   # "sd1" -> "1" (garde le numéro)
     s = re.sub(r"\b(hd|fhd|uhd|4k|8k|sd|fr|vip|raw|backup|event|only)\b", " ", s)
     return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
 
@@ -1988,6 +2203,10 @@ def _logo_bytes(src: str, c: dict) -> bytes:
                 _logo_cache[url] = png
         if png:
             return png
+    # Dernier filet avant l'affiche générique : base communautaire tv-logo/tv-logos (chaînes FR).
+    remote = _remote_logo(name)
+    if remote:
+        return remote
     return _poster_get(name or "TV")
 
 def _warm_logos():
@@ -2043,6 +2262,13 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     def log_message(self, *a):
         pass
+    def _redirect(self, location: str):
+        """Redirection 302 (utilisée pour renvoyer le lecteur directement vers le MediaFlow Proxy
+        personnel de l'utilisateur : aucun octet vidéo ne transite par notre VPS)."""
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
     def _send(self, code: int, body: bytes, ctype: str, cache: bool = False):
         global _request_count, _error_count
         now_min = int(time.time() // 60) * 60
@@ -2201,6 +2427,119 @@ class Handler(BaseHTTPRequestHandler):
             resp = json.dumps({"success": True}).encode()
             self._send(200, resp, "application/json")
             return
+        if path == "/api/catalog/seed":
+            # Import initial (une fois) : bascule en mode "mon catalogue" en le préremplissant avec
+            # tout ce qui est actuellement visible (non masqué, non générique) -> point de départ,
+            # l'admin élague ensuite depuis le dashboard. Sans effet si déjà en mode catalogue
+            # (utiliser /api/catalog/add pour ajouter au coup par coup), sauf si force=true.
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            st = _settings.setdefault("stremio", {})
+            if st.get("catalog") and not data.get("force"):
+                return self._send(409, json.dumps({"ok": False,
+                    "error": "catalogue déjà initialisé (force=true pour réimporter par-dessus)"}).encode(),
+                    "application/json")
+            raw = _scrape_registry()
+            manual_hidden = {k for k, v in st.get("hidden_channels", {}).items() if v}
+            cat = st.setdefault("catalog", {})
+            n = 0
+            for key, e in raw.items():
+                if key in manual_hidden or _looks_generic_junk(e["name"]):
+                    continue
+                cat[key] = {"name": st.get("channel_names", {}).get(key) or e["name"]}
+                n += 1
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True, "imported": n, "total": len(cat)}).encode(),
+                "application/json")
+        if path == "/api/catalog/reset":
+            # EFFACE le catalogue actuel et le remet EXACTEMENT à _DEFAULT_CATALOG (liste fixe codée
+            # en dur, pas un scrape) -> plus rien d'imprévu, uniquement les chaînes voulues.
+            if not self._require_auth():
+                return
+            _apply_default_catalog()
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True,
+                "total": len(_settings["stremio"]["catalog"])}).encode(), "application/json")
+        if path == "/api/catalog/add":
+            # Ajoute UNE chaîne à mon catalogue par son nom -> matchée automatiquement dès qu'une
+            # source a un flux au nom correspondant (aucun lien manuel à faire).
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            name = str(data.get("name") or "").strip()
+            if not name:
+                return self._send(400, json.dumps({"ok": False, "error": "nom requis"}).encode(), "application/json")
+            key = _canon_key(name) or _tvlogos_slug(name)
+            if not key:
+                return self._send(400, json.dumps({"ok": False, "error": "nom invalide"}).encode(), "application/json")
+            st = _settings.setdefault("stremio", {})
+            cat_field = str(data.get("category") or "").strip()
+            entry = {"name": name}
+            if cat_field in _GENRE_CHOICES:
+                st.setdefault("category_overrides", {})[key] = cat_field
+            st.setdefault("catalog", {})[key] = entry
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True, "key": key}).encode(), "application/json")
+        if path == "/api/catalog/bulk-add":
+            # Import en masse : plusieurs chaînes d'un coup (ex: coller une liste toute faite).
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            entries = data.get("entries")
+            if not isinstance(entries, list):
+                return self._send(400, json.dumps({"ok": False, "error": "liste 'entries' requise"}).encode(), "application/json")
+            st = _settings.setdefault("stremio", {})
+            cat_field_st = st.setdefault("catalog", {})
+            ov_cats = st.setdefault("category_overrides", {})
+            added, skipped = 0, 0
+            for it in entries:
+                if not isinstance(it, dict):
+                    continue
+                name = str(it.get("name") or "").strip()
+                if not name:
+                    skipped += 1
+                    continue
+                key = _canon_key(name) or _tvlogos_slug(name)
+                if not key:
+                    skipped += 1
+                    continue
+                cat_field = str(it.get("cat") or "").strip()
+                if cat_field in _GENRE_CHOICES:
+                    ov_cats[key] = cat_field
+                cat_field_st[key] = {"name": name}
+                added += 1
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True, "added": added, "skipped": skipped,
+                "total": len(cat_field_st)}).encode(), "application/json")
+        if path == "/api/catalog/remove":
+            # Retire une chaîne de mon catalogue (elle disparaît de Stremio même si une source la
+            # scrape toujours) — différent de "masquer" qui n'a de sens qu'en mode auto.
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            key = str(data.get("key") or "")
+            st = _settings.setdefault("stremio", {})
+            st.setdefault("catalog", {}).pop(key, None)
+            _settings_save()
+            _unified_invalidate()
+            return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
         if path == "/api/unified/edit":
             # Édition d'UNE chaîne unifiée : nom / logo / flux perso (merge partiel par canon_key).
             if not self._require_auth():
@@ -2228,6 +2567,19 @@ class Handler(BaseHTTPRequestHandler):
                     cs[key] = clean
                 else:
                     cs.pop(key, None)
+            if "hidden" in data:
+                hd = st.setdefault("hidden_channels", {})
+                if data.get("hidden"):
+                    hd[key] = True
+                else:
+                    hd.pop(key, None)
+            if "category" in data:
+                cat = str(data.get("category") or "").strip()
+                oc = st.setdefault("category_overrides", {})
+                if cat and cat in _GENRE_CHOICES:
+                    oc[key] = cat
+                else:
+                    oc.pop(key, None)
             _settings_save()
             _unified_invalidate()
             return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
@@ -2582,8 +2934,37 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(401, json.dumps({"ok": False, "error": "token invalide ou révoqué"}).encode(), "application/json")
             _token_touch(h, self._client_ip())
             base = self._self_base()
-            manifest_url = f"{base}/manifest.json?token={token}"
+            cfg_b64 = _b64u(json.dumps({"token": token}))
+            manifest_url = f"{base}/{cfg_b64}/manifest.json"
             return self._send(200, json.dumps({"ok": True, "manifest_url": manifest_url, "name": _tokens[h].get("name", "")}).encode(), "application/json")
+
+        if path == "/api/validate-mediaflow":
+            # User (page Configure): teste vraiment l'URL + le mot de passe MediaFlow, via
+            # l'endpoint standard /proxy/ip (retourne l'IP publique du proxy si le mot de passe
+            # est bon, 401/403 sinon). C'est le test le plus fiable sans lancer une vraie lecture.
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            mfp_url = str(data.get("url", "")).strip().rstrip("/")
+            mfp_pass = str(data.get("password", "")).strip()
+            if not mfp_url or not mfp_pass:
+                return self._send(400, json.dumps({"ok": False, "error": "URL et mot de passe requis"}).encode(), "application/json")
+            if not (mfp_url.startswith("http://") or mfp_url.startswith("https://")):
+                return self._send(400, json.dumps({"ok": False, "error": "URL invalide (doit commencer par http:// ou https://)"}).encode(), "application/json")
+            test_url = f"{mfp_url}/proxy/ip?api_password={urllib.parse.quote(mfp_pass)}"
+            try:
+                req = urllib.request.Request(test_url, headers={"User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    if r.status == 200:
+                        return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
+                    return self._send(200, json.dumps({"ok": False, "error": f"réponse inattendue du serveur MediaFlow ({r.status})"}).encode(), "application/json")
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 403):
+                    return self._send(200, json.dumps({"ok": False, "error": "mot de passe MediaFlow incorrect"}).encode(), "application/json")
+                return self._send(200, json.dumps({"ok": False, "error": f"MediaFlow a répondu une erreur ({e.code})"}).encode(), "application/json")
+            except Exception:
+                return self._send(200, json.dumps({"ok": False, "error": "MediaFlow injoignable à cette URL — vérifie l'adresse et que le serveur tourne"}).encode(), "application/json")
 
         return self._send(404, b"not found", "text/plain")
     def do_GET(self):
@@ -2687,14 +3068,18 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 return self._send(200, json.dumps(list(_manual_channels.values())).encode(), "application/json")
             if path == "/api/unified":
-                # Registre unifié (toutes sources fusionnées) pour le dashboard + le check des logos.
+                # Registre servi à Stremio (toutes sources fusionnées, ou "mon catalogue" si actif)
+                # pour le dashboard + le check des logos.
                 if not self._require_auth():
                     return
                 base = self._self_base()
                 st = _settings.get("stremio", {})
                 ov_n, ov_l, ov_s = st.get("channel_names", {}), st.get("channel_logos", {}), st.get("channel_streams", {})
+                ov_c = st.get("category_overrides", {})
+                manual_hidden = {k for k, v in st.get("hidden_channels", {}).items() if v}
+                catalog_active = bool(st.get("catalog"))
                 out = []
-                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
+                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e.get("order", 9999), e["name"].lower())):
                     enc = urllib.parse.quote(_b64u(e["key"]), safe="")
                     out.append({
                         "key": e["key"], "name": e["name"], "cat": e["cat"],
@@ -2706,9 +3091,31 @@ class Handler(BaseHTTPRequestHandler):
                         "override_name": ov_n.get(e["key"], ""),
                         "override_logo": ov_l.get(e["key"], ""),
                         "override_streams": ov_s.get(e["key"], []),
+                        "override_cat": e["key"] in ov_c,
+                        "hidden": e["key"] in manual_hidden,
+                        "auto_junk": e.get("auto_junk", False),
+                        "in_catalog": e.get("in_catalog", False),
+                        "refs": [{"src": r["src"], "id": r["id"], "q": r["q"]} for r in e["refs"]],
                     })
-                return self._send(200, json.dumps({"channels": out, "total": len(out)}).encode(),
-                    "application/json")
+                return self._send(200, json.dumps({"channels": out, "total": len(out),
+                    "catalog_active": catalog_active}).encode(), "application/json")
+            if path == "/api/unified/toggle-hidden":
+                # Bascule rapide visible/masqué depuis une tuile (sans ouvrir le modal d'édition).
+                if not self._require_auth():
+                    return
+                key = str(qs.get("key", [""])[0])
+                if not key:
+                    return self._send(400, json.dumps({"ok": False, "error": "clé manquante"}).encode(), "application/json")
+                st = _settings.setdefault("stremio", {})
+                hd = st.setdefault("hidden_channels", {})
+                now_hidden = key not in hd
+                if now_hidden:
+                    hd[key] = True
+                else:
+                    hd.pop(key, None)
+                _settings_save()
+                _unified_invalidate()
+                return self._send(200, json.dumps({"ok": True, "hidden": now_hidden}).encode(), "application/json")
             if path == "/api/vegeta/refresh":
                 # Force une ingestion VegetaTv SYNCHRONE + renvoie le diagnostic (débogage MFP/réseau).
                 if not self._require_auth():
@@ -2738,7 +3145,7 @@ class Handler(BaseHTTPRequestHandler):
                 st = _settings.get("stremio", {})
                 ov_n, ov_l, ov_s = st.get("channel_names", {}), st.get("channel_logos", {}), st.get("channel_streams", {})
                 unified = []
-                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e["name"].lower())):
+                for e in sorted(_unified_registry().values(), key=lambda e: (e["cat"], e.get("order", 9999), e["name"].lower())):
                     enc = urllib.parse.quote(_b64u(e["key"]), safe="")
                     unified.append({"key": e["key"], "name": e["name"], "cat": e["cat"],
                         "logo": f"{base}/logo/unified/{enc}.png",
@@ -2852,21 +3259,27 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 return self._send(200, json.dumps(_system_info()).encode(), "application/json")
 
-            def _check_manifest_token(qs: dict) -> tuple[bool, str | None]:
-                """Vérifie le token dans query string. Retourne (valide, token_hash_or_None)."""
+            def _check_manifest_token(qs: dict, user_config: dict | None = None) -> tuple[bool, str | None]:
+                """Vérifie le token, dans la query string (compat) ou dans la config
+                embarquée au chemin (fiable : Stremio ne transmet pas toujours les
+                query strings via le lien stremio://, tout doit passer par le path)."""
                 token = qs.get("token", [""])[0]
+                if not token and user_config:
+                    token = str(user_config.get("token") or "")
                 if not token:
                     return False, None
                 return _token_verify(token)
 
             if path.startswith("/") and path.endswith("/manifest.json"):
-                # Vérifier token AVANT de décoder config_b64
-                valid, token_hash = _check_manifest_token(qs)
+                config_b64 = path[1:-len("/manifest.json")]
+                user_config = _decode_config(config_b64) if config_b64 else {}
+                valid, token_hash = _check_manifest_token(qs, user_config)
                 if not valid:
                     self._send(401, json.dumps({"error": "token requis ou invalide", "code": "TOKEN_REQUIRED"}).encode(), "application/json")
                     return
-                config_b64 = path[1:-len("/manifest.json")]
-                user_config = _decode_config(config_b64) if config_b64 else {}
+                if not str(user_config.get("mfp_url") or "").strip() or not str(user_config.get("mfp_pass") or "").strip():
+                    self._send(401, json.dumps({"error": "MediaFlow Proxy requis (URL + mot de passe)", "code": "MEDIAFLOW_REQUIRED"}).encode(), "application/json")
+                    return
                 lang_filter = user_config.get("lang", "fr")
                 body = json.dumps(self._manifest(lang_filter=lang_filter, user_config=user_config)).encode()
                 self.send_response(200)
@@ -2884,12 +3297,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
             if path in ("/", "/manifest.json"):
-                valid, token_hash = _check_manifest_token(qs)
-                if not valid:
-                    return self._send(401, json.dumps({"error": "token requis ou invalide", "code": "TOKEN_REQUIRED"}).encode(), "application/json")
-                if token_hash:
-                    _token_touch(token_hash, self._client_ip())
-                return self._send(200, json.dumps(self._manifest(lang_filter="fr")).encode(), "application/json", True)
+                # Sans config dans le chemin -> impossible d'avoir un MediaFlow perso -> refusé
+                # (le token + le MediaFlow sont désormais obligatoires, embarqués via /configure).
+                return self._send(401, json.dumps({
+                    "error": "token et MediaFlow Proxy requis — installe via /configure",
+                    "code": "TOKEN_REQUIRED"}).encode(), "application/json")
             user_config, clean_path = self._extract_addon_config(path)
             if clean_path.startswith("/catalog/tv/"):
                 extra = clean_path[len("/catalog/tv/"):].removesuffix(".json")
@@ -2921,7 +3333,10 @@ class Handler(BaseHTTPRequestHandler):
                         entries = _unified_by_cat(g)
                     else:                          # tout le catalogue, rangé par catégorie
                         entries = sorted(_unified_registry().values(),
-                            key=lambda e: (_GENRE_CHOICES.index(e["cat"]) if e["cat"] in _GENRE_CHOICES else 99, e["name"].lower()))
+                            key=lambda e: (_GENRE_CHOICES.index(e["cat"]) if e["cat"] in _GENRE_CHOICES else 99, e.get("order", 9999), e["name"].lower()))
+                    hidden = _hidden_keys()
+                    if hidden:
+                        entries = [e for e in entries if e["key"] not in hidden]
                     q = params.get("search", "").lower().strip()
                     if q:
                         words = q.replace("+", " ").split()
@@ -2936,7 +3351,7 @@ class Handler(BaseHTTPRequestHandler):
                 source, _, cid = seg.partition(":")
                 if source == "u":
                     e = _unified_registry().get(_unb64u(cid))
-                    if not e:
+                    if not e or e["key"] in _hidden_keys():
                         return self._send(200, json.dumps({"meta": {}}).encode(), "application/json")
                     return self._send(200, json.dumps({"meta": self._umeta(e, user_config)}).encode(),
                         "application/json", True)
@@ -2951,20 +3366,34 @@ class Handler(BaseHTTPRequestHandler):
                 seg = urllib.parse.unquote(clean_path.rsplit("/", 1)[1].removesuffix(".json"))
                 source, _, cid = seg.partition(":")
                 b = self._self_base()
+                cfg_b64 = _b64u(json.dumps(user_config)) if user_config else ""
                 if source == "u":                 # chaîne unifiée -> TOUS les flux (toutes sources)
-                    streams = unified_streams(_unb64u(cid), b)
+                    ukey = _unb64u(cid)
+                    if ukey in _hidden_keys():
+                        return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
+                    streams = unified_streams(ukey, b, cfg_b64)
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 if source == "custom":            # chaîne perso (catalogue ⭐ Mes chaînes)
                     st = _settings.get("stremio", {})
                     cc = st.get("custom_channels", {}).get(cid, {})
                     cq, _r = _quality_of(cc.get("name", ""))
+                    p = f"{b}/{cfg_b64}" if cfg_b64 else b
                     streams = [_stream_entry("⭐", cc.get("name", "Ma chaîne"), cq, f"Source {idx + 1}",
-                        f"{b}/hls/custom/{cid}/s{idx}/index.m3u8", binge=f"cu-{cid}")
+                        f"{p}/hls/custom/{cid}/s{idx}/index.m3u8", binge=f"cu-{cid}")
                         for idx, _u in enumerate(cc.get("streams", []))]
                     return self._send(200, json.dumps({"streams": streams}).encode(), "application/json")
                 return self._send(200, json.dumps({"streams": []}).encode(), "application/json")
-            if path.startswith("/hls/") and path.endswith("/index.m3u8"):
-                parts = path.split("/")
+            if path.endswith("/index.m3u8") and (path.startswith("/hls/") or "/hls/" in path):
+                user_config, clean_path = self._extract_addon_config(path)
+                if not (clean_path.startswith("/hls/") and clean_path.endswith("/index.m3u8")):
+                    return self._send(404, b"not found", "text/plain")
+                mfp_url = str(user_config.get("mfp_url") or "").strip()
+                mfp_pass = str(user_config.get("mfp_pass") or "").strip()
+                if not mfp_url or not mfp_pass:
+                    return self._send(400,
+                        "MediaFlow Proxy requis : reconfigure l'addon sur /configure (URL + mot de passe MediaFlow manquants)".encode(),
+                        "text/plain")
+                parts = clean_path.split("/")
                 if parts[2] == "custom":
                     cid = parts[3]
                     seg4 = parts[4] if len(parts) == 6 else ""
@@ -2979,11 +3408,10 @@ class Handler(BaseHTTPRequestHandler):
                         m3u8 = streams[idx]
                         host = urllib.parse.urlsplit(m3u8).netloc
                         _track_play("custom", cid)
-                        hdr = {"Referer": host + "/", "Origin": host}
-                        henc = _b64u(json.dumps(hdr))
-                        text = _proxy_get(m3u8, hdr).decode("utf-8", "replace")
-                        return self._send(200, _rewrite_playlist(text, m3u8, henc, self._self_base()).encode(),
-                            "application/vnd.apple.mpegurl")
+                        dest = _mfp_wrap(mfp_url, mfp_pass, m3u8, referer=host)
+                        if not dest:
+                            return self._send(502, b"MediaFlow: echec de l'emballage du flux", "text/plain")
+                        return self._redirect(dest)
                     return self._send(404, b"format custom invalide", "text/plain")
                 cid = parts[2]
                 st = _settings.get("stremio", {})
@@ -3005,40 +3433,51 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     m3u8, host = resolve(cid)
                 _track_play("dlstreams", cid)
-                hdr = {"Referer": host + "/", "Origin": host}
-                henc = _b64u(json.dumps(hdr))
-                text = _proxy_get(m3u8, hdr).decode("utf-8", "replace")
-                return self._send(200, _rewrite_playlist(text, m3u8, henc, self._self_base()).encode(),
-                    "application/vnd.apple.mpegurl")
-            if path == "/vhls":
+                dest = _mfp_wrap(mfp_url, mfp_pass, m3u8, referer=host)
+                if not dest:
+                    return self._send(502, b"MediaFlow: echec de l'emballage du flux", "text/plain")
+                return self._redirect(dest)
+            if path == "/vhls" or path.endswith("/vhls"):
+                user_config, clean_path = self._extract_addon_config(path)
+                if clean_path != "/vhls":
+                    return self._send(404, b"not found", "text/plain")
+                mfp_url = str(user_config.get("mfp_url") or "").strip()
+                mfp_pass = str(user_config.get("mfp_pass") or "").strip()
+                if not mfp_url or not mfp_pass:
+                    return self._send(400,
+                        "MediaFlow Proxy requis : reconfigure l'addon sur /configure (URL + mot de passe MediaFlow manquants)".encode(),
+                        "text/plain")
                 vurl = _unb64u(qs["v"][0])
                 real = vavoo_resolve(vurl)
                 if not real:
                     return self._send(502, b"vavoo: flux introuvable (hors-antenne ?)", "text/plain")
                 _track_play("vavoo", vurl)
-                hdr = {"User-Agent": _VAVOO_UA}
-                henc = _b64u(json.dumps(hdr))
-                text = _proxy_get(real, hdr).decode("utf-8", "replace")
-                return self._send(200, _rewrite_playlist(text, real, henc, self._self_base()).encode(),
-                    "application/vnd.apple.mpegurl")
-            if path == "/vghls":
-                # VegetaTv : résout (load-balance byte-testé) -> URL MFP, et sert le manifeste MFP
-                # BRUT (ses segments pointent sur MFP, qui DOIT donc être joignable par le client ->
-                # MEDIAFLOW_URL = domaine PUBLIC, pas loopback). Loggé pour diagnostiquer une lecture KO.
+                dest = _mfp_wrap(mfp_url, mfp_pass, real, ua=_VAVOO_UA)
+                if not dest:
+                    return self._send(502, b"MediaFlow: echec de l'emballage du flux", "text/plain")
+                return self._redirect(dest)
+            if path == "/vghls" or path.endswith("/vghls"):
+                # VegetaTv : résout (load-balance byte-testé) -> URL brute, puis emballée via le
+                # MediaFlow Proxy PERSONNEL de l'utilisateur (pas celui de l'admin) -> redirection.
+                user_config, clean_path = self._extract_addon_config(path)
+                if clean_path != "/vghls":
+                    return self._send(404, b"not found", "text/plain")
+                mfp_url = str(user_config.get("mfp_url") or "").strip()
+                mfp_pass = str(user_config.get("mfp_pass") or "").strip()
+                if not mfp_url or not mfp_pass:
+                    return self._send(400,
+                        "MediaFlow Proxy requis : reconfigure l'addon sur /configure (URL + mot de passe MediaFlow manquants)".encode(),
+                        "text/plain")
                 key = _unb64u(qs["v"][0])
-                url = vegetatv_resolve(key)
-                if not url:
+                raw = vegetatv_resolve(key)
+                if not raw:
                     log.warning(f"vghls: resolve VIDE pour {key!r} (toutes les lignes contendues au byte-test)")
                     return self._send(502, b"vegetatv: flux introuvable (lignes contendues, reessaie)", "text/plain")
                 _track_play("vegetatv", key)
-                try:
-                    text = _proxy_get(url, {"User-Agent": _VEGETA_UA}).decode("utf-8", "replace")
-                except Exception as ex:
-                    log.error(f"vghls: MFP injoignable ({type(ex).__name__}) — MEDIAFLOW_URL={MEDIAFLOW_URL!r} depuis le conteneur ?")
-                    return self._send(502, b"vegetatv: MFP injoignable (MEDIAFLOW_URL depuis le conteneur ?)", "text/plain")
-                if "#EXTM3U" not in text:
-                    log.warning(f"vghls: MFP a repondu sans manifeste HLS (api_password faux ? source morte ?) : {text[:120]!r}")
-                return self._send(200, text.encode(), "application/vnd.apple.mpegurl")
+                dest = _mfp_wrap(mfp_url, mfp_pass, raw, ua=_VEGETA_UA)
+                if not dest:
+                    return self._send(502, b"MediaFlow: echec de l'emballage du flux", "text/plain")
+                return self._redirect(dest)
             if path == "/px":
                 ub = qs["u"][0]
                 henc = qs.get("h", [""])[0]
@@ -3208,6 +3647,10 @@ def main():
     _hist_load()
     _sessions_load()
     _settings_load()
+    if _settings.get("stremio", {}).get("catalog_version") != _CATALOG_VERSION:
+        _apply_default_catalog()
+        _settings_save()
+        log.info(f"Catalogue par défaut appliqué automatiquement ({len(_DEFAULT_CATALOG)} chaînes)")
     _epg_load()
     _playlists_load()
     _tokens_load()
