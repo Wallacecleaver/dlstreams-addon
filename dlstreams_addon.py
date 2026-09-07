@@ -213,7 +213,7 @@ _init_logo_mapping()
 _LOGOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LOGOS")
 _FOLDER2GENRE = {
     "SPORT": "Sports", "CINEMA": "Films", "DOCU": "Documentaires",
-    "INFOS": "Informations", "JEUNESSE": "Général", "MUSIC": "Général",
+    "INFOS": "Informations", "JEUNESSE": "Enfant", "MUSIC": "Général",
     "GENERAL": "Général",
 }
 # mots de qualité / statut à ignorer dans le rapprochement
@@ -585,7 +585,7 @@ def _epg_slot(dl_id) -> tuple[dict | None, dict | None]:
                 nxt = p
     return cur, nxt
 
-_GENRE_CHOICES = ["Général", "Sports", "Documentaires", "Films", "Informations"]
+_GENRE_CHOICES = ["Général", "Enfant", "Sports", "Documentaires", "Films", "Informations"]
 
 def _genres_for(name: str) -> list[str]:
     key = name.lower()
@@ -649,6 +649,10 @@ def _genre_for(name: str) -> list[str]:
     if any(k in n for k in ["découverte", "decouverte", "documentaire", "voyage", "histoire",
         "geo", "planète", "planete", "animaux", "nature", "science", "investigation"]):
         return ["Documentaires"]
+    if any(k in n for k in ["kids", "gulli", "cartoon", "piwi", "tiji", "disney", "nickelodeon",
+        "boomerang", "canal j", "canal+ kids", "junior", "télétoon", "teletoon", "baby tv",
+        "canal j"]):
+        return ["Enfant"]
     return ["Général"]
 
 def _get(url: str, referer: str = SITE + "/", extra: dict | None = None, timeout: int = 20) -> bytes:
@@ -1415,10 +1419,8 @@ _DEFAULT_CATALOG: list[tuple[str, str]] = [
     ("RMC Story", "Général"),
     ("RMC Découverte", "Général"),
     ("AB1", "Général"),
-    ("AB3", "Général"),
     ("Comedie+", "Général"),
     ("Novo 19", "Général"),
-    ("E! Entertainment", "Général"),
     ("Paris Premiere", "Général"),
     ("RTL 9", "Général"),
     ("Teva", "Général"),
@@ -1491,25 +1493,23 @@ _DEFAULT_CATALOG: list[tuple[str, str]] = [
     ("Africanews French", "Informations"),
     ("Africa 24", "Informations"),
     ("LCP", "Informations"),
-    # ---- Général (jeunesse / musique) ----
-    ("Canal J", "Général"),
-    ("Canal+ Kids", "Général"),
-    ("Disney Channel", "Général"),
-    ("Gulli", "Général"),
+    # ---- Général (musique) ----
     ("ADN TV+", "Général"),
-    ("Nickelodeon", "Général"),
-    ("Tiji", "Général"),
     ("CStar", "Général"),
     ("Trace Urban", "Général"),
     ("Trace Latina", "Général"),
-    ("Trace Gospel", "Général"),
-    ("Trace Mziki", "Général"),
-    ("Trace Toca", "Général"),
+    # ---- Enfant ----
+    ("Canal J", "Enfant"),
+    ("Canal+ Kids", "Enfant"),
+    ("Disney Channel", "Enfant"),
+    ("Gulli", "Enfant"),
+    ("Nickelodeon", "Enfant"),
+    ("Tiji", "Enfant"),
 ]
 # Incrémenter cette version RÉAPPLIQUE _DEFAULT_CATALOG au prochain démarrage (utile si la liste
 # ci-dessus est retouchée dans le code) -> jamais au détriment des ajouts/retraits faits depuis le
 # dashboard APRÈS la dernière application (le marqueur n'est bumpé qu'à un vrai changement de liste).
-_CATALOG_VERSION = 4
+_CATALOG_VERSION = 5
 
 def _apply_default_catalog():
     """Écrase 'mon catalogue' avec EXACTEMENT _DEFAULT_CATALOG (mêmes clés que /api/catalog/reset).
@@ -1610,7 +1610,7 @@ _CAT_ICON = {"Sports": "⚽", "Actualités": "📰", "Films & Séries": "🎬", 
     "Divertissement": "🎉", "Musique": "🎵", "Documentaire": "🌍", "Jeunesse": "🧸",
     "Télévision": "📺"}
 # slugs ASCII pour les ids de catalogue (évite l'encodage % des accents dans l'URL Stremio)
-_CAT_SLUG = {"Général": "general", "Sports": "sports", "Documentaires": "documentaires",
+_CAT_SLUG = {"Général": "general", "Enfant": "enfant", "Sports": "sports", "Documentaires": "documentaires",
     "Films": "films", "Informations": "informations"}
 _SLUG_CAT = {v: k for k, v in _CAT_SLUG.items()}
 _unified_cache: dict = {"at": 0.0, "reg": None}
