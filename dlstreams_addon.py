@@ -2179,8 +2179,15 @@ def _health_refresh(force: bool = False):
         epg_channels = len(_epg_data)
         epg_age = int(time.time() - _epg_at) if _epg_at else None
         epg_ok = epg_channels > 0 and (epg_age is not None and epg_age < 36 * 3600)
-    logos_total = len(_CH_LOGO)
-    logos_loaded = len(_logo_cache)
+    # Ancien indicateur : mesurait les 13 chaînes de _CH_LOGO (système d'avant le catalogue
+    # unifié, obsolète). Remplacé par la vraie couverture logo/poster CURÉE sur le catalogue
+    # actuellement servi à Stremio (compte uniquement les fichiers locaux -> pas le fallback
+    # distant GitHub, plus lent à vérifier, donc le vrai chiffre "OK" est probablement un peu
+    # plus élevé que ça en pratique).
+    reg = _unified_registry()
+    logos_total = len(reg)
+    logos_loaded = sum(1 for e in reg.values()
+        if _local_logo_for(e["name"]) or _local_poster_for(e["name"]))
     logos_ok = logos_total > 0 and logos_loaded >= max(1, logos_total // 2)
     # VegetaTv : sain = MFP configuré ET registre peuplé ET au moins un serveur up.
     vg_n = len(_vegeta_reg.get("reg") or {})
