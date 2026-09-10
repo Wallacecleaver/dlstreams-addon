@@ -2155,9 +2155,10 @@ _health_lock = threading.Lock()
 _HEALTH_TTL = 60
 
 def _health_refresh(force: bool = False):
+    skip_network = False
     with _health_lock:
         if not force and time.time() - _health_snapshot.get("at", 0) < _HEALTH_TTL:
-            return
+            skip_network = True   # dlstreams/vavoo (réseau) : throttlés par le TTL
     def _dl():
         t0 = time.time()
         try:
@@ -2172,9 +2173,13 @@ def _health_refresh(force: bool = False):
             return {"ok": True, "ms": int((time.time() - t0) * 1000)}
         except Exception as e:
             return {"ok": False, "ms": int((time.time() - t0) * 1000)}
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        dl = ex.submit(_dl).result()
-        vv = ex.submit(_vv).result()
+    if skip_network:
+        dl = _health_snapshot.get("dlstreams") or {"ok": False, "ms": 0}
+        vv = _health_snapshot.get("vavoo") or {"ok": False, "ms": 0}
+    else:
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            dl = ex.submit(_dl).result()
+            vv = ex.submit(_vv).result()
     with _epg_lock:
         epg_channels = len(_epg_data)
         epg_age = int(time.time() - _epg_at) if _epg_at else None
