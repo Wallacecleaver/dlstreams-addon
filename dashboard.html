@@ -119,6 +119,16 @@
   .stat-card.c-orange { --card-glow:rgba(245,158,11,.26); --card-icon-bg:rgba(245,158,11,.14); }
   .stat-card.c-blue2 { --card-glow:rgba(56,189,248,.26); --card-icon-bg:rgba(56,189,248,.14); }
   .stat-card.c-red2 { --card-glow:rgba(230,57,70,.26); --card-icon-bg:rgba(230,57,70,.14); }
+  .stat-card-hero { grid-column:1 / -1; padding:24px 28px; }
+  .stat-card-hero .stat-value { font-size:48px; }
+  .stat-card-hero .stat-label { font-size:12px; }
+  .stats-grid-sm { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
+  .stat-card-sm { position:relative; overflow:hidden; border-radius:12px; padding:12px 14px;
+    background:var(--surface); border:1px solid var(--border);
+    display:flex; flex-direction:column; gap:2px; opacity:.85; }
+  .stat-card-sm .stat-label { font-size:9px; }
+  .stat-card-sm .stat-value { font-size:20px; padding-right:0; }
+  .stat-card-sm .stat-hint { font-size:10px; }
   .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1.1px; font-weight:700; }
   .stat-value { font-size:34px; font-weight:700; color:var(--text); line-height:1.05;
     font-family:var(--font-mono); letter-spacing:.5px; padding-right:44px; }
@@ -605,24 +615,33 @@
           </div>
 
           <div class="stats-grid">
-            <div class="stat-card c-red">
-              <div class="stat-icon">📡</div>
-              <div class="stat-label">Chaînes W Addon TV</div>
+            <div class="stat-card stat-card-hero c-red">
+              <div class="stat-icon">📋</div>
+              <div class="stat-label">Mon catalogue</div>
+              <div class="stat-value" id="c-cat">—</div>
+              <div class="stat-hint" id="c-cat-h">chargement…</div>
+            </div>
+          </div>
+
+          <div class="stats-grid-sm">
+            <div class="stat-card-sm">
+              <div class="stat-label">Chaînes W Addon TV (brut)</div>
               <div class="stat-value" id="c-dl">—</div>
-              <div class="stat-hint" id="c-dl-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+              <div class="stat-hint" id="c-dl-h">chargement…</div>
             </div>
-            <div class="stat-card c-blue">
-              <div class="stat-icon">📺</div>
-              <div class="stat-label">Chaînes Vavoo</div>
+            <div class="stat-card-sm">
+              <div class="stat-label">Chaînes Vavoo (brut)</div>
               <div class="stat-value" id="c-vv">—</div>
-              <div class="stat-hint" id="c-vv-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+              <div class="stat-hint" id="c-vv-h">chargement…</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-icon">🐉</div>
-              <div class="stat-label">Chaînes VegetaTv</div>
+            <div class="stat-card-sm">
+              <div class="stat-label">Chaînes VegetaTv (brut)</div>
               <div class="stat-value" id="c-vg">—</div>
-              <div class="stat-hint" id="c-vg-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+              <div class="stat-hint" id="c-vg-h">chargement…</div>
             </div>
+          </div>
+
+          <div class="stats-grid">
             <div class="stat-card c-green">
               <div class="stat-icon">➕</div>
               <div class="stat-label">Sources manuelles</div>
@@ -1457,6 +1476,7 @@ async function refreshStats(){
         LAST_TOP = d.top_channels || [];
         LAST_REC = d.recent_plays || [];
         renderChannelsCard();
+        refreshCatalogCard();
         const ut = $("#update-time");
         ut.classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
@@ -1479,6 +1499,20 @@ function animateNumber(el, target) {
     requestAnimationFrame(frame);
 }
 
+async function refreshCatalogCard(){
+    const el = $("#c-cat"), hint = $("#c-cat-h");
+    if (!el) return;
+    try {
+        const ok = await fetchUnified();
+        if (!ok) { hint.textContent = 'erreur de chargement'; return; }
+        const total = _UNI.length;
+        const withFlux = _UNI.filter(c => c.flux > 0).length;
+        animateNumber(el, total);
+        hint.textContent = _CATALOG_ACTIVE
+            ? `${withFlux}/${total} chaîne${total>1?'s':''} avec un flux trouvé`
+            : 'mode automatique — pas de liste fixe';
+    } catch(e) { /* silencieux, page overview pas critique */ }
+}
 function setCacheBadge(el, age){
     if(age === null){ el.innerHTML = '<span class="cache-badge old"><span class="dot"></span>pas encore chargé</span>'; return; }
     let cls = "ok", label = "il y a " + fmtAge(age);
