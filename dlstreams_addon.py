@@ -1773,22 +1773,6 @@ def unified_streams(key: str, base: str, cfg_b64: str = "") -> list:
     for r in e["refs"]:
         src, q = r["src"], r["q"]
         if src == "dlstreams":
-            # DLStreams : afficher TOUS les players disponibles pour cette chaîne.
-            # Chaque player pointe vers /hls/<id>/pN/index.m3u8 afin que Stremio
-            # propose chaque flux séparément. Le catalogue n'est pas modifié.
-            pls = players(str(r["id"]))
-            if pls:
-                for pi, (plabel, _purl) in enumerate(pls):
-                    label = plabel or f"Player {pi + 1}"
-                    pq, pqr = _quality_of(label)
-                    detail = f"dlstreams · {label}" + (f" · {pq}" if pq else "")
-                    scored.append((
-                        r["qr"] + pqr,
-                        _stream_entry("🔀", "dlstreams", pq, detail,
-                                      f"{p}/hls/{r['id']}/p{pi}/index.m3u8",
-                                      binge=f"u-{key}")
-                    ))
-                continue
             emoji, prov, url = "🔀", "dlstreams", f"{p}/hls/{r['id']}/index.m3u8"
         elif src == "vavoo":
             emoji, prov, url = "📺", "Vavoo", f"{p}/vhls?v={_b64u(r['id'])}"
@@ -3394,6 +3378,23 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(_system_info()).encode(), "application/json")
+
+            if path == "/api/debug/players":
+                if not self._require_auth():
+                    return
+                cid = qs.get("id", [""])[0]
+                if not cid:
+                    return self._send(400, json.dumps({"ok": False, "error": "id requis"}).encode(), "application/json")
+                pls = players(cid)
+                # Aussi tester la résolution de chaque player
+                resolved = []
+                for i, (label, url) in enumerate(pls):
+                    try:
+                        m3u8, host = resolve_player(url)
+                        resolved.append({"index": i, "label": label, "url": url, "resolved": True, "m3u8": m3u8[:80] + "..."})
+                    except Exception as e:
+                        resolved.append({"index": i, "label": label, "url": url, "resolved": False, "error": str(e)})
+                return self._send(200, json.dumps({"ok": True, "cid": cid, "found": len(pls), "players": resolved}).encode(), "application/json")
 
             def _check_manifest_token(qs: dict, user_config: dict | None = None) -> tuple[bool, str | None]:
                 """Vérifie le token, dans la query string (compat) ou dans la config
