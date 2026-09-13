@@ -119,6 +119,16 @@
   .stat-card.c-orange { --card-glow:rgba(245,158,11,.26); --card-icon-bg:rgba(245,158,11,.14); }
   .stat-card.c-blue2 { --card-glow:rgba(56,189,248,.26); --card-icon-bg:rgba(56,189,248,.14); }
   .stat-card.c-red2 { --card-glow:rgba(230,57,70,.26); --card-icon-bg:rgba(230,57,70,.14); }
+  .stat-card-hero { grid-column:1 / -1; padding:24px 28px; }
+  .stat-card-hero .stat-value { font-size:48px; }
+  .stat-card-hero .stat-label { font-size:12px; }
+  .stats-grid-sm { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
+  .stat-card-sm { position:relative; overflow:hidden; border-radius:12px; padding:12px 14px;
+    background:var(--surface); border:1px solid var(--border);
+    display:flex; flex-direction:column; gap:2px; opacity:.85; }
+  .stat-card-sm .stat-label { font-size:9px; }
+  .stat-card-sm .stat-value { font-size:20px; padding-right:0; }
+  .stat-card-sm .stat-hint { font-size:10px; }
   .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1.1px; font-weight:700; }
   .stat-value { font-size:34px; font-weight:700; color:var(--text); line-height:1.05;
     font-family:var(--font-mono); letter-spacing:.5px; padding-right:44px; }
@@ -605,24 +615,33 @@
           </div>
 
           <div class="stats-grid">
-            <div class="stat-card c-red">
-              <div class="stat-icon">📡</div>
-              <div class="stat-label">Chaînes W Addon TV</div>
+            <div class="stat-card stat-card-hero c-red">
+              <div class="stat-icon">📋</div>
+              <div class="stat-label">Mon catalogue</div>
+              <div class="stat-value" id="c-cat">—</div>
+              <div class="stat-hint" id="c-cat-h">chargement…</div>
+            </div>
+          </div>
+
+          <div class="stats-grid-sm">
+            <div class="stat-card-sm">
+              <div class="stat-label">Chaînes W Addon TV (brut)</div>
               <div class="stat-value" id="c-dl">—</div>
-              <div class="stat-hint" id="c-dl-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+              <div class="stat-hint" id="c-dl-h">chargement…</div>
             </div>
-            <div class="stat-card c-blue">
-              <div class="stat-icon">📺</div>
-              <div class="stat-label">Chaînes Vavoo</div>
+            <div class="stat-card-sm">
+              <div class="stat-label">Chaînes Vavoo (brut)</div>
               <div class="stat-value" id="c-vv">—</div>
-              <div class="stat-hint" id="c-vv-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+              <div class="stat-hint" id="c-vv-h">chargement…</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-icon">🐉</div>
-              <div class="stat-label">Chaînes VegetaTv</div>
+            <div class="stat-card-sm">
+              <div class="stat-label">Chaînes VegetaTv (brut)</div>
               <div class="stat-value" id="c-vg">—</div>
-              <div class="stat-hint" id="c-vg-h"><span class="cache-badge"><span class="dot"></span>chargement…</span></div>
+              <div class="stat-hint" id="c-vg-h">chargement…</div>
             </div>
+          </div>
+
+          <div class="stats-grid">
             <div class="stat-card c-green">
               <div class="stat-icon">➕</div>
               <div class="stat-label">Sources manuelles</div>
@@ -1263,6 +1282,7 @@
           <label>Catégorie</label>
           <select id="uni-m-cat">
             <option value="Général">Général</option>
+            <option value="Enfant">Enfant</option>
             <option value="Sports">Sports</option>
             <option value="Documentaires">Documentaires</option>
             <option value="Films">Films</option>
@@ -1456,6 +1476,7 @@ async function refreshStats(){
         LAST_TOP = d.top_channels || [];
         LAST_REC = d.recent_plays || [];
         renderChannelsCard();
+        refreshCatalogCard();
         const ut = $("#update-time");
         ut.classList.remove("loading");
         $("#update-label").textContent = "MAJ " + new Date().toLocaleTimeString('fr-FR');
@@ -1478,6 +1499,20 @@ function animateNumber(el, target) {
     requestAnimationFrame(frame);
 }
 
+async function refreshCatalogCard(){
+    const el = $("#c-cat"), hint = $("#c-cat-h");
+    if (!el) return;
+    try {
+        const ok = await fetchUnified();
+        if (!ok) { hint.textContent = 'erreur de chargement'; return; }
+        const total = _UNI.length;
+        const withFlux = _UNI.filter(c => c.flux > 0).length;
+        animateNumber(el, total);
+        hint.textContent = _CATALOG_ACTIVE
+            ? `${withFlux}/${total} chaîne${total>1?'s':''} avec un flux trouvé`
+            : 'mode automatique — pas de liste fixe';
+    } catch(e) { /* silencieux, page overview pas critique */ }
+}
 function setCacheBadge(el, age){
     if(age === null){ el.innerHTML = '<span class="cache-badge old"><span class="dot"></span>pas encore chargé</span>'; return; }
     let cls = "ok", label = "il y a " + fmtAge(age);
@@ -1819,10 +1854,15 @@ function renderCatalogBanner(){
     const nomatchLabel = $('#uni-nomatch-label');
     if (_CATALOG_ACTIVE) {
         $('#uni-page-title').textContent = 'Mon catalogue';
-        $('#uni-page-sub').textContent = 'Ta propre liste de chaînes — les flux des sources s\'y attachent automatiquement par nom, rien d\'autre n\'apparaît dans Stremio';
+        $('#uni-page-sub').textContent = 'Ta liste FIXE de chaînes (calée sur tvmio) — les flux des sources s\'y attachent automatiquement par nom, rien d\'autre n\'apparaît jamais dans Stremio';
         addForm.style.display = 'block';
         nomatchLabel.style.display = 'flex';
-        box.innerHTML = '';
+        box.innerHTML = `<div class="card" style="padding:12px 16px;margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="font-size:12px;color:var(--text2)">${_UNI.length} chaîne${_UNI.length>1?'s':''} dans ton catalogue — appliqué automatiquement à chaque redémarrage, pas besoin d'y toucher</div>
+                <button class="btn-outline-sm" style="width:auto;padding:6px 12px" onclick="resetCatalogToDefault()">♻️ Effacer et remettre la liste par défaut</button>
+            </div>
+        </div>`;
     } else {
         $('#uni-page-title').textContent = 'Chaînes unifiées';
         $('#uni-page-sub').textContent = 'Toutes sources fusionnées automatiquement (façon tvmio) — vérifie les logos et les catégories';
@@ -1832,20 +1872,20 @@ function renderCatalogBanner(){
             <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
                 <div>
                     <div style="font-weight:600;color:var(--text)">📋 Mode automatique actif</div>
-                    <div style="font-size:13px;color:var(--text2);margin-top:4px">Tout ce que les sources publient apparaît ici. Passe en <b>mon catalogue</b> pour choisir toi-même exactement quelles chaînes existent — les flux s'y attacheront automatiquement par correspondance de nom.</div>
+                    <div style="font-size:13px;color:var(--text2);margin-top:4px">Ça ne devrait plus arriver après un redémarrage (le catalogue fixe s'applique tout seul) — si tu vois ça quand même, clique pour le forcer manuellement.</div>
                 </div>
-                <button class="btn btn-red" style="width:auto;padding:10px 18px;flex-shrink:0" onclick="startCatalogMode()">📋 Passer à mon catalogue</button>
+                <button class="btn btn-red" style="width:auto;padding:10px 18px;flex-shrink:0" onclick="resetCatalogToDefault()">📋 Activer mon catalogue</button>
             </div>
         </div>`;
     }
 }
-async function startCatalogMode(){
-    if (!confirm('Ça importe toutes les chaînes actuellement visibles (non masquées, non génériques) comme point de départ de ton catalogue. Tu pourras ensuite en retirer ou en ajouter librement. Continuer ?')) return;
+async function resetCatalogToDefault(){
+    if (!confirm('Ça EFFACE tout le catalogue actuel et le remplace EXACTEMENT par la liste fixe définie dans le code. Continuer ?')) return;
     try {
-        const r = await apiFetch('/api/catalog/seed', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+        const r = await apiFetch('/api/catalog/reset', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
         const d = await r.json();
         if (!d.ok) throw new Error(d.error || 'échec');
-        toast(d.imported + ' chaînes importées dans ton catalogue', 'success');
+        toast('Catalogue réinitialisé : ' + d.total + ' chaînes', 'success');
         _UNI = []; loadUnified();
     } catch(e){ if(e.message!=='unauthenticated') toast('Erreur : '+e.message, 'error'); }
 }
@@ -2341,7 +2381,7 @@ async function loadCatPage(){
         renderCatPage();
     } catch(err){ if(err.message!=='unauthenticated') box.innerHTML = '<div class="fav-empty">Erreur de chargement</div>'; }
 }
-const CAT_CHOICES = ['Général', 'Sports', 'Documentaires', 'Films', 'Informations'];
+const CAT_CHOICES = ['Général', 'Enfant', 'Sports', 'Documentaires', 'Films', 'Informations'];
 function renderCatPage(){
     const box = $('#catp-list'); if(!box || !_CATP_DATA) return;
     const q = ($('#catp-q').value || '').toLowerCase().trim();
