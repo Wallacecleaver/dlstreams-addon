@@ -1681,17 +1681,63 @@ async function loadNow(force){
         if (e.message !== 'unauthenticated') console.error("Now error:", e);
     }
 }
+// --- PROGRAMMES : merge toutes chaînes unifiées + EPG ---
+let _UNI_CACHE = [];
+
+async function loadNow(force){
+    try{
+        if(force){
+            const el = $("#now-list");
+            if(el && !el.innerHTML.includes('chargement')) el.innerHTML = '<div class="fav-empty">chargement…</div>';
+        }
+        // Charger en parallèle : EPG (now) + toutes chaînes unifiées
+        const [epgRes, uniRes] = await Promise.all([
+            apiFetch('/api/now'),
+            apiFetch('/api/unified')
+        ]);
+        _NOW_CACHE = await epgRes.json();
+        const uniData = await uniRes.json();
+        _UNI_CACHE = uniData.channels || [];
+        renderNow();
+    }catch(e){
+        if (e.message !== 'unauthenticated') console.error("Now error:", e);
+    }
+}
+
 function renderNow(){
     const el = $("#now-list");
     if(!el) return;
     const tot = $("#now-total");
     const q = ($("#now-q").value || "").toLowerCase().trim();
-    let list = _NOW_CACHE;
-    if(!list || !list.length){
-        el.innerHTML = '<div class="fav-empty">EPG pas encore chargé — va dans Stremio → Général pour le rafraîchir</div>';
-        if(tot) tot.textContent = '';
-        return;
-    }
+    
+    // Map EPG par id (clé unifiée ou id dlstreams)
+    const epgMap = new Map();
+    (_NOW_CACHE || []).forEach(n => epgMap.set(n.id, n));
+    
+    // Construire la liste complète : toutes chaînes unifiées
+    let list = _UNI_CACHE.map(u => {
+        const epg = epgMap.get(u.key) || epgMap.get(u.id); // essai clé unifiée puis id
+        if (epg) {
+            // Chaîne avec EPG : merger les infos
+            return {
+                ...u,
+                cur: epg.cur,
+                nxt: epg.nxt,
+                now: epg.now,
+                hasEPG: true
+            };
+        } else {
+            // Chaîne SANS EPG : afficher quand même
+            return {
+                ...u,
+                cur: null,
+                nxt: null,
+                now: Math.floor(Date.now()/1000),
+                hasEPG: false
+            };
+        }
+    });
+    
     if(q) list = list.filter(n => (n.name||"").toLowerCase().includes(q)
         || ((n.cur&&n.cur.title)||"").toLowerCase().includes(q)
         || ((n.nxt&&n.nxt.title)||"").toLowerCase().includes(q));
@@ -1700,9 +1746,10 @@ function renderNow(){
         if(tot) tot.textContent = '0 chaîne';
         return;
     }
-    if(tot) tot.textContent = list.length + (list.length>1 ? ' chaînes guidées' : ' chaîne guidée');
+    const withEPG = list.filter(n => n.hasEPG).length;
+    if(tot) tot.textContent = list.length + ' chaînes' + (withEPG ? ` (${withEPG} guidées)` : '');
     el.innerHTML = '<div class="now-grid">' + list.map(n => {
-        const href = `${BASE}/hls/${n.id}/index.m3u8`;
+        const href = n.src === 'vavoo' ? `${BASE}/vhls?v=${b64u(n.id)}` : `${BASE}/hls/${n.id}/index.m3u8`;
         const cur = n.cur || {};
         const nxt = n.nxt || {};
         const now = n.now || Math.floor(Date.now()/1000);
@@ -1714,17 +1761,19 @@ function renderNow(){
             rem = Math.max(0, Math.round((cur.stop-now)/60));
         }
         const nxT = nxt.start ? new Date(nxt.start*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        const logoUrl = n.logo || `${BASE}/logo/unified/${b64u(n.key)}.png`;
         return `<a class="now-card" href="${href}" target="_blank" title="${escapeHtml(n.name)} — ${escapeHtml(cur.title||'')}">
             <div class="now-tile">
-                <img class="now-logo" src="${BASE}${n.logo}" alt="" loading="lazy" onerror="this.style.display='none'">
+                <img class="now-logo" src="${logoUrl}" alt="" loading="lazy" onerror="this.style.display='none'">
                 <span class="now-live"><i></i> EN DIRECT</span>
+                ${!n.hasEPG ? '<span class="now-live" style="background:var(--warn);margin-left:4px">Sans EPG</span>' : ''}
             </div>
             <div class="now-body">
                 <div class="now-ch">${escapeHtml(n.name)}</div>
-                <div class="now-prog-title">${escapeHtml(cur.title || '—')}</div>
+                <div class="now-prog-title">${escapeHtml(cur.title || (n.hasEPG ? '—' : 'Pas de données EPG'))}</div>
                 ${cur.desc ? `<div class="now-prog-desc">${escapeHtml(cur.desc)}</div>` : ''}
                 <div class="now-bar"><div class="now-fill" style="width:${pct}%"></div></div>
-                <div class="now-ends">${st}–${en} · ${rem} min restantes</div>
+                <div class="now-ends">${st}–${en} ${n.hasEPG ? `· ${rem} min restantes` : ''}</div>
                 ${nxt.title ? `<div class="now-next">Suivant · <b>${escapeHtml(nxt.title)}</b>${nxT ? ' ('+nxT+')' : ''}</div>` : ''}
             </div>
         </a>`;
