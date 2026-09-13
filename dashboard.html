@@ -579,7 +579,7 @@
           <div class="nav-section-label">Stremio</div>
           <button class="nav-item" data-page="st-channels" onclick="navigateTo('st-channels')">📺 Chaînes</button>
           <button class="nav-item" data-page="st-categories" onclick="navigateTo('st-categories')">🗂️ Catégories</button>
-          <button class="nav-item" data-page="st-playlists" onclick="navigateTo('st-playlists')">🎵 Playlists</button>
+          
           <button class="nav-item" data-page="st-programs" onclick="navigateTo('st-programs')">🕐 Programmes</button>
           <button class="nav-item" data-page="rg-add" onclick="navigateTo('rg-add')">➕ Ajouter une chaîne</button>
           <button class="nav-item" data-page="rg-general" onclick="navigateTo('rg-general')">🎨 Général</button>
@@ -788,23 +788,6 @@
               </div>
               <div id="catp-list">chargement…</div>
             </div>
-          </div>
-        </div>
-
-        <!-- PAGE: PLAYLISTS -->
-        <div class="page" id="page-st-playlists">
-          <div class="page-header">
-            <div>
-              <div class="page-title">Playlists</div>
-              <div class="page-sub">Regroupez vos chaînes favorites en collections exportables en M3U</div>
-            </div>
-            <div class="header-actions">
-              <input type="text" id="pl-new-name" placeholder="Nom de la playlist…" style="background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-size:13px">
-              <button class="btn-add" onclick="createPlaylist()">➕ Créer</button>
-            </div>
-          </div>
-          <div class="channel-list" id="playlists-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
-            <div class="fav-empty">chargement…</div>
           </div>
         </div>
 
@@ -1036,28 +1019,6 @@
                 <button class="btn-outline-sm" onclick="closeCustomChannelModal()">Annuler</button>
                 <button class="btn-danger" id="tv-custom-delete-btn" style="display:none" onclick="deleteCustomChannel()">🗑️ Supprimer</button>
                 <button class="add-source-btn" style="width:auto" onclick="saveCustomChannel()">💾 Enregistrer</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Modal playlist -->
-        <div class="modal" id="pl-modal">
-          <div class="modal-content" style="max-width:640px">
-            <div class="modal-header">
-              <h3 id="pl-modal-title">Playlist</h3>
-              <button class="modal-close" onclick="closePlModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-              <div class="search-bar" style="margin-bottom:14px">
-                <input type="search" id="pl-add-search" placeholder="Rechercher une chaîne à ajouter…" oninput="renderPlAddResults()">
-              </div>
-              <div id="pl-add-results" style="max-height:160px;overflow-y:auto;margin-bottom:16px"></div>
-              <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-weight:700">Chaînes dans la playlist</div>
-              <div id="pl-channels-list"></div>
-              <div class="form-actions">
-                <button class="btn-outline-sm" onclick="exportPlaylistM3U()">⬇️ Export M3U</button>
-                <button class="btn-danger" onclick="deletePlaylist()">🗑️ Supprimer la playlist</button>
               </div>
             </div>
           </div>
@@ -1436,7 +1397,6 @@ function navigateTo(page) {
     else if (page === 'activite') loadActivity('activity-list-src');
     else if (page === 'st-channels') loadTvChannels();
     else if (page === 'st-categories') loadCatPage();
-    else if (page === 'st-playlists') loadPlaylists();
     else if (page === 'st-programs') loadNow();
     else if (page === 'rg-add') { loadManualChannels(); }
     else if (page === 'rg-general') loadSettings();
@@ -2988,105 +2948,6 @@ async function boot(){
     loadLogs();
     const hp = (location.pathname.split('/dashboard/')[1] || '').replace(/\/+$/, '');
     if (hp && hp !== 'dashboard' && document.getElementById('page-' + hp)) navigateTo(hp);
-}
-
-// ===== PLAYLISTS (Stremio) =====
-let PLAYLISTS = [];
-let PL_CURRENT = null;
-async function loadPlaylists(){
-    try{
-        const r = await apiFetch("/api/playlists");
-        PLAYLISTS = await r.json();
-        renderPlaylistsGrid();
-    }catch(e){ if(e.message !== 'unauthenticated') console.error(e); }
-}
-function renderPlaylistsGrid(){
-    const el = $("#playlists-grid");
-    if(!el) return;
-    if(!PLAYLISTS.length){
-        el.innerHTML = '<div class="fav-empty">aucune playlist — crée-en une ci-dessus</div>';
-        return;
-    }
-    el.innerHTML = PLAYLISTS.map(p => `
-        <div class="chan-card" style="cursor:pointer" onclick="openPlModal('${escapeHtml(p.name)}')">
-            <div class="chan-tile" style="display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),#ff7a59)">
-                <span style="font-size:32px">🎵</span>
-            </div>
-            <div class="chan-body">
-                <div class="chan-name">${escapeHtml(p.name)}</div>
-                <div class="chan-meta">${p.count} chaîne${p.count>1?'s':''}</div>
-            </div>
-        </div>`).join('');
-}
-async function createPlaylist(){
-    const input = $("#pl-new-name");
-    const name = input.value.trim();
-    if(!name){ toast('Entre un nom de playlist', 'warn'); return; }
-    const r = await apiFetch("/api/playlists", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'create', name})});
-    const d = await r.json();
-    if(d.success){ PLAYLISTS = d.playlists; input.value=''; renderPlaylistsGrid(); toast('✅ Playlist créée', 'success'); }
-    else toast(d.message || 'Erreur', 'error');
-}
-function openPlModal(name){
-    PL_CURRENT = name;
-    $("#pl-modal-title").textContent = "🎵 " + name;
-    $("#pl-add-search").value = '';
-    renderPlAddResults();
-    renderPlChannels();
-    $("#pl-modal").classList.add('active');
-}
-function closePlModal(){ $("#pl-modal").classList.remove('active'); PL_CURRENT = null; }
-function renderPlChannels(){
-    const p = PLAYLISTS.find(x => x.name === PL_CURRENT);
-    const el = $("#pl-channels-list");
-    if(!p || !p.channels.length){ el.innerHTML = '<div class="fav-empty">aucune chaîne — ajoute-en via la recherche ci-dessus</div>'; return; }
-    el.innerHTML = p.channels.map(c => `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">
-            <span style="flex:1;font-size:13px">${escapeHtml(c.name)}</span>
-            <button class="btn-outline-sm" onclick="removeFromPlaylist('${escapeHtml(c.key)}')">Retirer</button>
-        </div>`).join('');
-}
-function renderPlAddResults(){
-    const q = ($("#pl-add-search").value || '').toLowerCase().trim();
-    const el = $("#pl-add-results");
-    if(!q){ el.innerHTML = ''; return; }
-    const p = PLAYLISTS.find(x => x.name === PL_CURRENT);
-    const existing = new Set((p?.channels||[]).map(c=>c.key));
-    const pool = [...(ALL.dlstreams||[]).map(c=>({src:'dlstreams', id:c.id, name:c.name})),
-                  ...(ALL.vavoo||[]).map(c=>({src:'vavoo', id:c.id, name:c.name}))];
-    const matches = pool.filter(c => c.name.toLowerCase().includes(q)).slice(0, 20);
-    if(!matches.length){ el.innerHTML = '<div class="fav-empty">aucun résultat</div>'; return; }
-    el.innerHTML = matches.map(c => {
-        const key = c.src + ":" + c.id;
-        const already = existing.has(key);
-        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 4px">
-            <span style="flex:1;font-size:13px">${escapeHtml(c.name)}</span>
-            <button class="btn-outline-sm" ${already?'disabled':''} onclick="addToPlaylist('${escapeHtml(key)}')">${already?'Ajoutée':'➕ Ajouter'}</button>
-        </div>`;
-    }).join('');
-}
-async function addToPlaylist(key){
-    const r = await apiFetch("/api/playlists", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'add', name: PL_CURRENT, key})});
-    const d = await r.json();
-    if(d.success){ PLAYLISTS = d.playlists; renderPlChannels(); renderPlAddResults(); renderPlaylistsGrid(); }
-}
-async function removeFromPlaylist(key){
-    const r = await apiFetch("/api/playlists", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'remove', name: PL_CURRENT, key})});
-    const d = await r.json();
-    if(d.success){ PLAYLISTS = d.playlists; renderPlChannels(); renderPlaylistsGrid(); }
-}
-async function deletePlaylist(){
-    if(!confirm('Supprimer cette playlist ?')) return;
-    const r = await apiFetch("/api/playlists", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'delete', name: PL_CURRENT})});
-    const d = await r.json();
-    if(d.success){ PLAYLISTS = d.playlists; closePlModal(); renderPlaylistsGrid(); toast('Playlist supprimée', 'success'); }
-}
-function exportPlaylistM3U(){
-    const p = PLAYLISTS.find(x => x.name === PL_CURRENT);
-    if(!p || !p.channels.length){ toast('Playlist vide', 'warn'); return; }
-    const chans = p.channels.map(c => ({id: c.id, name: c.name, lang:'fr', src: c.src}));
-    downloadText('dlstreams-' + p.name.replace(/[^a-z0-9]+/gi,'_') + '.m3u', buildM3U(chans));
-    toast('✅ Export téléchargé', 'success');
 }
 
 checkSession();

@@ -95,9 +95,6 @@ _login_attempts: dict[str, list[float]] = {}
 _LOGIN_MAX_ATTEMPTS = 6
 _LOGIN_WINDOW = 300
 
-_PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_playlists.json")
-_playlists: list[dict] = []
-
 # ============================================================
 # TOKENS D'ACCÈS ADDON — multi-tokens nommés, hash SHA256 stocké
 # ============================================================
@@ -716,24 +713,6 @@ def _sessions_save():
     try:
         with open(_SESSION_FILE, "w", encoding="utf-8") as f:
             json.dump(_sessions, f)
-    except Exception as e:
-        pass
-
-def _playlists_load():
-    global _playlists
-    try:
-        if os.path.exists(_PLAYLISTS_FILE):
-            with open(_PLAYLISTS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, list):
-                _playlists = data
-    except Exception as e:
-        pass
-
-def _playlists_save():
-    try:
-        with open(_PLAYLISTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(_playlists, f, ensure_ascii=False, indent=1)
     except Exception as e:
         pass
 
@@ -2845,58 +2824,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"success": True,
                 "message": "rafraichissement EPG lance"}).encode(),
                 "application/json")
-        if path == "/api/playlists":
-            if not self._require_auth():
-                return
-            try:
-                data = json.loads(body) if body else {}
-            except Exception as e:
-                return self._send(400, json.dumps({"success": False, "error": "body invalide"}).encode(), "application/json")
-            action = data.get("action")
-            if action == "create":
-                name = data.get("name", "").strip()
-                if not name:
-                    return self._send(400, json.dumps({"success": False, "error": "nom requis"}).encode(), "application/json")
-                if any(p["name"] == name for p in _playlists):
-                    return self._send(400, json.dumps({"success": False, "error": "nom déjà utilisé"}).encode(), "application/json")
-                _playlists.append({"name": name, "channels": []})
-                _playlists_save()
-                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
-            if action == "add":
-                name = data.get("name", "").strip()
-                key = data.get("key", "").strip()
-                if not name or not key:
-                    return self._send(400, json.dumps({"success": False, "error": "nom et key requis"}).encode(), "application/json")
-                pl = next((p for p in _playlists if p["name"] == name), None)
-                if not pl:
-                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
-                if any(c["key"] == key for c in pl.get("channels", [])):
-                    return self._send(400, json.dumps({"success": False, "error": "chaîne déjà dans la playlist"}).encode(), "application/json")
-                pl.setdefault("channels", []).append({"key": key})
-                _playlists_save()
-                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
-            if action == "remove":
-                name = data.get("name", "").strip()
-                key = data.get("key", "").strip()
-                if not name or not key:
-                    return self._send(400, json.dumps({"success": False, "error": "nom et key requis"}).encode(), "application/json")
-                pl = next((p for p in _playlists if p["name"] == name), None)
-                if not pl:
-                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
-                pl["channels"] = [c for c in pl.get("channels", []) if c["key"] != key]
-                _playlists_save()
-                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
-            if action == "delete":
-                name = data.get("name", "").strip()
-                if not name:
-                    return self._send(400, json.dumps({"success": False, "error": "nom requis"}).encode(), "application/json")
-                idx = next((i for i, p in enumerate(_playlists) if p["name"] == name), None)
-                if idx is None:
-                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
-                _playlists.pop(idx)
-                _playlists_save()
-                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
-            return self._send(400, json.dumps({"success": False, "error": "action inconnue"}).encode(), "application/json")
         if path == "/api/wiseplay/channel-edit":
             # Édition d'une chaîne unifiée depuis Wiseplay (auth par code d'accès). Merge partiel.
             code = qs.get("code", [""])[0]
@@ -3251,10 +3178,6 @@ class Handler(BaseHTTPRequestHandler):
                         "application/json")
                 return self._send(200, json.dumps({"ok": n > 0, "channels": n, "diag": _vegeta_diag}).encode(),
                     "application/json")
-            if path == "/api/playlists":
-                if not self._require_auth():
-                    return
-                return self._send(200, json.dumps(_playlists).encode(), "application/json")
             if path == "/api/wiseplay/config":
                 code = qs.get("code", [""])[0]
                 stored_code = _settings.get("wiseplay", {}).get("access_code", "")
@@ -3799,7 +3722,6 @@ def main():
         _settings_save()
         log.info(f"Catalogue par défaut appliqué automatiquement ({len(_DEFAULT_CATALOG)} chaînes)")
     _epg_load()
-    _playlists_load()
     _tokens_load()
     log.info(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     log.info(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
