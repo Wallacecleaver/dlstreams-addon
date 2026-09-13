@@ -3387,17 +3387,22 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, json.dumps({"ok": False, "error": "id requis"}).encode(), "application/json")
                 pls = players(cid)
                 log.info(f"DEBUG players cid={cid}: {len(pls)} players trouvés par le scraper")
+                _log_activity("Debug players", f"cid={cid}: {len(pls)} joueurs trouvés")
                 # Aussi tester la résolution de chaque player
                 resolved = []
                 for i, (label, url) in enumerate(pls):
                     try:
                         m3u8, host = resolve_player(url)
                         log.info(f"  Player {i} ({label}): OK → m3u8={m3u8[:80]}...")
+                        _log_activity("Debug player", f"cid={cid} #{i} ({label}): OK")
                         resolved.append({"index": i, "label": label, "url": url, "resolved": True, "m3u8": m3u8[:80] + "..."})
                     except Exception as e:
                         log.warning(f"  Player {i} ({label}): ÉCHEC → {type(e).__name__}: {e}")
+                        _log_activity("Debug player", f"cid={cid} #{i} ({label}): ÉCHEC → {type(e).__name__}: {e}")
                         resolved.append({"index": i, "label": label, "url": url, "resolved": False, "error": str(e)})
-                log.info(f"DEBUG players cid={cid}: {sum(1 for p in resolved if p['resolved'])}/{len(resolved)} joueurs résolus")
+                ok_count = sum(1 for p in resolved if p["resolved"])
+                log.info(f"DEBUG players cid={cid}: {ok_count}/{len(resolved)} joueurs résolus")
+                _log_activity("Debug players", f"cid={cid}: {ok_count}/{len(resolved)} résolus")
                 return self._send(200, json.dumps({"ok": True, "cid": cid, "found": len(pls), "players": resolved}).encode(), "application/json")
 
             def _check_manifest_token(qs: dict, user_config: dict | None = None) -> tuple[bool, str | None]:
