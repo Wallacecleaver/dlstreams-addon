@@ -2190,8 +2190,11 @@ def _now_playing() -> list[dict]:
     if not _epg_data:
         return []
     out = []
+    seen_ids = set()
+    
+    # 1. Chaînes populaires (dlstreams)
     for c in _POPULAR_CHANNELS:
-        cur, nxt = _epg_slot(c["id"])       # acquiert _epg_lock brièvement, par chaîne
+        cur, nxt = _epg_slot(c["id"])
         if not cur:
             continue
         out.append({
@@ -2202,6 +2205,48 @@ def _now_playing() -> list[dict]:
             "cur": {"title": cur.get("title", ""), "desc": cur.get("desc", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
             "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
         })
+        seen_ids.add(c["id"])
+    
+    # 2. Toutes les autres chaînes du registre unifié qui ont un EPG
+    unified = _unified_registry()
+    for key, e in unified.items():
+        # Chercher un ID EPG correspondant (via channel_epg override ou nom)
+        st = _settings.get("stremio", {})
+        epg_override = st.get("channel_epg", {})
+        
+        # Essayer de trouver un match EPG pour cette chaîne
+        epg_id = None
+        for dl_id, epg_val in epg_override.items():
+            if dl_id in seen_ids:
+                continue
+            # Vérifier si cette chaîne unifiée correspond à l'override
+            # On compare par nom normalisé
+            if _norm_name(e["name"]) == _norm_name(epg_val) or _norm_name(e["name"]) == _norm_name(dl_id):
+                epg_id = epg_val
+                break
+        
+        # Si pas d'override, essayer de matcher par nom dans _CH_EPG
+        if not epg_id:
+            for dl_id, epg_val in _CH_EPG.items():
+                if dl_id in seen_ids:
+                    continue
+                if _norm_name(e["name"]) == _norm_name(epg_val):
+                    epg_id = epg_val
+                    break
+        
+        if epg_id:
+            cur, nxt = _epg_slot(epg_id)
+            if cur:
+                out.append({
+                    "id": e["key"],  # clé unifiée
+                    "name": e["name"],
+                    "logo": f"/logo/unified/{_b64u(e['key'])}.png",
+                    "now": int(time.time()),
+                    "cur": {"title": cur.get("title", ""), "desc": cur.get("desc", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
+                    "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
+                })
+                seen_ids.add(epg_id)
+    
     return out
 
 _TVLOGOS_BASE = "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/france/"
