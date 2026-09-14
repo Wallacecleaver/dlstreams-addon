@@ -95,6 +95,9 @@ _login_attempts: dict[str, list[float]] = {}
 _LOGIN_MAX_ATTEMPTS = 6
 _LOGIN_WINDOW = 300
 
+_PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_playlists.json")
+_playlists: list[dict] = []
+
 # ============================================================
 # TOKENS D'ACCÈS ADDON — multi-tokens nommés, hash SHA256 stocké
 # ============================================================
@@ -441,29 +444,6 @@ _CH_EPG = {
     "972": "DAZN3.fr",
     "973": "DAZN4.fr",
     "974": "DAZN5.fr",
-    # Chaînes TNT principales (xmltvfr.fr)
-    "tf1": "TF1.fr",
-    "france2": "France2.fr",
-    "france3": "France3.fr",
-    "france4": "France4.fr",
-    "france5": "France5.fr",
-    "m6": "M6.fr",
-    "arte": "Arte.fr",
-    "c8": "C8.fr",
-    "w9": "W9.fr",
-    "tmc": "TMC.fr",
-    "tf1-series": "TF1SeriesFilms.fr",
-    "nrj12": "NRJ12.fr",
-    "lcp": "LCP.fr",
-    "franceinfo": "FranceInfo.fr",
-    "cstar": "CStar.fr",
-    "gulli": "Gulli.fr",
-    "tf1-info": "TF1Info.fr",
-    "l-equipetv": "LEquipe.fr",
-    "6ter": "6ter.fr",
-    "rmc-story": "RMCStory.fr",
-    "rmc-decouverte": "RMCDecouverte.fr",
-    "chasse-peche": "ChassePeche.fr",
 }
 _EPG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlstreams_epg.json")
 _EPG_TTL = 6 * 3600
@@ -736,6 +716,24 @@ def _sessions_save():
     try:
         with open(_SESSION_FILE, "w", encoding="utf-8") as f:
             json.dump(_sessions, f)
+    except Exception as e:
+        pass
+
+def _playlists_load():
+    global _playlists
+    try:
+        if os.path.exists(_PLAYLISTS_FILE):
+            with open(_PLAYLISTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                _playlists = data
+    except Exception as e:
+        pass
+
+def _playlists_save():
+    try:
+        with open(_PLAYLISTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(_playlists, f, ensure_ascii=False, indent=1)
     except Exception as e:
         pass
 
@@ -2213,11 +2211,8 @@ def _now_playing() -> list[dict]:
     if not _epg_data:
         return []
     out = []
-    seen_ids = set()
-    
-    # 1. Chaînes populaires (dlstreams)
     for c in _POPULAR_CHANNELS:
-        cur, nxt = _epg_slot(c["id"])
+        cur, nxt = _epg_slot(c["id"])       # acquiert _epg_lock brièvement, par chaîne
         if not cur:
             continue
         out.append({
@@ -2228,48 +2223,6 @@ def _now_playing() -> list[dict]:
             "cur": {"title": cur.get("title", ""), "desc": cur.get("desc", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
             "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
         })
-        seen_ids.add(c["id"])
-    
-    # 2. Toutes les autres chaînes du registre unifié qui ont un EPG
-    unified = _unified_registry()
-    for key, e in unified.items():
-        # Chercher un ID EPG correspondant (via channel_epg override ou nom)
-        st = _settings.get("stremio", {})
-        epg_override = st.get("channel_epg", {})
-        
-        # Essayer de trouver un match EPG pour cette chaîne
-        epg_id = None
-        for dl_id, epg_val in epg_override.items():
-            if dl_id in seen_ids:
-                continue
-            # Vérifier si cette chaîne unifiée correspond à l'override
-            # On compare par nom normalisé
-            if _norm_name(e["name"]) == _norm_name(epg_val) or _norm_name(e["name"]) == _norm_name(dl_id):
-                epg_id = epg_val
-                break
-        
-        # Si pas d'override, essayer de matcher par nom dans _CH_EPG
-        if not epg_id:
-            for dl_id, epg_val in _CH_EPG.items():
-                if dl_id in seen_ids:
-                    continue
-                if _norm_name(e["name"]) == _norm_name(epg_val):
-                    epg_id = epg_val
-                    break
-        
-        if epg_id:
-            cur, nxt = _epg_slot(epg_id)
-            if cur:
-                out.append({
-                    "id": e["key"],  # clé unifiée
-                    "name": e["name"],
-                    "logo": f"/logo/unified/{_b64u(e['key'])}.png",
-                    "now": int(time.time()),
-                    "cur": {"title": cur.get("title", ""), "desc": cur.get("desc", ""), "start": cur.get("start", 0), "stop": cur.get("stop", 0)},
-                    "nxt": {"title": (nxt or {}).get("title", ""), "start": (nxt or {}).get("start", 0)} if nxt else None,
-                })
-                seen_ids.add(epg_id)
-    
     return out
 
 _TVLOGOS_BASE = "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/france/"
@@ -2892,6 +2845,58 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"success": True,
                 "message": "rafraichissement EPG lance"}).encode(),
                 "application/json")
+        if path == "/api/playlists":
+            if not self._require_auth():
+                return
+            try:
+                data = json.loads(body) if body else {}
+            except Exception as e:
+                return self._send(400, json.dumps({"success": False, "error": "body invalide"}).encode(), "application/json")
+            action = data.get("action")
+            if action == "create":
+                name = data.get("name", "").strip()
+                if not name:
+                    return self._send(400, json.dumps({"success": False, "error": "nom requis"}).encode(), "application/json")
+                if any(p["name"] == name for p in _playlists):
+                    return self._send(400, json.dumps({"success": False, "error": "nom déjà utilisé"}).encode(), "application/json")
+                _playlists.append({"name": name, "channels": []})
+                _playlists_save()
+                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
+            if action == "add":
+                name = data.get("name", "").strip()
+                key = data.get("key", "").strip()
+                if not name or not key:
+                    return self._send(400, json.dumps({"success": False, "error": "nom et key requis"}).encode(), "application/json")
+                pl = next((p for p in _playlists if p["name"] == name), None)
+                if not pl:
+                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
+                if any(c["key"] == key for c in pl.get("channels", [])):
+                    return self._send(400, json.dumps({"success": False, "error": "chaîne déjà dans la playlist"}).encode(), "application/json")
+                pl.setdefault("channels", []).append({"key": key})
+                _playlists_save()
+                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
+            if action == "remove":
+                name = data.get("name", "").strip()
+                key = data.get("key", "").strip()
+                if not name or not key:
+                    return self._send(400, json.dumps({"success": False, "error": "nom et key requis"}).encode(), "application/json")
+                pl = next((p for p in _playlists if p["name"] == name), None)
+                if not pl:
+                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
+                pl["channels"] = [c for c in pl.get("channels", []) if c["key"] != key]
+                _playlists_save()
+                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
+            if action == "delete":
+                name = data.get("name", "").strip()
+                if not name:
+                    return self._send(400, json.dumps({"success": False, "error": "nom requis"}).encode(), "application/json")
+                idx = next((i for i, p in enumerate(_playlists) if p["name"] == name), None)
+                if idx is None:
+                    return self._send(404, json.dumps({"success": False, "error": "playlist introuvable"}).encode(), "application/json")
+                _playlists.pop(idx)
+                _playlists_save()
+                return self._send(200, json.dumps({"success": True, "playlists": _playlists}).encode(), "application/json")
+            return self._send(400, json.dumps({"success": False, "error": "action inconnue"}).encode(), "application/json")
         if path == "/api/wiseplay/channel-edit":
             # Édition d'une chaîne unifiée depuis Wiseplay (auth par code d'accès). Merge partiel.
             code = qs.get("code", [""])[0]
@@ -3178,6 +3183,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(vavoo_channels()).encode(), "application/json", True)
+            if path == "/api/vegetatv-channels":
+                if not self._require_auth():
+                    return
+                return self._send(200, json.dumps(vegetatv_channels()).encode(), "application/json", True)
             if path == "/api/manual-channels":
                 if not self._require_auth():
                     return
@@ -3246,6 +3255,10 @@ class Handler(BaseHTTPRequestHandler):
                         "application/json")
                 return self._send(200, json.dumps({"ok": n > 0, "channels": n, "diag": _vegeta_diag}).encode(),
                     "application/json")
+            if path == "/api/playlists":
+                if not self._require_auth():
+                    return
+                return self._send(200, json.dumps(_playlists).encode(), "application/json")
             if path == "/api/wiseplay/config":
                 code = qs.get("code", [""])[0]
                 stored_code = _settings.get("wiseplay", {}).get("access_code", "")
@@ -3318,6 +3331,12 @@ class Handler(BaseHTTPRequestHandler):
                             raise ValueError("flux introuvable")
                         _proxy_get(real, {"User-Agent": _VAVOO_UA}, timeout=10)
                         url = f"{self._self_base()}/vhls?v={_b64u(cid)}"
+                    elif src == "vegetatv":
+                        raw = vegetatv_resolve(_unb64u(cid))
+                        if not raw:
+                            raise ValueError("flux introuvable (lignes contendues au byte-test ?)")
+                        _proxy_get(raw, {"User-Agent": _VEGETA_UA}, timeout=10)
+                        url = f"{self._self_base()}/vghls?v={_b64u(cid)}"
                     else:
                         m3u8, host = resolve(cid)
                         _proxy_get(m3u8, {"Referer": host + "/", "Origin": host}, timeout=10)
@@ -3354,6 +3373,12 @@ class Handler(BaseHTTPRequestHandler):
                             raise ValueError("flux introuvable")
                         _proxy_get(real, {"User-Agent": _VAVOO_UA}, timeout=10)
                         url = f"{self._self_base()}/vhls?v={_b64u(cid)}"
+                    elif src == "vegetatv":
+                        raw = vegetatv_resolve(_unb64u(cid))
+                        if not raw:
+                            raise ValueError("flux introuvable (lignes contendues au byte-test ?)")
+                        _proxy_get(raw, {"User-Agent": _VEGETA_UA}, timeout=10)
+                        url = f"{self._self_base()}/vghls?v={_b64u(cid)}"
                     else:
                         m3u8, host = resolve(cid)
                         _proxy_get(m3u8, {"Referer": host + "/", "Origin": host}, timeout=10)
@@ -3369,32 +3394,6 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_auth():
                     return
                 return self._send(200, json.dumps(_system_info()).encode(), "application/json")
-
-            if path == "/api/debug/players":
-                if not self._require_auth():
-                    return
-                cid = qs.get("id", [""])[0]
-                if not cid:
-                    return self._send(400, json.dumps({"ok": False, "error": "id requis"}).encode(), "application/json")
-                pls = players(cid)
-                log.info(f"DEBUG players cid={cid}: {len(pls)} players trouvés par le scraper")
-                _log_activity("Debug players", f"cid={cid}: {len(pls)} joueurs trouvés")
-                # Aussi tester la résolution de chaque player
-                resolved = []
-                for i, (label, url) in enumerate(pls):
-                    try:
-                        m3u8, host = resolve_player(url)
-                        log.info(f"  Player {i} ({label}): OK → m3u8={m3u8[:80]}...")
-                        _log_activity("Debug player", f"cid={cid} #{i} ({label}): OK")
-                        resolved.append({"index": i, "label": label, "url": url, "resolved": True, "m3u8": m3u8[:80] + "..."})
-                    except Exception as e:
-                        log.warning(f"  Player {i} ({label}): ÉCHEC → {type(e).__name__}: {e}")
-                        _log_activity("Debug player", f"cid={cid} #{i} ({label}): ÉCHEC → {type(e).__name__}: {e}")
-                        resolved.append({"index": i, "label": label, "url": url, "resolved": False, "error": str(e)})
-                ok_count = sum(1 for p in resolved if p["resolved"])
-                log.info(f"DEBUG players cid={cid}: {ok_count}/{len(resolved)} joueurs résolus")
-                _log_activity("Debug players", f"cid={cid}: {ok_count}/{len(resolved)} résolus")
-                return self._send(200, json.dumps({"ok": True, "cid": cid, "found": len(pls), "players": resolved}).encode(), "application/json")
 
             def _check_manifest_token(qs: dict, user_config: dict | None = None) -> tuple[bool, str | None]:
                 """Vérifie le token, dans la query string (compat) ou dans la config
@@ -3790,6 +3789,7 @@ def main():
         _settings_save()
         log.info(f"Catalogue par défaut appliqué automatiquement ({len(_DEFAULT_CATALOG)} chaînes)")
     _epg_load()
+    _playlists_load()
     _tokens_load()
     log.info(f"dlstreams addon+proxy sur http://0.0.0.0:{PORT}")
     log.info(f"  Dashboard: http://127.0.0.1:{PORT}/dashboard")
